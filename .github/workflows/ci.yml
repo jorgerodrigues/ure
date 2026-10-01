@@ -1,0 +1,33 @@
+name: Native app checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: xcode-27
+    timeout-minutes: 15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Check Swift format and lint
+        run: make lint
+      - name: Build Debug without a signing account
+        run: make build
+      - name: Build optimized Release
+        run: make release
+      - name: Run isolated unit tests
+        run: make test
+
