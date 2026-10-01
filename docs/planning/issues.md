@@ -35,7 +35,7 @@ Milestones describe implementation order, not separate production releases. Do n
 | ID | Issue | Depends on |
 | --- | --- | --- |
 | W001 | Create the native Mac shell and verification commands | None |
-| W002 | Open and migrate a recoverable SQLite library | W001 |
+| W002 | ~~Open and migrate a recoverable SQLite library~~ (implementation done; release gates pending) | W001 |
 | W003 | Create and edit watch records | W002 |
 | W004 | Add the shared caliber library | W003 |
 | W005 | Create job intake and watch repair history | W004 |
@@ -103,7 +103,9 @@ No domain tables, sample production content, signing secrets, release installer,
 
 ## W002 Open and migrate a recoverable SQLite library
 
-Status: Proposed. Milestone: Foundation. Target: one focused PR.
+Status: Done (implementation); minimum-OS and remote CI checks pending. Milestone: Foundation. Target: one focused PR.
+
+Verification: [library-verification.md](library-verification.md).
 
 Dependencies: W001.
 
@@ -120,10 +122,10 @@ Make startup preserve an existing library across restarts and failed migrations.
 
 ### Acceptance criteria
 
-- [ ] First launch creates one library. Later launches reopen it without resetting data.
-- [ ] Foreign keys are enabled. Related changes can commit atomically. File and database work does not block the main actor.
-- [ ] An existing library gets a recoverable snapshot before an upgrade. A snapshot failure prevents the upgrade.
-- [ ] Migration failure, an unreadable database, or a newer schema produces a recovery screen. No empty replacement database is created.
+- [x] First launch creates one library. Later launches reopen it without resetting data.
+- [x] Foreign keys are enabled. Related changes can commit atomically. File and database work does not block the main actor.
+- [x] An existing library gets a recoverable snapshot before an upgrade. A snapshot failure prevents the upgrade.
+- [x] Migration failure, an unreadable database, or a newer schema produces a recovery screen. No empty replacement database is created.
 
 ### Verification
 

@@ -1,6 +1,6 @@
 # Watch workshop app specification
 
-Version 0.3. Prepared on 1 October 2026. This is the first-release contract for review. The current-platform direction and app foundation were approved on 1 October 2026. Other proposed defaults are not yet an approved product baseline. Job history and shared caliber knowledge remain proposed defaults. PDF report creation is deferred. Parts must accept saved links.
+Version 0.3. Prepared on 1 October 2026. This is the first-release contract for review. The current-platform direction, app foundation, and W002 SQLite/GRDB storage design were approved on 1 October 2026. Other proposed defaults are not yet an approved product baseline. Job history and shared caliber knowledge remain proposed defaults. PDF report creation is deferred. Parts must accept saved links.
 
 Build a native Mac app that keeps a watch's identity, repair work, and supporting evidence together. A watch is a lasting record. A job is one repair or restoration of that watch. A caliber is reusable technical knowledge. All app data stays on the Mac. The user chooses when to open an external link or export a file.
 
@@ -36,7 +36,7 @@ These choices make the draft concrete. They are recommendations, not user approv
 | Customers | Optional name, email, and phone on the job; work notes and outcomes for later reference |
 | Shared knowledge | A small caliber library with notes, photos, PDF files, and links |
 | Native stack | Approved: Swift 6 and SwiftUI Observation; AppKit and PDFKit where needed |
-| Persistence | SQLite through GRDB; photos and PDFs in app-managed files |
+| Persistence | Approved: SQLite through GRDB; photos and PDFs in app-managed files |
 | Minimum system | Approved: macOS 27 on Apple silicon; no older-system compatibility layer |
 | Distribution | Run locally from Xcode first; store distribution and automatic updates are later work |
 | Editing | Explicit Save and Cancel for forms and notes; immediate saving for simple status actions |
@@ -235,7 +235,7 @@ flowchart LR
 
 Views render state and forward actions. Feature models own loading, drafts, and presentation state. Services own validation, state transitions, and effects. Persistence code owns SQL and migrations. Inject the database, clock, ID source, and file store where tests need control. Avoid a separate protocol for every trivial type. No database writes occur directly in a SwiftUI view.
 
-GRDB is the sole proposed runtime package. It provides SQLite access, observation, migrations, and backup support. Pin the resolved version in the repository. Use Swift Package Manager. Use Apple's frameworks for files, image decoding, and PDF viewing. This is a design choice supported by the [GRDB documentation](https://github.com/groue/GRDB.swift/blob/master/README.md).
+GRDB is the sole approved runtime package. It provides SQLite access, observation, migrations, and backup support. W002 pins version 7.11.1 and its resolved revision through Swift Package Manager. Use Apple's frameworks for files, image decoding, and PDF viewing. This is a design choice supported by the [GRDB documentation](https://github.com/groue/GRDB.swift/blob/master/README.md).
 
 Use Swift 6 language mode with complete concurrency checking and approachable concurrency. UI state uses Observation and defaults to the main actor. Immutable values can be nonisolated. An async function alone does not move CPU or blocking work off the main actor; use dedicated actors or @concurrent functions for that work. Keep I/O and thumbnail work off the main actor. Publish UI state on the main actor. Serialize domain mutations through one application boundary. Use SQL transactions for related rows and their events. Observe committed data to refresh all relevant views. A repeated click while a command is pending must not create a duplicate task or order event.
 
@@ -305,7 +305,7 @@ The first release passes these journeys:
 
 For a synthetic library of 500 watches, 1,000 jobs, 10,000 tasks, and 5,000 photo items, target a warm list or search response under 300 ms and an initial usable window under 3 seconds on the development Mac. These are proposed performance targets, not measured results. Record hardware and build mode when checking them. Originals load only when viewed. Thumbnail decoding must not freeze task input.
 
-Release acceptance requires running on a Mac with the proposed minimum OS as well as the development OS, or explicitly recording that the minimum-OS run is still pending. The W001 app shell exists. Storage and repair behavior are not implemented yet. Full release checks remain future acceptance criteria.
+Release acceptance requires running on a Mac with the proposed minimum OS as well as the development OS, or explicitly recording that the minimum-OS run is still pending. The W001 app shell and W002 recoverable library exist. Watch records and repair behavior are not implemented yet. Full release checks remain future acceptance criteria.
 
 ## 13 Implementation handover
 

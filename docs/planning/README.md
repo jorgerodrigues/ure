@@ -19,7 +19,7 @@ The editable copies are [the specification](https://chatgpt.com/space/page_d041f
 | Repair history | Separate jobs for a watch, with at most one open job |
 | Shared knowledge | Reusable caliber records and references |
 
-Other proposed defaults are listed in specification section 1. They include optional owner details, SQLite through GRDB, explicit Save actions, and written measurement notes. The approved platform is macOS 27 on Apple silicon, using Xcode 27, Swift 6.4, and SwiftUI Observation. The working name is Ure. Git is initialized. No remote is configured. No GitHub or Linear issues have been published. The W001 app foundation is implemented locally; its checks and pending gates are recorded in [setup-verification.md](setup-verification.md).
+Other proposed defaults are listed in specification section 1. They include optional owner details, explicit Save actions, and written measurement notes. The approved platform is macOS 27 on Apple silicon, using Xcode 27, Swift 6.4, and SwiftUI Observation. The user approved W002's SQLite/GRDB storage design on 1 October 2026. The working name is Ure. Git is initialized. No remote is configured. No GitHub or Linear issues have been published. The W001 app foundation and W002 recoverable library are implemented locally. Their checks are recorded in [setup-verification.md](setup-verification.md) and [library-verification.md](library-verification.md).
 
 ## Package contents
 
@@ -60,4 +60,4 @@ Replace W013 with the selected issue ID.
 
 The package contains 30 unique issues. Every dependency points to an earlier issue. Each issue includes scope, acceptance criteria, validation, and exclusions. Each user requirement maps to one or more issues. Existing issue IDs are stable.
 
-The saved Page text was read back and compared with the authored content. Rendered Page layout has not been visually inspected. The W001 shell is implemented locally. Its actual build and test results are recorded separately. Storage, repair behavior, and full release checks remain future acceptance criteria.
+The saved Page text was read back and compared with the authored content. Rendered Page layout has not been visually inspected. The W001 shell and W002 recoverable library are implemented locally. Their actual build and test results are recorded separately. Watch records, repair behavior, and full release checks remain future acceptance criteria.

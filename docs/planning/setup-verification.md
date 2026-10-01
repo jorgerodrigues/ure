@@ -28,9 +28,11 @@ The test cases cover production path resolution, the explicit test marker, both 
 
 ## Pending checks
 
-`make test-all` built all test targets and passed its six unit cases. The UI runner failed to initialize with `Timed out while enabling automation mode.` None of its UI assertions ran. Keyboard navigation, Settings, resizing to the minimum size, and the two appearance checks remain pending.
+The initial W001 `make test-all` built all test targets and passed its six unit cases. The UI runner failed to initialize with `Timed out while enabling automation mode.` None of its UI assertions ran in that attempt.
 
-Apple's [UI automation guidance](https://developer.apple.com/documentation/xcuiautomation/recording-ui-automation-for-testing) requires Accessibility access for Xcode Helper. Check that permission and retry `make test-ui` in a logged-in graphical session. If initialization still fails after authorization, diagnose the runner before treating this as an app failure.
+During W002 verification, the native UI runner initialized successfully. Keyboard navigation, Settings, and both appearance checks passed. The new recovery and Retry check also passed. The minimum-window resize check still fails: the test gesture leaves the window at 1200 points wide. The same failure was reproduced with the same gesture against the unchanged W001 app at `daa19a4`. Its minimum-window gate remains pending. See [library-verification.md](library-verification.md) for W002 results.
+
+Apple's [UI automation guidance](https://developer.apple.com/documentation/xcuiautomation/recording-ui-automation-for-testing) requires Accessibility access for Xcode Helper. If the runner again fails to initialize, check that permission in a logged-in graphical session. The current remaining native UI gate is the resize check.
 
 The app was launched on the development OS. A macOS 27.0 run is pending. The GitHub Actions workflow is prepared for the macOS 27 arm64 runner, but no remote exists and no remote CI run has occurred.
 
@@ -45,4 +47,3 @@ The ignored `Config/Local.xcconfig` contains that setting on this Mac. The track
 Xcode's App Intents metadata tool reports `Metadata extraction skipped, no AppIntents.framework dependency found`. The shell has no App Intents. Swift compilation and lint have no outstanding diagnostics. No empty App Intents implementation was added to suppress the tool message.
 
 Local ad-hoc builds use App Sandbox. Xcode disables Hardened Runtime for ad-hoc signing. Distribution signing, an owner-controlled bundle identifier, and release acceptance remain separate work.
-

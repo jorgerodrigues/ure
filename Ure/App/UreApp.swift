@@ -2,12 +2,30 @@ import SwiftUI
 
 @main
 struct UreApp: App {
-    @State private var navigation = WorkshopNavigation(configuration: .current)
+    @State private var navigation: WorkshopNavigation
+    @State private var library: LibraryState
+
+    init() {
+        let configuration = AppConfiguration.current
+        #if DEBUG
+            let dependencies = LibraryTestSeed.dependencies(
+                environment: ProcessInfo.processInfo.environment)
+        #else
+            let dependencies = LibraryDependencies()
+        #endif
+        _navigation = State(initialValue: WorkshopNavigation(configuration: configuration))
+        _library = State(
+            initialValue: LibraryState(
+                coordinator: LibraryCoordinator(
+                    root: configuration.libraryRoot, dependencies: dependencies))
+        )
+    }
 
     var body: some Scene {
         Window("Ure", id: "workshop") {
-            WorkshopView()
+            LibraryRootView()
                 .environment(navigation)
+                .environment(library)
                 .frame(minWidth: 1000, minHeight: 650)
         }
         .defaultSize(width: 1200, height: 800)
@@ -19,6 +37,7 @@ struct UreApp: App {
 
         Settings {
             SettingsView()
+                .environment(library)
         }
     }
 }
