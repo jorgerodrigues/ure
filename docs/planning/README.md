@@ -29,6 +29,8 @@ Other proposed defaults are listed in specification section 1. They include opti
 | issues.md | Milestones, common completion rules, dependency index, and all issue bodies |
 | issues/W*.md | The 30 individual issue bodies |
 | issues.json | Structured issue data and full bodies for a later tracker import |
+| setup-verification.md | W001 checks and remaining native UI acceptance |
+| library-verification.md | W002 checks and remaining release gates |
 | README.md | This guide and handover prompt |
 
 ## Requirement coverage

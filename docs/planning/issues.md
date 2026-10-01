@@ -1,6 +1,6 @@
 # Watch workshop implementation issues
 
-Version 0.3. Prepared on 1 October 2026. These are 30 proposed issue bodies. Each is intended to produce one focused PR. Product assumptions in specification section 1 must be settled before agents start the affected work. These planning IDs have not been published to an issue tracker.
+Version 0.3. Prepared on 1 October 2026. These are 30 implementation issue bodies. Each is intended to produce one focused PR. Product assumptions in specification section 1 must be settled before agents start the affected work. These planning IDs have not been published to an issue tracker.
 
 Read [the specification](specification.md) first. The numbered order below is a valid dependency order. Do not start an issue before its listed dependencies are merged. Requirements that touch persistence must include schema changes, validation, service behavior, UI, and tests in the same PR. Infrastructure issues explicitly state when they have no independent UI.
 
@@ -34,7 +34,7 @@ Milestones describe implementation order, not separate production releases. Do n
 
 | ID | Issue | Depends on |
 | --- | --- | --- |
-| W001 | Create the native Mac shell and verification commands | None |
+| W001 | ~~Create the native Mac shell and verification commands~~ (implementation done; UI checks pending) | None |
 | W002 | ~~Open and migrate a recoverable SQLite library~~ (implementation done; release gates pending) | W001 |
 | W003 | Create and edit watch records | W002 |
 | W004 | Add the shared caliber library | W003 |
@@ -67,7 +67,9 @@ Milestones describe implementation order, not separate production releases. Do n
 
 ## W001 Create the native Mac shell and verification commands
 
-Status: Implemented locally; native UI acceptance pending. Milestone: Foundation. Target: one focused PR.
+Status: Done (implementation); native UI acceptance pending. Milestone: Foundation. Target: one focused PR.
+
+Implementation commit: `daa19a4`.
 
 Verification: [setup-verification.md](setup-verification.md).
 
@@ -88,8 +90,8 @@ Launch a native app with a reproducible build and an isolated test environment.
 
 - [ ] A fresh checkout builds and launches using the documented commands.
 - [ ] The window follows the system appearance and resizes to the proposed minimum without clipped navigation.
-- [ ] Tests use an injected temporary library path. They cannot open the normal user library.
-- [ ] The shared scheme supports unsigned CI builds. No account, network service, or third-party UI package is needed.
+- [x] Tests use an injected temporary library path. They cannot open the normal user library.
+- [x] The shared scheme supports unsigned CI builds. No account, network service, or third-party UI package is needed.
 
 ### Verification
 
@@ -104,6 +106,8 @@ No domain tables, sample production content, signing secrets, release installer,
 ## W002 Open and migrate a recoverable SQLite library
 
 Status: Done (implementation); minimum-OS and remote CI checks pending. Milestone: Foundation. Target: one focused PR.
+
+Implementation commit: `07bee8e`.
 
 Verification: [library-verification.md](library-verification.md).
 
