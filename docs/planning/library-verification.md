@@ -2,6 +2,8 @@
 
 Recorded on 1 October 2026. W002 is implemented locally. The minimum-OS run and remote CI remain pending.
 
+Implementation commit: `07bee8e`.
+
 ## Implementation
 
 - GRDB 7.11.1 is the sole runtime package. The Xcode project pins the exact version. `Package.resolved` pins revision `b83108d10f42680d78f23fe4d4d80fc88dab3212`.
@@ -37,7 +39,7 @@ Adding a package exposed the existing `clang-stat-cache` stall in the package ta
 
 ## Remaining limits
 
-- A macOS 27.0 run and remote CI remain pending. There is no configured Git remote.
+- A macOS 27.0 run and remote CI remain pending. The [GitHub remote](https://github.com/jorgerodrigues/ure) is configured, but no CI run has occurred.
 - The existing W001 minimum-window resize gate remains pending as described above.
 - Recovery snapshots and old generations are retained. No automatic retention policy or public backup/restore controls are added in W002.
 - This implementation does not add watch or repair tables. W003 adds watch records.

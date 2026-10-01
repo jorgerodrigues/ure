@@ -72,13 +72,13 @@ The Release configuration enables optimization and whole-module compilation. The
 ## Project context
 
 - [Specification](docs/planning/specification.md)
-- [Implementation issues](docs/planning/issues.md)
-- [W001 foundation](docs/planning/issues/W001.md)
-- [Setup verification and pending gates](docs/planning/setup-verification.md)
+- [Implementation roadmap](docs/planning/issues.md)
+- [GitHub issues](https://github.com/jorgerodrigues/ure/issues)
+- [W001 foundation verification and pending gates](docs/planning/setup-verification.md)
 - [W002 library verification](docs/planning/library-verification.md)
 
-The user approved the current-platform direction and W002's SQLite/GRDB design on 1 October 2026. Separate repair jobs and shared caliber knowledge remain proposed product choices. The next implementation issue is W003, which adds watch records.
+The user approved the current-platform direction and W002's SQLite/GRDB design on 1 October 2026. Separate repair jobs and shared caliber knowledge remain proposed product choices. The next implementation issue is [W003: watch records](https://github.com/jorgerodrigues/ure/issues/1). GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.
 
-The GitHub Actions workflow uses the [macOS 27 arm64 runner](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md) and Xcode 27. It runs format/lint, Debug and Release builds, and isolated unit tests. Remote CI remains unverified until a GitHub remote is configured.
+The GitHub Actions workflow uses the [macOS 27 arm64 runner](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md) and Xcode 27. It runs format/lint, Debug and Release builds, and isolated unit tests. The [GitHub remote](https://github.com/jorgerodrigues/ure) is configured. Remote CI has not run yet.
 
 Current platform references: [Apple's Xcode requirements](https://developer.apple.com/xcode/system-requirements/), [Observation](https://developer.apple.com/documentation/swiftui/migrating-from-the-observable-object-protocol-to-the-observable-macro), [Swift concurrency](https://docs.swift.org/swift-book/LanguageGuide/Concurrency.html), and [SwiftUI performance](https://developer.apple.com/documentation/xcode/understanding-and-improving-swiftui-performance).

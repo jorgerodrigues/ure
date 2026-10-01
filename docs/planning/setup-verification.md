@@ -2,6 +2,8 @@
 
 Recorded on 1 October 2026. W001 is implemented locally. Its native UI acceptance is still pending.
 
+Implementation commit: `daa19a4`.
+
 ## Platform
 
 - Target: macOS 27.0 or later, Apple silicon only.
@@ -34,7 +36,7 @@ During W002 verification, the native UI runner initialized successfully. Keyboar
 
 Apple's [UI automation guidance](https://developer.apple.com/documentation/xcuiautomation/recording-ui-automation-for-testing) requires Accessibility access for Xcode Helper. If the runner again fails to initialize, check that permission in a logged-in graphical session. The current remaining native UI gate is the resize check.
 
-The app was launched on the development OS. A macOS 27.0 run is pending. The GitHub Actions workflow is prepared for the macOS 27 arm64 runner, but no remote exists and no remote CI run has occurred.
+The app was launched on the development OS. A macOS 27.0 run is pending. The GitHub Actions workflow is prepared for the macOS 27 arm64 runner. The [GitHub remote](https://github.com/jorgerodrigues/ure) is configured, but no remote CI run has occurred.
 
 The empty app shell does not verify the realistic-library performance targets. W031 must measure those with the stated dataset and Release build. Full repair and recovery journeys remain future work.
 

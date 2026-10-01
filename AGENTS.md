@@ -2,6 +2,8 @@
 
 Read `README.md`, `docs/planning/specification.md`, the selected issue, and its dependencies before editing. The user approved the current-platform direction. Other product choices marked proposed still need to be settled before affected implementation.
 
+GitHub issues hold story descriptions, acceptance criteria, and current status. Use `gh issue view` to read the selected issue and its dependencies. `docs/planning/issues.md` maps the stable planning IDs to GitHub issues.
+
 ## Platform and design
 
 - Target macOS 27 and Apple silicon. Use Xcode 27 or later and Swift 6 language mode. Do not add older-OS fallbacks.
@@ -25,8 +27,7 @@ Read `README.md`, `docs/planning/specification.md`, the selected issue, and its 
 - Run `make check` and `make release` for changed app code. Run focused native UI tests for changed interactions.
 - Test behavior and failure boundaries. No test may open the normal user library. Keep the shared scheme's test marker and injected library location.
 - Save test captures and result bundles under `~/Developer/test-assets/<branch>/`. Follow the `test-assets` skill and remove that folder when the branch is done.
-- Record actual results. UI automation authorization, a macOS 27.0 run, and remote CI are pending in `docs/planning/setup-verification.md`.
+- Record actual results. The minimum-window resize check, a macOS 27.0 run, and remote CI are pending in `docs/planning/setup-verification.md`.
 - `Config/Local.xcconfig` is ignored and optional. It holds the verified SDK file-cache workaround on the development Mac. Keep machine-specific settings out of committed configuration.
 
 Ask whether the user wants addressed review comments resolved. Do not add tool attribution or coauthor footers to commits, issues, or pull requests.
-
