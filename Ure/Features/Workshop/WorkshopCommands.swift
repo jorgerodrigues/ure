@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct WorkshopCommands: Commands {
@@ -9,6 +10,10 @@ struct WorkshopCommands: Commands {
             Button("New Watch", action: createWatch)
                 .keyboardShortcut("n", modifiers: .command)
                 .disabled(watches.isLoading || watches.isSaving || watches.loadError != nil)
+        }
+        CommandGroup(after: .newItem) {
+            Button("Close", action: closeWindow)
+                .keyboardShortcut("w", modifiers: .command)
         }
         CommandGroup(replacing: .saveItem) {
             Button("Save", action: watches.saveCommand)
@@ -38,5 +43,9 @@ struct WorkshopCommands: Commands {
             navigation.selection = .watches
             watches.create()
         }
+    }
+
+    private func closeWindow() {
+        NSApp.keyWindow?.performClose(nil)
     }
 }
