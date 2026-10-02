@@ -18,6 +18,12 @@
 - Do not use force unwraps, force casts, force tries, or unchecked `Sendable`.
 - Use stable list IDs and thumbnails. Load originals only for viewing. Profile Release builds with realistic data before adding caches or extra layers.
 
+## Design
+
+- Designs live in the Paper file "Ure" (https://app.paper.design/file/01M3XMBQN7WXTGQBWF7QYKP790). The Brand page holds the brief and colour. The Logo page holds the app icon. The macOS 27 page holds the screen rules and the reference main window, in light and dark. Feature screens have one page per issue, such as "Watches · W003", with an implementation-notes artboard.
+- Check Paper for the screen you build before you write UI. Read exact values with the Paper tools (JSX and computed styles), not from screenshots. Translate them into native SwiftUI controls and semantic colours.
+- Follow the macOS 27 screen rules in `docs/design/README.md`. Don't put Liquid Glass on content or add toolbar backgrounds.
+
 ## Verification
 
 - During rapid implementation, run `make lint` and `make build` for app changes. Keep behavioral tests current and compile affected tests when needed. Build commands and local setup are in `README.md`.
