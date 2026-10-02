@@ -53,6 +53,7 @@ struct WorkshopCommands: Commands {
 
     private var canSave: Bool {
         if editing.isSaving { return false }
+        if editing.notes.draft != nil { return editing.notes.canSave }
         switch navigation.selectedSection {
         case .watches:
             if editing.jobs.isEditing { return editing.jobs.canSave }
@@ -63,6 +64,10 @@ struct WorkshopCommands: Commands {
     }
 
     private func save() {
+        if editing.notes.draft != nil {
+            editing.notes.saveCommand()
+            return
+        }
         switch navigation.selectedSection {
         case .watches:
             if editing.jobs.isEditing {

@@ -328,6 +328,7 @@ nonisolated struct JobTransitionTests {
 
 nonisolated enum JobMigrationFixture {
     static func removeStages(in db: Database) throws {
+        try NoteMigrationFixture.removeNotes(in: db)
         try db.execute(sql: "DROP TABLE activityEvent")
         for column in ["condition", "conditionNote"] {
             try db.execute(sql: "ALTER TABLE watch DROP COLUMN \(column)")
