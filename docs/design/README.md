@@ -1,6 +1,6 @@
 # Design
 
-The Paper file [**Ure**](https://app.paper.design/file/01M3XMBQN7WXTGQBWF7QYKP790) is the source of truth for design. Its pages are **Brand**, **Logo** and **macOS 27**. This note keeps the decisions that affect code. Values marked approximate come from Apple's guidelines and reviews, not from Apple's design kit.
+The Paper file [**Ure**](https://app.paper.design/file/01M3XMBQN7WXTGQBWF7QYKP790) is the source of truth for design. Its pages are **Brand**, **Logo**, **macOS 27**, and one page per feature issue, starting with **Watches · W003**. Each feature page ends with an implementation-notes artboard. This note keeps the decisions that affect code. Values marked approximate come from Apple's guidelines and reviews, not from Apple's design kit.
 
 ## Brand
 
