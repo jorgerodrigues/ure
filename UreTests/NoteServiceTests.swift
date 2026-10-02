@@ -210,6 +210,7 @@ nonisolated enum NoteFixture {
 
 nonisolated enum NoteMigrationFixture {
     static func removeNotes(in db: Database) throws {
+        try ReferenceMigrationFixture.removeLinks(in: db)
         try db.execute(sql: "DROP TABLE note")
         try db.execute(sql: "DELETE FROM grdb_migrations WHERE identifier = 'v6-notes'")
     }

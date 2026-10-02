@@ -6,6 +6,7 @@ struct WorkshopView: View {
     @Environment(CaliberState.self) private var calibers
     @Environment(JobState.self) private var jobs
     @Environment(NoteState.self) private var notes
+    @Environment(ReferenceState.self) private var references
     @Environment(WorkshopEditing.self) private var editing
 
     var body: some View {
@@ -42,6 +43,7 @@ struct WorkshopView: View {
         .task(calibers.observe)
         .task(jobs.observe)
         .task(notes.observe)
+        .task(references.observe)
         .background(WorkshopWindowGuard(editing: editing))
         .alert(editing.unsavedChangesTitle, isPresented: $editing.showsUnsavedChanges) {
             Button("Save", action: editing.saveAndContinueCommand)

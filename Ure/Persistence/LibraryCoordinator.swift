@@ -109,6 +109,11 @@ actor LibraryCoordinator {
         return ValueObservation.tracking(NoteQueries.fetchAll).values(in: database)
     }
 
+    func referenceValues() throws -> AsyncValueObservation<[LibraryItem]> {
+        guard let database else { throw LibraryError.notOpen }
+        return ValueObservation.tracking(LibraryItemQueries.fetchAll).values(in: database)
+    }
+
     private func createLibrary() throws -> LibraryInfo {
         let manager = FileManager.default
         let generationID = dependencies.makeID()

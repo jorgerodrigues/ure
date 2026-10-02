@@ -80,7 +80,8 @@ struct JobStateTests {
         let editing = WorkshopEditing(
             watches: WatchState(service: WatchService(coordinator: coordinator)),
             calibers: CaliberState(service: CaliberService(coordinator: coordinator)), jobs: state,
-            notes: NoteState(service: NoteService(coordinator: coordinator)))
+            notes: NoteState(service: NoteService(coordinator: coordinator)),
+            references: ReferenceState(service: ReferenceService(coordinator: coordinator)))
         state.start(for: watch.id)
         state.draft?.title = "Keep this intake"
         var navigated = false

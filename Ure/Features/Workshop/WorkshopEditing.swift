@@ -6,28 +6,36 @@ final class WorkshopEditing {
     let calibers: CaliberState
     let jobs: JobState
     let notes: NoteState
+    let references: ReferenceState
 
-    init(watches: WatchState, calibers: CaliberState, jobs: JobState, notes: NoteState) {
+    init(
+        watches: WatchState, calibers: CaliberState, jobs: JobState, notes: NoteState,
+        references: ReferenceState
+    ) {
         self.watches = watches
         self.calibers = calibers
         self.jobs = jobs
         self.notes = notes
+        self.references = references
     }
 
-    var isSaving: Bool { watches.isSaving || calibers.isSaving || jobs.isSaving || notes.isSaving }
+    var isSaving: Bool {
+        watches.isSaving || calibers.isSaving || jobs.isSaving || notes.isSaving
+            || references.isSaving
+    }
     var hasUnsavedChanges: Bool {
         watches.hasUnsavedChanges || calibers.hasUnsavedChanges || jobs.hasUnsavedChanges
-            || notes.hasUnsavedChanges
+            || notes.hasUnsavedChanges || references.hasUnsavedChanges
     }
     var isNavigationPending: Bool {
         watches.isNavigationPending || calibers.isNavigationPending || jobs.isNavigationPending
-            || notes.isNavigationPending
+            || notes.isNavigationPending || references.isNavigationPending
     }
 
     var showsUnsavedChanges: Bool {
         get {
             watches.showsUnsavedChanges || calibers.showsUnsavedChanges || jobs.showsUnsavedChanges
-                || notes.showsUnsavedChanges
+                || notes.showsUnsavedChanges || references.showsUnsavedChanges
         }
         set {
             if watches.isNavigationPending {
@@ -36,8 +44,10 @@ final class WorkshopEditing {
                 calibers.showsUnsavedChanges = newValue
             } else if jobs.isNavigationPending {
                 jobs.showsUnsavedChanges = newValue
-            } else {
+            } else if notes.isNavigationPending {
                 notes.showsUnsavedChanges = newValue
+            } else {
+                references.showsUnsavedChanges = newValue
             }
         }
     }
@@ -46,7 +56,8 @@ final class WorkshopEditing {
         if watches.isNavigationPending { return "Save changes to this watch?" }
         if calibers.isNavigationPending { return "Save changes to this caliber?" }
         if jobs.isNavigationPending { return "Save changes to this job?" }
-        return "Save changes to this note?"
+        if notes.isNavigationPending { return "Save changes to this note?" }
+        return "Save changes to this reference?"
     }
 
     func requestNavigation(_ action: @escaping () -> Void, onCancel: (() -> Void)? = nil) {
@@ -59,7 +70,14 @@ final class WorkshopEditing {
                 self.calibers.requestNavigation(
                     {
                         self.jobs.requestNavigation(
-                            { self.notes.requestNavigation(action, onCancel: onCancel) },
+                            {
+                                self.notes.requestNavigation(
+                                    {
+                                        self.references.requestNavigation(
+                                            action, onCancel: onCancel)
+                                    },
+                                    onCancel: onCancel)
+                            },
                             onCancel: onCancel)
                     }, onCancel: onCancel)
             }, onCancel: onCancel)
@@ -72,8 +90,10 @@ final class WorkshopEditing {
             calibers.stay()
         } else if jobs.isNavigationPending {
             jobs.stay()
-        } else {
+        } else if notes.isNavigationPending {
             notes.stay()
+        } else {
+            references.stay()
         }
     }
 
@@ -84,8 +104,10 @@ final class WorkshopEditing {
             calibers.discardAndContinue()
         } else if jobs.isNavigationPending {
             jobs.discardAndContinue()
-        } else {
+        } else if notes.isNavigationPending {
             notes.discardAndContinue()
+        } else {
+            references.discardAndContinue()
         }
     }
 
@@ -100,8 +122,10 @@ final class WorkshopEditing {
             await calibers.saveAndContinue()
         } else if jobs.isNavigationPending {
             await jobs.saveAndContinue()
-        } else {
+        } else if notes.isNavigationPending {
             await notes.saveAndContinue()
+        } else {
+            await references.saveAndContinue()
         }
     }
 }

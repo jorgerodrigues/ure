@@ -4,10 +4,15 @@ struct CaliberDetailView: View {
     @Environment(CaliberState.self) private var calibers
     @Environment(WatchState.self) private var watches
     @Environment(NoteState.self) private var notes
+    @Environment(ReferenceState.self) private var references
 
     var body: some View {
         if calibers.draft != nil {
             CaliberEditorView()
+        } else if let caliber = calibers.selectedCaliber,
+            references.isPresenting(for: .caliber(caliber.id))
+        {
+            ReferenceDetailView(owner: .caliber(caliber.id))
         } else if let caliber = calibers.selectedCaliber,
             notes.isPresenting(for: .caliber(caliber.id))
         {
@@ -18,6 +23,7 @@ struct CaliberDetailView: View {
                     CaliberSpecificationsView(caliber: caliber)
                 }
                 NoteSectionView(owner: .caliber(caliber.id))
+                ReferenceSectionView(owner: .caliber(caliber.id))
                 Section("Linked watches") {
                     if watches.isLoading {
                         ProgressView("Loading watches…")
