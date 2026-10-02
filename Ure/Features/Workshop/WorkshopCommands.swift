@@ -3,22 +3,22 @@ import SwiftUI
 
 struct WorkshopCommands: Commands {
     let navigation: WorkshopNavigation
-    let watches: WatchState
+    let editing: WorkshopEditing
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("New Watch", action: createWatch)
+            Button(newRecordTitle, action: createRecord)
                 .keyboardShortcut("n", modifiers: .command)
-                .disabled(watches.isLoading || watches.isSaving || watches.loadError != nil)
+                .disabled(!canCreate)
         }
         CommandGroup(after: .newItem) {
             Button("Close", action: closeWindow)
                 .keyboardShortcut("w", modifiers: .command)
         }
         CommandGroup(replacing: .saveItem) {
-            Button("Save", action: watches.saveCommand)
+            Button("Save", action: save)
                 .keyboardShortcut("s", modifiers: .command)
-                .disabled(!watches.canSave || navigation.selectedSection != .watches)
+                .disabled(!canSave)
         }
         CommandGroup(after: .sidebar) {
             Divider()
@@ -28,20 +28,55 @@ struct WorkshopCommands: Commands {
                     selectSection(section)
                 }
                 .keyboardShortcut(KeyEquivalent(section.shortcut), modifiers: [.command, .option])
-                .disabled(watches.isSaving)
+                .disabled(editing.isSaving)
             }
         }
     }
 
     private func selectSection(_ section: WorkshopSection) {
         guard section != navigation.selection else { return }
-        watches.requestNavigation { navigation.selection = section }
+        editing.requestNavigation { navigation.selection = section }
     }
 
-    private func createWatch() {
-        watches.requestNavigation {
-            navigation.selection = .watches
-            watches.create()
+    private var newRecordTitle: String {
+        if navigation.selectedSection == .calibers { return "New Caliber" }
+        return "New Watch"
+    }
+
+    private var canCreate: Bool {
+        if editing.isSaving { return false }
+        if navigation.selectedSection == .calibers {
+            return !editing.calibers.isLoading && editing.calibers.loadError == nil
+        }
+        return !editing.watches.isLoading && editing.watches.loadError == nil
+    }
+
+    private var canSave: Bool {
+        if editing.isSaving { return false }
+        switch navigation.selectedSection {
+        case .watches: return editing.watches.canSave
+        case .calibers: return editing.calibers.canSave
+        default: return false
+        }
+    }
+
+    private func save() {
+        switch navigation.selectedSection {
+        case .watches: editing.watches.saveCommand()
+        case .calibers: editing.calibers.saveCommand()
+        default: break
+        }
+    }
+
+    private func createRecord() {
+        let createsCaliber = navigation.selectedSection == .calibers
+        editing.requestNavigation {
+            if createsCaliber {
+                editing.calibers.create()
+            } else {
+                navigation.selection = .watches
+                editing.watches.create()
+            }
         }
     }
 

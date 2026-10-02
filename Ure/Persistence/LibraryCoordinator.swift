@@ -94,6 +94,11 @@ actor LibraryCoordinator {
         return ValueObservation.tracking(WatchQueries.fetchAll).values(in: database)
     }
 
+    func caliberValues() throws -> AsyncValueObservation<[CaliberRecord]> {
+        guard let database else { throw LibraryError.notOpen }
+        return ValueObservation.tracking(CaliberQueries.fetchAll).values(in: database)
+    }
+
     private func createLibrary() throws -> LibraryInfo {
         let manager = FileManager.default
         let generationID = dependencies.makeID()

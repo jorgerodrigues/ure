@@ -13,6 +13,7 @@ nonisolated struct WatchRecord: Codable, Equatable, Identifiable, Sendable, Fetc
     let caseReference: String?
     let serial: String?
     let approximateYear: String?
+    let caliberID: UUID?
     let caseMaterial: String?
     let caseDiameter: Double?
     let lugWidth: Double?

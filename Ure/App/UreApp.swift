@@ -2,10 +2,12 @@ import SwiftUI
 
 @main
 struct UreApp: App {
-    @NSApplicationDelegateAdaptor(WatchApplicationDelegate.self) private var applicationDelegate
+    @NSApplicationDelegateAdaptor(WorkshopApplicationDelegate.self) private var applicationDelegate
     @State private var navigation: WorkshopNavigation
     @State private var library: LibraryState
     @State private var watches: WatchState
+    @State private var calibers: CaliberState
+    @State private var editing: WorkshopEditing
 
     init() {
         let configuration = AppConfiguration.current
@@ -19,9 +21,13 @@ struct UreApp: App {
         let coordinator = LibraryCoordinator(
             root: configuration.libraryRoot, dependencies: dependencies)
         let watches = WatchState(service: WatchService(coordinator: coordinator))
+        let calibers = CaliberState(service: CaliberService(coordinator: coordinator))
+        let editing = WorkshopEditing(watches: watches, calibers: calibers)
         _library = State(initialValue: LibraryState(coordinator: coordinator))
         _watches = State(initialValue: watches)
-        applicationDelegate.watches = watches
+        _calibers = State(initialValue: calibers)
+        _editing = State(initialValue: editing)
+        applicationDelegate.editing = editing
     }
 
     var body: some Scene {
@@ -30,13 +36,15 @@ struct UreApp: App {
                 .environment(navigation)
                 .environment(library)
                 .environment(watches)
+                .environment(calibers)
+                .environment(editing)
                 .frame(minWidth: 1000, minHeight: 650)
         }
         .defaultSize(width: 1200, height: 800)
         .windowResizability(.contentMinSize)
         .commands {
             SidebarCommands()
-            WorkshopCommands(navigation: navigation, watches: watches)
+            WorkshopCommands(navigation: navigation, editing: editing)
         }
 
         Settings {

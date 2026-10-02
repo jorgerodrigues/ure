@@ -39,7 +39,7 @@ Adding a package exposed the existing `clang-stat-cache` stall in the package ta
 
 ## Remaining limits
 
-- A macOS 27.0 run and remote CI remain pending. The [GitHub remote](https://github.com/jorgerodrigues/ure) is configured, but no CI run has occurred.
+- A macOS 27.0 native acceptance run remains pending. On 2 October 2026, [remote CI](https://github.com/jorgerodrigues/ure/actions/runs/36971087793) passed format, Debug, Release, and isolated unit checks, including the library tests, for the merged W003 app. Native UI and device checks are deferred to release acceptance by user agreement.
 - The existing W001 minimum-window resize gate remains pending as described above.
 - Recovery snapshots and old generations are retained. No automatic retention policy or public backup/restore controls are added in W002.
 - This implementation does not add watch or repair tables. W003 adds watch records.

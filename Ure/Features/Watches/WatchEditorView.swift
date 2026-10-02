@@ -18,6 +18,7 @@ struct WatchEditorView: View {
                 WatchTextField("Serial number", text: field(\.serial), identifier: "watchSerial")
                 WatchTextField(
                     "Approximate year", text: field(\.approximateYear), identifier: "watchYear")
+                WatchCaliberPicker()
             }
             Section("Specifications") {
                 WatchTextField(

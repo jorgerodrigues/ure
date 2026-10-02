@@ -3,9 +3,11 @@ import SwiftUI
 struct WorkshopView: View {
     @Environment(WorkshopNavigation.self) private var navigation
     @Environment(WatchState.self) private var watches
+    @Environment(CaliberState.self) private var calibers
+    @Environment(WorkshopEditing.self) private var editing
 
     var body: some View {
-        @Bindable var watches = watches
+        @Bindable var editing = editing
 
         NavigationSplitView {
             WorkshopSidebar()
@@ -14,6 +16,8 @@ struct WorkshopView: View {
             Group {
                 if navigation.selectedSection == .watches {
                     WatchListView()
+                } else if navigation.selectedSection == .calibers {
+                    CaliberListView()
                 } else {
                     WorkshopSectionView(section: navigation.selectedSection)
                 }
@@ -22,6 +26,8 @@ struct WorkshopView: View {
         } detail: {
             if navigation.selectedSection == .watches {
                 WatchDetailView()
+            } else if navigation.selectedSection == .calibers {
+                CaliberDetailView()
             } else {
                 ContentUnavailableView(
                     "Select a record",
@@ -31,11 +37,12 @@ struct WorkshopView: View {
             }
         }
         .task(watches.observe)
-        .background(WatchWindowGuard(watches: watches))
-        .alert("Save changes to this watch?", isPresented: $watches.showsUnsavedChanges) {
-            Button("Save", action: watches.saveAndContinueCommand)
-            Button("Discard", role: .destructive, action: watches.discardAndContinue)
-            Button("Stay", role: .cancel, action: watches.stay)
+        .task(calibers.observe)
+        .background(WorkshopWindowGuard(editing: editing))
+        .alert(editing.unsavedChangesTitle, isPresented: $editing.showsUnsavedChanges) {
+            Button("Save", action: editing.saveAndContinueCommand)
+            Button("Discard", role: .destructive, action: editing.discardAndContinue)
+            Button("Stay", role: .cancel, action: editing.stay)
         } message: {
             Text("Your changes have not been saved.")
         }

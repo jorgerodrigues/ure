@@ -19,6 +19,7 @@ nonisolated struct WatchDraft: Equatable, Sendable {
     var caseReference = ""
     var serial = ""
     var approximateYear = ""
+    var caliberID: UUID?
     var caseMaterial = ""
     var caseDiameter = ""
     var lugWidth = ""
@@ -34,6 +35,7 @@ nonisolated struct WatchDraft: Equatable, Sendable {
         caseReference = watch.caseReference ?? ""
         serial = watch.serial ?? ""
         approximateYear = watch.approximateYear ?? ""
+        caliberID = watch.caliberID
         caseMaterial = watch.caseMaterial ?? ""
         caseDiameter = Self.dimensionText(watch.caseDiameter, locale: locale)
         lugWidth = Self.dimensionText(watch.lugWidth, locale: locale)
@@ -52,7 +54,8 @@ nonisolated struct WatchDraft: Equatable, Sendable {
         return WatchRecord(
             id: id, name: name, brand: optional(brand), model: optional(model),
             caseReference: optional(caseReference), serial: optional(serial),
-            approximateYear: optional(approximateYear), caseMaterial: optional(caseMaterial),
+            approximateYear: optional(approximateYear), caliberID: caliberID,
+            caseMaterial: optional(caseMaterial),
             caseDiameter: diameter, lugWidth: width, waterResistance: optional(waterResistance),
             specificationNotes: optional(specificationNotes), createdAt: createdAt,
             updatedAt: updatedAt)

@@ -27,6 +27,9 @@ struct WatchDetailView: View {
                         }
                     }
                 }
+                Section("Shared caliber specifications") {
+                    WatchCaliberView(caliberID: watch.caliberID)
+                }
             }
             .formStyle(.grouped)
             .textSelection(.enabled)
