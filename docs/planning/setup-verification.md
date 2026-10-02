@@ -36,7 +36,7 @@ During W002 verification, the native UI runner initialized successfully. Keyboar
 
 Apple's [UI automation guidance](https://developer.apple.com/documentation/xcuiautomation/recording-ui-automation-for-testing) requires Accessibility access for Xcode Helper. If the runner again fails to initialize, check that permission in a logged-in graphical session. The current remaining native UI gate is the resize check.
 
-The app was launched on the development OS. A macOS 27.0 run is pending. The GitHub Actions workflow is prepared for the macOS 27 arm64 runner. The [GitHub remote](https://github.com/jorgerodrigues/ure) is configured, but no remote CI run has occurred.
+The app was launched on the development OS. A macOS 27.0 native acceptance run is pending. On 2 October 2026, [remote CI](https://github.com/jorgerodrigues/ure/actions/runs/36971087793) passed format, Debug, Release, and isolated unit checks for the merged W003 app. Native UI and device checks are deferred to release acceptance by user agreement. The minimum-window resize gate remains pending.
 
 The empty app shell does not verify the realistic-library performance targets. W031 must measure those with the stated dataset and Release build. Full repair and recovery journeys remain future work.
 

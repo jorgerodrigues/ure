@@ -1,25 +1,25 @@
 import AppKit
 import SwiftUI
 
-final class WatchApplicationDelegate: NSObject, NSApplicationDelegate {
-    var watches: WatchState?
+final class WorkshopApplicationDelegate: NSObject, NSApplicationDelegate {
+    var editing: WorkshopEditing?
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let watches else { return .terminateNow }
-        if watches.isSaving || watches.isNavigationPending { return .terminateCancel }
-        guard watches.hasUnsavedChanges else { return .terminateNow }
-        watches.requestNavigation(
+        guard let editing else { return .terminateNow }
+        if editing.isSaving || editing.isNavigationPending { return .terminateCancel }
+        guard editing.hasUnsavedChanges else { return .terminateNow }
+        editing.requestNavigation(
             { sender.reply(toApplicationShouldTerminate: true) },
             onCancel: { sender.reply(toApplicationShouldTerminate: false) })
         return .terminateLater
     }
 }
 
-struct WatchWindowGuard: NSViewRepresentable {
-    let watches: WatchState
+struct WorkshopWindowGuard: NSViewRepresentable {
+    let editing: WorkshopEditing
 
     func makeNSView(context: Context) -> WindowProbe {
-        WindowProbe(watches: watches)
+        WindowProbe(editing: editing)
     }
 
     func updateNSView(_ nsView: WindowProbe, context: Context) {}
@@ -29,12 +29,12 @@ struct WatchWindowGuard: NSViewRepresentable {
     }
 
     final class WindowProbe: NSView {
-        private let watches: WatchState
+        private let editing: WorkshopEditing
         private var proxy: WindowDelegateProxy?
         private weak var installedWindow: NSWindow?
 
-        init(watches: WatchState) {
-            self.watches = watches
+        init(editing: WorkshopEditing) {
+            self.editing = editing
             super.init(frame: .zero)
         }
 
@@ -45,7 +45,7 @@ struct WatchWindowGuard: NSViewRepresentable {
             guard installedWindow !== window else { return }
             restoreDelegate()
             guard let window else { return }
-            let proxy = WindowDelegateProxy(watches: watches, originalDelegate: window.delegate)
+            let proxy = WindowDelegateProxy(editing: editing, originalDelegate: window.delegate)
             self.proxy = proxy
             installedWindow = window
             window.delegate = proxy
@@ -61,21 +61,21 @@ struct WatchWindowGuard: NSViewRepresentable {
     }
 
     nonisolated final class WindowDelegateProxy: NSObject, NSWindowDelegate {
-        private let watches: WatchState
+        private let editing: WorkshopEditing
         let originalDelegate: (any NSWindowDelegate)?
 
-        init(watches: WatchState, originalDelegate: (any NSWindowDelegate)?) {
-            self.watches = watches
+        init(editing: WorkshopEditing, originalDelegate: (any NSWindowDelegate)?) {
+            self.editing = editing
             self.originalDelegate = originalDelegate
         }
 
         @MainActor
         func windowShouldClose(_ sender: NSWindow) -> Bool {
-            if watches.isSaving { return false }
-            if !watches.hasUnsavedChanges {
+            if editing.isSaving { return false }
+            if !editing.hasUnsavedChanges {
                 return originalDelegate?.windowShouldClose?(sender) ?? true
             }
-            watches.requestNavigation { [weak sender] in sender?.performClose(nil) }
+            editing.requestNavigation { [weak sender] in sender?.performClose(nil) }
             return false
         }
 

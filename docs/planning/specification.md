@@ -1,6 +1,6 @@
 # Watch workshop app specification
 
-Version 0.4. Updated on 2 October 2026. This is the first-release contract for review. The current-platform direction, app foundation, and W002 SQLite/GRDB storage design were approved on 1 October 2026. The user also approved explicit Save and Cancel editing for W003. Other proposed defaults are not yet an approved product baseline. Job history and shared caliber knowledge remain proposed defaults. PDF report creation is deferred. Parts must accept saved links.
+Version 0.5. Updated on 2 October 2026. This is the first-release contract for review. The current-platform direction, app foundation, and W002 SQLite/GRDB storage design were approved on 1 October 2026. The user approved the shared caliber design on 2 October 2026. Explicit Save and Cancel editing is approved for W003 and W004. Other proposed defaults are not yet an approved product baseline. Job history remains proposed. PDF report creation is deferred. Parts must accept saved links.
 
 Build a native Mac app that keeps a watch's identity, repair work, and supporting evidence together. A watch is a lasting record. A job is one repair or restoration of that watch. A caliber is reusable technical knowledge. All app data stays on the Mac. The user chooses when to open an external link or export a file.
 
@@ -34,12 +34,12 @@ These choices make the draft concrete. They are recommendations, not user approv
 | --- | --- |
 | Repair history | Several jobs per watch; at most one open job per watch |
 | Customers | Optional name, email, and phone on the job; work notes and outcomes for later reference |
-| Shared knowledge | A small caliber library with notes, photos, PDF files, and links |
+| Shared knowledge | Approved on 2 October 2026: reusable caliber records linked to several watches; notes, photos, PDF files, and links follow in their own issues |
 | Native stack | Approved: Swift 6 and SwiftUI Observation; AppKit and PDFKit where needed |
 | Persistence | Approved: SQLite through GRDB; photos and PDFs in app-managed files |
 | Minimum system | Approved: macOS 27 on Apple silicon; no older-system compatibility layer |
 | Distribution | Run locally from Xcode first; store distribution and automatic updates are later work |
-| Editing | Approved for W003: explicit Save and Cancel, Cmd-S, and unsaved-draft protection; later notes and immediate status actions remain proposed |
+| Editing | Approved for W003 and W004: explicit Save and Cancel, Cmd-S, and unsaved-draft protection; later notes and immediate status actions remain proposed |
 | Notes | Plain text with selectable and clickable links; no rich text editor |
 | Measurements | Written notes and attached instrument photos in version 1; structured measurement forms later |
 | Parts cost | Optional supplier price and currency; no job accounting or invoice totals |
@@ -145,7 +145,7 @@ Current condition is Unknown, Running, Running poorly, Stopped, or Disassembled.
 
 ### Caliber
 
-Required: display designation. Optional: manufacturer, variant, movement type, beat rate in vibrations per hour, jewel count, nominal power reserve in hours, lift angle in degrees, and specification notes. Movement type is Unknown, Manual, Automatic, Quartz, or Other. Numeric fields are optional, finite, and non-negative; nonzero is required for beat rate and lift angle. Add a source note or reference for technical claims. Do not seed unverified technical data.
+Required: display designation. Optional: manufacturer, variant, movement type, beat rate in vibrations per hour, jewel count, nominal power reserve in hours, lift angle in degrees, specification notes, and a source note. Movement type is Unknown, Manual, Automatic, Quartz, or Other. Numeric fields are optional, finite, and non-negative; nonzero is required for beat rate and lift angle. Add a source note or reference for technical claims. Do not seed unverified technical data.
 
 ### Job
 
@@ -289,7 +289,7 @@ All status colors have text labels. Keyboard actions cover search, save, cancel,
 
 Use Swift Testing or XCTest for domain and persistence behavior. Use XCUITest for a small number of key journeys. Test real on-disk SQLite migrations and file operations. In-memory tests alone cannot prove persistence or recovery. Use small non-sensitive JPEG, PNG, HEIC, and PDF fixtures. Include rotated images, long identifiers, Unicode text, a corrupt file, and a failed write.
 
-Run focused tests for each issue. Run the build, formatter check, and the project lint command where configured before its PR is ready. The Swift compiler supplies type checking. Do not add an empty lint command or a large new tool suite just to satisfy a checklist. Define reproducible commands in W001. Never use destructive migration defaults. UI capture files follow the user's test-assets skill.
+Run focused unit tests for each issue. Run `make check` and `make release` before its PR is ready. The Swift compiler supplies type checking. The user agreed on 2 October 2026 to defer native UI and device checks to release acceptance. Keep the native tests and record pending gates. Do not launch app tests on the user's active desktop during story implementation. Do not add an empty lint command or a large new tool suite just to satisfy a checklist. Define reproducible commands in W001. Never use destructive migration defaults. UI capture files follow the user's test-assets skill.
 
 The first release passes these journeys:
 
@@ -305,7 +305,7 @@ The first release passes these journeys:
 
 For a synthetic library of 500 watches, 1,000 jobs, 10,000 tasks, and 5,000 photo items, target a warm list or search response under 300 ms and an initial usable window under 3 seconds on the development Mac. These are proposed performance targets, not measured results. Record hardware and build mode when checking them. Originals load only when viewed. Thumbnail decoding must not freeze task input.
 
-Release acceptance requires running on a Mac with the proposed minimum OS as well as the development OS, or explicitly recording that the minimum-OS run is still pending. The W001 app shell, W002 recoverable library, and W003 watch records exist. W003 native UI acceptance remains pending. Repair behavior is not implemented yet. Full release checks remain future acceptance criteria.
+Release acceptance requires running on a Mac with the proposed minimum OS as well as the development OS, or explicitly recording that the minimum-OS run is still pending. The W001 app shell, W002 recoverable library, W003 watch records, and W004 shared caliber records exist. Native UI and device acceptance is deferred to the release stage. Repair behavior is not implemented yet. Full release checks remain future acceptance criteria.
 
 ## 13 Implementation handover
 
@@ -313,4 +313,4 @@ Use the [implementation roadmap](issues.md) as the delivery order. Read each sto
 
 Each PR implements its issue through the relevant schema, validation, service, UI, and tests. Do not split one behavior into separately merged database-only and UI-only tickets unless the issue explicitly defines internal infrastructure. Agents must read this spec and their dependency issues before editing. They must report unresolved decisions rather than silently choosing a conflicting model.
 
-W001 through W032 are stable planning IDs. The [roadmap](issues.md) links the 28 published stories to issues in [jorgerodrigues/ure](https://github.com/jorgerodrigues/ure/issues). GitHub holds story descriptions, acceptance criteria, discussions, and current status. This repository holds the product specification and verification evidence. Update product decisions here and then update the affected GitHub issues. W001 and W002 implementation commits and W003 local implementation evidence are linked from the roadmap. The app uses local ad-hoc signing; no distribution signing identity is configured.
+W001 through W032 are stable planning IDs. The [roadmap](issues.md) links the 28 published stories to issues in [jorgerodrigues/ure](https://github.com/jorgerodrigues/ure/issues). GitHub holds story descriptions, acceptance criteria, discussions, and current status. This repository holds the product specification and verification evidence. Update product decisions here and then update the affected GitHub issues. Foundation commits, implementation PRs, and verification reports are linked from the roadmap. The app uses local ad-hoc signing; no distribution signing identity is configured.

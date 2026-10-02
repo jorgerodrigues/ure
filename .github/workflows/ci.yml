@@ -22,11 +22,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Check Swift format and lint
-        run: make lint
-      - name: Build Debug without a signing account
-        run: make build
+      - name: Run format, Debug build, and isolated unit checks
+        run: make check
       - name: Build optimized Release
         run: make release
-      - name: Run isolated unit tests
-        run: make test

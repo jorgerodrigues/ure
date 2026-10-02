@@ -2,7 +2,7 @@ import SwiftUI
 
 struct WorkshopSidebar: View {
     @Environment(WorkshopNavigation.self) private var navigation
-    @Environment(WatchState.self) private var watches
+    @Environment(WorkshopEditing.self) private var editing
 
     var body: some View {
         List(WorkshopSection.allCases, selection: selection) { section in
@@ -11,7 +11,7 @@ struct WorkshopSidebar: View {
         }
         .listStyle(.sidebar)
         .accessibilityLabel("Workshop sections")
-        .disabled(watches.isSaving)
+        .disabled(editing.isSaving)
     }
 
     private var selection: Binding<WorkshopSection?> {
@@ -22,6 +22,6 @@ struct WorkshopSidebar: View {
 
     private func selectSection(_ section: WorkshopSection?) {
         guard section != navigation.selection else { return }
-        watches.requestNavigation { navigation.selection = section }
+        editing.requestNavigation { navigation.selection = section }
     }
 }

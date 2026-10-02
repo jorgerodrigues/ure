@@ -3,36 +3,36 @@ import GRDB
 import Observation
 
 @Observable
-final class WatchState {
-    private let service: WatchService
-    private var originalDraft: WatchDraft?
+final class CaliberState {
+    private let service: CaliberService
+    private var originalDraft: CaliberDraft?
     private var pendingNavigation: (() -> Void)?
     private var cancelNavigation: (() -> Void)?
-    private(set) var watches: [WatchRecord] = []
+    private(set) var calibers: [CaliberRecord] = []
     private(set) var selectedID: UUID?
     private(set) var isLoading = true
     private(set) var isSaving = false
     private(set) var loadError: String?
     private(set) var saveError: String?
-    private(set) var fieldErrors: [WatchField: String] = [:]
-    var draft: WatchDraft?
+    private(set) var fieldErrors: [CaliberField: String] = [:]
+    var draft: CaliberDraft?
     var searchText = ""
     var showsUnsavedChanges = false
 
-    init(service: WatchService) {
+    init(service: CaliberService) {
         self.service = service
     }
 
-    var selectedWatch: WatchRecord? { watches.first { $0.id == selectedID } }
+    var selectedCaliber: CaliberRecord? { calibers.first { $0.id == selectedID } }
     var hasUnsavedChanges: Bool { draft != originalDraft }
     var canSave: Bool { draft != nil && !isSaving }
     var isNavigationPending: Bool { pendingNavigation != nil }
 
-    var filteredWatches: [WatchRecord] {
+    var filteredCalibers: [CaliberRecord] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if query.isEmpty { return watches }
-        return watches.filter { watch in
-            [watch.name, watch.brand, watch.model, watch.caseReference, watch.serial]
+        if query.isEmpty { return calibers }
+        return calibers.filter { caliber in
+            [caliber.designation, caliber.manufacturer, caliber.variant]
                 .compactMap { $0 }.contains { $0.localizedCaseInsensitiveContains(query) }
         }
     }
@@ -41,9 +41,9 @@ final class WatchState {
         isLoading = true
         loadError = nil
         do {
-            let values = try await service.coordinator.watchValues()
+            let values = try await service.coordinator.caliberValues()
             for try await records in values {
-                watches = records
+                calibers = records
                 isLoading = false
             }
         } catch {
@@ -61,14 +61,14 @@ final class WatchState {
     func create() {
         requestNavigation {
             self.selectedID = nil
-            self.draft = WatchDraft()
+            self.draft = CaliberDraft()
             self.originalDraft = self.draft
         }
     }
 
     func edit() {
-        guard !isSaving, let selectedWatch else { return }
-        draft = WatchDraft(watch: selectedWatch)
+        guard !isSaving, let selectedCaliber else { return }
+        draft = CaliberDraft(caliber: selectedCaliber)
         originalDraft = draft
         clearErrors()
     }
@@ -88,10 +88,10 @@ final class WatchState {
         defer { isSaving = false }
         do {
             let saved = try await service.save(draft, editing: selectedID)
-            if let index = watches.firstIndex(where: { $0.id == saved.id }) {
-                watches[index] = saved
+            if let index = calibers.firstIndex(where: { $0.id == saved.id }) {
+                calibers[index] = saved
             } else {
-                watches.append(saved)
+                calibers.append(saved)
             }
             selectedID = saved.id
             self.draft = nil
@@ -99,7 +99,7 @@ final class WatchState {
             return true
         } catch {
             saveError = error.localizedDescription
-            if let validation = error as? WatchValidationError {
+            if let validation = error as? CaliberValidationError {
                 fieldErrors = validation.fields
             }
             return false

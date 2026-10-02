@@ -1,6 +1,6 @@
 # Ure
 
-A native Mac app for watch repair and restoration. The current implementation includes the native shell, W002 recoverable library, and W003 watch records. Repair features follow in the [planning backlog](docs/planning/issues.md).
+A native Mac app for watch repair and restoration. The current implementation includes the native shell, recoverable library, watch records, and shared caliber records. Repair features follow in the [planning backlog](docs/planning/issues.md).
 
 ## Requirements
 
@@ -20,13 +20,19 @@ make run
 
 Local runs use ad-hoc signing. No Apple developer account is required. App Sandbox is enabled. Hardened Runtime is configured for distribution; Xcode disables it for local ad-hoc builds. The current bundle identifier is `local.ure.app`; settle an owner-controlled identifier before distribution and before storing valuable data.
 
-The main window contains Workshop, Watches, Calibers, Parts, and Archive. Use **Option-Command-1** through **Option-Command-5** to select a section. **Command-comma** opens Settings. Startup creates or reopens the local library. Watches has a saved-record list and editor. Other sections remain empty until their features are implemented.
+The main window contains Workshop, Watches, Calibers, Parts, and Archive. Use **Option-Command-1** through **Option-Command-5** to select a section. **Command-comma** opens Settings. Startup creates or reopens the local library. Watches and Calibers have saved-record lists and editors. Other sections remain empty until their features are implemented.
 
 ## Watch records
 
 Use **Add Watch** in Watches or **Command-N** to create a record. Only a name is required. Optional identity and specification fields remain unknown until entered. Serial numbers and case references preserve leading zeros and punctuation. Case diameter and lug width use millimetres and must be finite positive numbers.
 
-Use **Save** or **Command-S** to commit the draft. **Cancel** discards it. Changing records or sections, closing the main window, and quitting with unsaved changes offer Save, Discard, or Stay. A failed save keeps the draft and reports the error. Saved changes refresh the list and detail. The list search filters watch identity fields. Caliber management, condition changes, photos, and jobs belong to later issues.
+Use **Save** or **Command-S** to commit the draft. **Cancel** discards it. Changing records or sections, closing the main window, and quitting with unsaved changes offer Save, Discard, or Stay. A failed save keeps the draft and reports the error. Saved changes refresh the list and detail. The list search filters watch identity fields. Condition changes, photos, and jobs belong to later issues.
+
+## Shared caliber records
+
+Use **Add Caliber** in Calibers or **Command-N** while that section is selected. Only the exact designation is required. Variant and manufacturer remain separate fields. Unknown numeric specifications stay empty. Beat rate and lift angle must be finite and positive. Jewel count and nominal power reserve may also be zero. Add a source note for technical claims. The library starts without seeded caliber facts.
+
+Select a caliber in the watch editor, or choose **Unknown** to clear its link. Several watches can share one caliber. Its saved specifications appear in each linked watch's detail. The caliber detail lists linked watches and opens their records. Clearing one link preserves the caliber and all other watch links. Caliber editing uses the same Save, Cancel, Command-S, and draft protection as watch editing. Notes, technical files, and general reference links follow in their own issues.
 
 ## Local library and recovery
 
@@ -83,9 +89,10 @@ The Release configuration enables optimization and whole-module compilation. The
 - [W001 foundation verification and pending gates](docs/planning/setup-verification.md)
 - [W002 library verification](docs/planning/library-verification.md)
 - [W003 watch verification and pending native UI acceptance](docs/planning/watch-verification.md)
+- [W004 caliber verification](docs/planning/caliber-verification.md)
 
-The user approved the current-platform direction and W002's SQLite/GRDB design on 1 October 2026. Explicit Save and Cancel editing is approved for W003. W003 is implemented on `w003-watch-records`; native UI acceptance remains pending. After W003 is verified and merged, the next issue is [W004: shared caliber library](https://github.com/jorgerodrigues/ure/issues/2). Shared caliber knowledge and separate repair jobs remain proposed product choices. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.
+The user approved the current-platform direction and W002's SQLite/GRDB design on 1 October 2026. Shared caliber records and their watch links were approved on 2 October 2026. Explicit Save and Cancel editing is approved for W003 and W004. W003 is merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29). W004 is implemented on `w004-shared-calibers`. Native UI and device checks are deferred to release acceptance by agreement. Separate repair jobs remain a proposed product choice. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.
 
-The GitHub Actions workflow uses the [macOS 27 arm64 runner](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md) and Xcode 27. It runs format/lint, Debug and Release builds, and isolated unit tests. The [GitHub remote](https://github.com/jorgerodrigues/ure) is configured. Remote CI has not run yet.
+The GitHub Actions workflow uses the [macOS 27 arm64 runner](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md) and Xcode 27. It runs `make check` and `make release`, including isolated unit tests. The [GitHub remote](https://github.com/jorgerodrigues/ure) is configured. Native UI and device checks run during release acceptance, not during story implementation.
 
 Current platform references: [Apple's Xcode requirements](https://developer.apple.com/xcode/system-requirements/), [Observation](https://developer.apple.com/documentation/swiftui/migrating-from-the-observable-object-protocol-to-the-observable-macro), [Swift concurrency](https://docs.swift.org/swift-book/LanguageGuide/Concurrency.html), and [SwiftUI performance](https://developer.apple.com/documentation/xcode/understanding-and-improving-swiftui-performance).
