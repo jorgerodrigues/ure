@@ -62,6 +62,10 @@ Use **Save**, **Cancel**, or **Command-S**. Invalid URLs and failed writes keep 
 
 Select a saved link to read its details. **Open in Browser** opens its saved URL in the default browser. Links are labelled **External reference**. Their linked content is not saved offline. Loading, selecting, and saving do not open a browser or fetch the page.
 
+## Managed original import infrastructure
+
+W009 ([PR #36](https://github.com/jorgerodrigues/ure/pull/36)) adds the internal `FileImportService` API for JPEG, PNG, HEIC, and PDF originals. The approved limits are 100 MB (100,000,000 bytes) per original and 200 files per batch. It detects content rather than trusting extensions, keeps unchanged original bytes, and stores file size, SHA-256, dimensions, and orientation. Each import uses a generated storage key. Source filenames stay metadata only. Cancellation and per-file failures preserve committed assets. Startup recovery removes unreferenced interrupted imports through the coordinator's mutation gate. Photo and PDF import controls follow in W010 and W011.
+
 ## Local library and recovery
 
 The app resolves its Library folder inside sandboxed Application Support. Settings shows its location. `active-library.json` selects one directory under `generations/`. Each generation holds `library.sqlite`, `manifest.json`, and `originals/`. Original files and SQLite writes share one coordinator. Database access, file copies, and hashing run away from the main actor.
@@ -122,6 +126,7 @@ The Release configuration enables optimization and whole-module compilation. The
 - [W006 job stages and watch condition verification](docs/planning/job-stage-verification.md)
 - [W007 scoped notes verification](docs/planning/note-verification.md)
 - [W008 technical references verification](docs/planning/reference-verification.md)
+- [W009 managed file import verification](docs/planning/file-import-verification.md)
 
 The user approved the current-platform direction and W002's SQLite/GRDB storage design on 1 October 2026. Shared caliber records and the repair history rule were approved on 2 October 2026. Watch, caliber, intake, stage, and condition forms use explicit Save and Cancel editing. W003, W004, and W005 are merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29), [PR #31](https://github.com/jorgerodrigues/ure/pull/31), and [PR #32](https://github.com/jorgerodrigues/ure/pull/32). W006 is merged in [PR #33](https://github.com/jorgerodrigues/ure/pull/33). W007 is merged in [PR #34](https://github.com/jorgerodrigues/ure/pull/34). W008 is implemented in [PR #35](https://github.com/jorgerodrigues/ure/pull/35). Native UI and device checks are deferred to release acceptance by agreement. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.
 

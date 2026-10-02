@@ -3,6 +3,7 @@ import Foundation
 nonisolated struct LibraryDependencies: Sendable {
     var makeID: @Sendable () -> UUID = { UUID() }
     var now: @Sendable () -> Date = { Date() }
+    var importCheckpoint: @Sendable (FileImportCheckpoint) throws -> Void = { _ in }
     var prepareLibrary: @Sendable (URL) throws -> Void = { _ in }
 }
 
