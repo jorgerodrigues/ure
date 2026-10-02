@@ -34,9 +34,13 @@ Result bundles are retained under `~/Developer/test-assets/w003-watch-records/`.
 
 ## Remaining checks
 
-Unlock the Mac and rerun the focused native journeys. They cover creation, Cmd-S, validation correction, Cancel, restart persistence, dirty section navigation, window closing, app termination, Settings, recovery, and both appearances. No test was removed or skipped to hide the initialization failure.
+On 2 October 2026, the user agreed to defer native UI and device checks to release acceptance. Build and unit checks remain required for each story. Do not run app tests on the user's active desktop during story implementation.
 
-The W001 minimum-window resize gate, a macOS 27.0 run, and remote CI remain pending. The focused W003 command does not select the existing resize test. The implementation branch has not been merged into the default branch.
+The merge preparation reran `make check` with 46 passing unit cases and `make release`. Remote CI also passed its format, Debug, Release, and unit stages. Native retries verified creation, editing, validation, Cancel, restart persistence, and dirty section navigation. The retries found ambiguous Touch Bar button queries and application-level keyboard targets. The tests now use sheet-scoped buttons and main-window keyboard targets. The app also lacked a File > Close command; it now routes Command-W through the existing window draft guard. Window-close and quit acceptance remain pending. Test launches ignore saved window restoration state.
+
+Run the remaining focused native journeys during release acceptance. They cover window closing, app termination, Settings, recovery, and both appearances. The tests remain in the suite.
+
+The W001 minimum-window resize gate and a macOS 27.0 acceptance run remain pending. The focused W003 command does not select the existing resize test.
 
 ```sh
 xcodebuild -project Ure.xcodeproj -scheme Ure \
