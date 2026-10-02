@@ -51,4 +51,28 @@ struct AppConfigurationTests {
 
         #expect(first.libraryRoot != second.libraryRoot)
     }
+
+    @Test
+    func restartFixtureStaysIsolatedAndRequiresATestMarker() {
+        let id = UUID().uuidString
+        let environment = ["URE_TESTING": "1", "URE_TEST_LIBRARY_ID": id]
+        let first = AppConfiguration.resolve(
+            environment: environment, applicationSupportDirectory: applicationSupport,
+            temporaryDirectory: temporaryDirectory)
+        let second = AppConfiguration.resolve(
+            environment: environment, applicationSupportDirectory: applicationSupport,
+            temporaryDirectory: temporaryDirectory)
+        #expect(first.libraryRoot == second.libraryRoot)
+        #expect(first.libraryRoot.lastPathComponent == id)
+        #expect(first.libraryRoot.path.hasPrefix("/isolated-fixture/Temporary/UreTests/"))
+        let normal = AppConfiguration.resolve(
+            environment: ["URE_TEST_LIBRARY_ID": id],
+            applicationSupportDirectory: applicationSupport,
+            temporaryDirectory: temporaryDirectory)
+        #expect(normal.libraryRoot.path == "/isolated-fixture/Application Support/Ure/Library")
+        let invalid = AppConfiguration.resolve(
+            environment: ["URE_TESTING": "1", "URE_TEST_LIBRARY_ID": "../../Library"],
+            applicationSupportDirectory: applicationSupport, temporaryDirectory: temporaryDirectory)
+        #expect(UUID(uuidString: invalid.libraryRoot.lastPathComponent) != nil)
+    }
 }

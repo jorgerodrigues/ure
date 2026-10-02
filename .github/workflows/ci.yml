@@ -30,4 +30,3 @@ jobs:
         run: make release
       - name: Run isolated unit tests
         run: make test
-

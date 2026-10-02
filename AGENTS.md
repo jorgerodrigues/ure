@@ -24,7 +24,7 @@ GitHub issues hold story descriptions, acceptance criteria, and current status. 
 
 ## Verification
 
-- Run `make check` and `make release` for changed app code. Run focused native UI tests for changed interactions.
+- Run `make check` and `make release` for changed app code. Run build and unit checks for each story. The user agreed on 2 October 2026 to defer native UI and device checks to release acceptance. Keep those tests and record their pending gates. Do not launch app tests on the user's active desktop during story implementation.
 - Test behavior and failure boundaries. No test may open the normal user library. Keep the shared scheme's test marker and injected library location.
 - Save test captures and result bundles under `~/Developer/test-assets/<branch>/`. Follow the `test-assets` skill and remove that folder when the branch is done.
 - Record actual results. The minimum-window resize check, a macOS 27.0 run, and remote CI are pending in `docs/planning/setup-verification.md`.

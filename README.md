@@ -1,6 +1,6 @@
 # Ure
 
-A native Mac app for watch repair and restoration. The current implementation includes the native shell and W002 recoverable library. Watch records and repair features follow in the [planning backlog](docs/planning/issues.md).
+A native Mac app for watch repair and restoration. The current implementation includes the native shell, W002 recoverable library, and W003 watch records. Repair features follow in the [planning backlog](docs/planning/issues.md).
 
 ## Requirements
 
@@ -20,7 +20,13 @@ make run
 
 Local runs use ad-hoc signing. No Apple developer account is required. App Sandbox is enabled. Hardened Runtime is configured for distribution; Xcode disables it for local ad-hoc builds. The current bundle identifier is `local.ure.app`; settle an owner-controlled identifier before distribution and before storing valuable data.
 
-The main window contains Workshop, Watches, Calibers, Parts, and Archive. Use **Option-Command-1** through **Option-Command-5** to select a section. **Command-comma** opens Settings. Lists remain empty until watch and repair features are implemented. Startup now creates or reopens the library metadata database.
+The main window contains Workshop, Watches, Calibers, Parts, and Archive. Use **Option-Command-1** through **Option-Command-5** to select a section. **Command-comma** opens Settings. Startup creates or reopens the local library. Watches has a saved-record list and editor. Other sections remain empty until their features are implemented.
+
+## Watch records
+
+Use **Add Watch** in Watches or **Command-N** to create a record. Only a name is required. Optional identity and specification fields remain unknown until entered. Serial numbers and case references preserve leading zeros and punctuation. Case diameter and lug width use millimetres and must be finite positive numbers.
+
+Use **Save** or **Command-S** to commit the draft. **Cancel** discards it. Changing records or sections, closing the main window, and quitting with unsaved changes offer Save, Discard, or Stay. A failed save keeps the draft and reports the error. Saved changes refresh the list and detail. The list search filters watch identity fields. Caliber management, condition changes, photos, and jobs belong to later issues.
 
 ## Local library and recovery
 
@@ -57,7 +63,7 @@ xcodebuild -project Ure.xcodeproj -scheme Ure \
   test
 ```
 
-Test launches receive a unique temporary library location. The shared scheme sets `URE_TESTING=1`, and native test-host markers also force isolation. UI tests set the marker on each app launch. A Debug-only damaged-pointer seed requires the explicit test marker. No test opens the normal user library.
+Test launches receive a unique temporary library location. The shared scheme sets `URE_TESTING=1`, and native test-host markers also force isolation. UI tests set the marker on each app launch. A valid UUID in `URE_TEST_LIBRARY_ID` lets a marked restart test reuse its own temporary library. It cannot select an arbitrary path or affect an unmarked launch. A Debug-only damaged-pointer seed requires the explicit test marker. No test opens the normal user library.
 
 Derived data stays in the ignored `.build/` directory. Test result bundles and captures go in `~/Developer/test-assets/<branch>/`. Native UI tests require a logged-in graphical session and [Accessibility permission for Xcode Helper](https://developer.apple.com/documentation/xcuiautomation/recording-ui-automation-for-testing). Keep captures while the branch is active, then remove that branch's folder when work is complete.
 
@@ -76,8 +82,9 @@ The Release configuration enables optimization and whole-module compilation. The
 - [GitHub issues](https://github.com/jorgerodrigues/ure/issues)
 - [W001 foundation verification and pending gates](docs/planning/setup-verification.md)
 - [W002 library verification](docs/planning/library-verification.md)
+- [W003 watch verification and pending native UI acceptance](docs/planning/watch-verification.md)
 
-The user approved the current-platform direction and W002's SQLite/GRDB design on 1 October 2026. Separate repair jobs and shared caliber knowledge remain proposed product choices. The next implementation issue is [W003: watch records](https://github.com/jorgerodrigues/ure/issues/1). GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.
+The user approved the current-platform direction and W002's SQLite/GRDB design on 1 October 2026. Explicit Save and Cancel editing is approved for W003. W003 is implemented on `w003-watch-records`; native UI acceptance remains pending. After W003 is verified and merged, the next issue is [W004: shared caliber library](https://github.com/jorgerodrigues/ure/issues/2). Shared caliber knowledge and separate repair jobs remain proposed product choices. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.
 
 The GitHub Actions workflow uses the [macOS 27 arm64 runner](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md) and Xcode 27. It runs format/lint, Debug and Release builds, and isolated unit tests. The [GitHub remote](https://github.com/jorgerodrigues/ure) is configured. Remote CI has not run yet.
 
