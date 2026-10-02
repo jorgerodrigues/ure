@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 
 nonisolated enum FileImportError: LocalizedError, Equatable {
     case unsupportedType
@@ -24,9 +25,10 @@ nonisolated enum FileImportError: LocalizedError, Equatable {
     }
 }
 
-nonisolated struct FileImportResult: Sendable {
+nonisolated struct FileImportResult<Value: Sendable>: Identifiable, Sendable {
+    let id = UUID()
     let source: URL
-    let outcome: Result<FileAsset, FileImportError>
+    let outcome: Result<Value, any Error>
 }
 
 nonisolated enum FileImportCheckpoint: Sendable {
@@ -39,29 +41,46 @@ nonisolated enum FileImportCheckpoint: Sendable {
 }
 
 nonisolated struct FileImportService: Sendable {
+    static let defaultMaximumByteCount: Int64 = 100_000_000
+    static let defaultMaximumFileCount = 200
     let coordinator: LibraryCoordinator
-    var maximumByteCount: Int64 = 100_000_000
-    var maximumFileCount: Int = 200
+    var maximumByteCount: Int64 = Self.defaultMaximumByteCount
+    var maximumFileCount: Int = Self.defaultMaximumFileCount
 
-    func importFiles(_ sources: [URL]) async -> [FileImportResult] {
+    func importFiles(_ sources: [URL]) async -> [FileImportResult<FileAsset>] {
+        let results = await importFiles(sources) { _, asset, _ in asset }
+        return results.map { result in
+            FileImportResult(
+                source: result.source, outcome: result.outcome.mapError(Self.importError))
+        }
+    }
+
+    static func importError(_ error: any Error) -> any Error {
+        if let error = error as? FileImportError { return error }
+        return FileImportError.storageFailure(error.localizedDescription)
+    }
+
+    func importFiles<Value: Sendable>(
+        _ sources: [URL],
+        commit: @Sendable (Database, FileAsset, LibraryDependencies) throws -> Value
+    ) async -> [FileImportResult<Value>] {
         guard sources.count <= maximumFileCount else {
             return sources.map {
-                FileImportResult(source: $0, outcome: .failure(.tooManyFiles(maximumFileCount)))
+                FileImportResult(
+                    source: $0, outcome: .failure(FileImportError.tooManyFiles(maximumFileCount)))
             }
         }
-        var results: [FileImportResult] = []
+        var results: [FileImportResult<Value>] = []
         for source in sources {
-            let outcome: Result<FileAsset, FileImportError>
+            let outcome: Result<Value, any Error>
             do {
                 let asset = try await coordinator.importOriginal(
-                    from: source, maximumByteCount: maximumByteCount)
+                    from: source, maximumByteCount: maximumByteCount, commit: commit)
                 outcome = .success(asset)
             } catch is CancellationError {
-                outcome = .failure(.cancelled)
-            } catch let error as FileImportError {
-                outcome = .failure(error)
+                outcome = .failure(FileImportError.cancelled)
             } catch {
-                outcome = .failure(.storageFailure(error.localizedDescription))
+                outcome = .failure(error)
             }
             results.append(FileImportResult(source: source, outcome: outcome))
         }

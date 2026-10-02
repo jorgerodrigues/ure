@@ -405,21 +405,22 @@ nonisolated struct FileImportServiceTests {
     }
 }
 
-nonisolated private extension Result where Success == FileAsset, Failure == FileImportError {
+nonisolated private extension Result where Success == FileAsset, Failure == any Error {
     var failure: FileImportError? {
-        if case .failure(let error) = self { return error }
+        if case .failure(let error) = self { return error as? FileImportError }
         return nil
     }
 }
 
 nonisolated enum FileAssetMigrationFixture {
     static func removeAssets(in db: Database) throws {
+        try PhotoMigrationFixture.removePhotos(in: db)
         try db.execute(sql: "DROP TABLE fileAsset")
         try db.execute(sql: "DELETE FROM grdb_migrations WHERE identifier = 'v8-file-assets'")
     }
 }
 
-nonisolated private struct ImportFixture: Sendable {
+nonisolated struct ImportFixture: Sendable {
     let directory = URL.temporaryDirectory.appending(path: "UreTests/\(UUID().uuidString)")
     var root: URL { directory.appending(path: "library") }
     var sources: URL { directory.appending(path: "sources") }

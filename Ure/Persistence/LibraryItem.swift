@@ -3,6 +3,14 @@ import GRDB
 
 nonisolated enum LibraryItemKind: String, Codable, Sendable {
     case link = "Link"
+    case photo = "Photo"
+}
+
+nonisolated enum PhotoStage: String, Codable, CaseIterable, Sendable {
+    case unclassified = "Unclassified"
+    case before = "Before"
+    case during = "During"
+    case after = "After"
 }
 
 nonisolated enum LibraryItemOwner: Equatable, Sendable {
@@ -35,6 +43,9 @@ nonisolated struct LibraryItem: Codable, Equatable, Identifiable, Sendable, Fetc
     let notes: String
     let createdAt: Date
     let updatedAt: Date
+    var fileAssetID: UUID? = nil
+    var photoStage: PhotoStage? = nil
+    var caption: String? = nil
 
     func belongs(to owner: LibraryItemOwner) -> Bool {
         switch owner {

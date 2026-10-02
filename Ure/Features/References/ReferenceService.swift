@@ -8,6 +8,7 @@ nonisolated enum ReferenceError: LocalizedError, Equatable {
     case ownerMismatch
     case invalidURL
     case browserUnavailable
+    case notLink
 
     var errorDescription: String? {
         switch self {
@@ -17,6 +18,7 @@ nonisolated enum ReferenceError: LocalizedError, Equatable {
         case .ownerMismatch: "This reference belongs to another scope. Your draft has been kept."
         case .invalidURL: "This reference does not have a valid HTTP or HTTPS URL."
         case .browserUnavailable: "The default browser could not open this reference. Try again."
+        case .notLink: "This item is not an external link."
         }
     }
 }
@@ -46,6 +48,7 @@ nonisolated struct ReferenceService: Sendable {
                     throw ReferenceError.missingRecord
                 }
                 guard existing.belongs(to: owner) else { throw ReferenceError.ownerMismatch }
+                guard existing.kind == .link else { throw ReferenceError.notLink }
                 let record = try draft.record(
                     id: id, owner: owner, createdAt: existing.createdAt, updatedAt: now)
                 try LibraryItemQueries.update(record, in: db)
@@ -60,6 +63,7 @@ nonisolated struct ReferenceService: Sendable {
 
     @MainActor
     func open(_ item: LibraryItem) throws {
+        guard item.kind == .link else { throw ReferenceError.notLink }
         guard let url = ReferenceDraft.parsedURL(item.sourceURL) else {
             throw ReferenceError.invalidURL
         }

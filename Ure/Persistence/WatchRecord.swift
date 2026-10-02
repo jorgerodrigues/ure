@@ -31,6 +31,7 @@ nonisolated struct WatchRecord: Codable, Equatable, Identifiable, Sendable, Fetc
     var updatedAt: Date
     var condition: WatchCondition = .unknown
     var conditionNote: String? = nil
+    var coverPhotoID: UUID? = nil
 
     static func databaseUUIDEncodingStrategy(for column: String) -> DatabaseUUIDEncodingStrategy {
         .uppercaseString

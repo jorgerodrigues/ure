@@ -24,14 +24,14 @@ final class ReferenceState {
 
     var selectedReference: LibraryItem? {
         guard let owner else { return nil }
-        return references.first { $0.id == selectedID && $0.belongs(to: owner) }
+        return references.first { $0.id == selectedID && $0.kind == .link && $0.belongs(to: owner) }
     }
     var hasUnsavedChanges: Bool { draft != originalDraft }
     var canSave: Bool { draft != nil && !isSaving }
     var isNavigationPending: Bool { pendingNavigation != nil }
 
     func records(for owner: LibraryItemOwner) -> [LibraryItem] {
-        references.filter { $0.belongs(to: owner) }.sorted { lhs, rhs in
+        references.filter { $0.kind == .link && $0.belongs(to: owner) }.sorted { lhs, rhs in
             if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
             return lhs.id.uuidString < rhs.id.uuidString
         }
@@ -77,7 +77,7 @@ final class ReferenceState {
     }
 
     func open(_ item: LibraryItem, for owner: LibraryItemOwner) {
-        guard item.belongs(to: owner) else { return }
+        guard item.kind == .link, item.belongs(to: owner) else { return }
         requestNavigation {
             self.owner = owner
             self.selectedID = item.id

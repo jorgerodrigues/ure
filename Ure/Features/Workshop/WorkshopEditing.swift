@@ -7,35 +7,39 @@ final class WorkshopEditing {
     let jobs: JobState
     let notes: NoteState
     let references: ReferenceState
+    let photos: PhotoState
 
     init(
         watches: WatchState, calibers: CaliberState, jobs: JobState, notes: NoteState,
-        references: ReferenceState
+        references: ReferenceState, photos: PhotoState
     ) {
         self.watches = watches
         self.calibers = calibers
         self.jobs = jobs
         self.notes = notes
         self.references = references
+        self.photos = photos
     }
 
     var isSaving: Bool {
         watches.isSaving || calibers.isSaving || jobs.isSaving || notes.isSaving
-            || references.isSaving
+            || references.isSaving || photos.isSaving || photos.isImporting
     }
     var hasUnsavedChanges: Bool {
         watches.hasUnsavedChanges || calibers.hasUnsavedChanges || jobs.hasUnsavedChanges
-            || notes.hasUnsavedChanges || references.hasUnsavedChanges
+            || notes.hasUnsavedChanges || references.hasUnsavedChanges || photos.hasUnsavedChanges
     }
     var isNavigationPending: Bool {
         watches.isNavigationPending || calibers.isNavigationPending || jobs.isNavigationPending
             || notes.isNavigationPending || references.isNavigationPending
+            || photos.isNavigationPending
     }
 
     var showsUnsavedChanges: Bool {
         get {
             watches.showsUnsavedChanges || calibers.showsUnsavedChanges || jobs.showsUnsavedChanges
                 || notes.showsUnsavedChanges || references.showsUnsavedChanges
+                || photos.showsUnsavedChanges
         }
         set {
             if watches.isNavigationPending {
@@ -46,8 +50,10 @@ final class WorkshopEditing {
                 jobs.showsUnsavedChanges = newValue
             } else if notes.isNavigationPending {
                 notes.showsUnsavedChanges = newValue
-            } else {
+            } else if references.isNavigationPending {
                 references.showsUnsavedChanges = newValue
+            } else {
+                photos.showsUnsavedChanges = newValue
             }
         }
     }
@@ -57,7 +63,8 @@ final class WorkshopEditing {
         if calibers.isNavigationPending { return "Save changes to this caliber?" }
         if jobs.isNavigationPending { return "Save changes to this job?" }
         if notes.isNavigationPending { return "Save changes to this note?" }
-        return "Save changes to this reference?"
+        if references.isNavigationPending { return "Save changes to this reference?" }
+        return "Save changes to this photo?"
     }
 
     func requestNavigation(_ action: @escaping () -> Void, onCancel: (() -> Void)? = nil) {
@@ -74,7 +81,10 @@ final class WorkshopEditing {
                                 self.notes.requestNavigation(
                                     {
                                         self.references.requestNavigation(
-                                            action, onCancel: onCancel)
+                                            {
+                                                self.photos.requestNavigation(
+                                                    action, onCancel: onCancel)
+                                            }, onCancel: onCancel)
                                     },
                                     onCancel: onCancel)
                             },
@@ -92,8 +102,10 @@ final class WorkshopEditing {
             jobs.stay()
         } else if notes.isNavigationPending {
             notes.stay()
-        } else {
+        } else if references.isNavigationPending {
             references.stay()
+        } else {
+            photos.stay()
         }
     }
 
@@ -106,8 +118,10 @@ final class WorkshopEditing {
             jobs.discardAndContinue()
         } else if notes.isNavigationPending {
             notes.discardAndContinue()
-        } else {
+        } else if references.isNavigationPending {
             references.discardAndContinue()
+        } else {
+            photos.discardAndContinue()
         }
     }
 
@@ -124,8 +138,10 @@ final class WorkshopEditing {
             await jobs.saveAndContinue()
         } else if notes.isNavigationPending {
             await notes.saveAndContinue()
-        } else {
+        } else if references.isNavigationPending {
             await references.saveAndContinue()
+        } else {
+            await photos.saveAndContinue()
         }
     }
 }

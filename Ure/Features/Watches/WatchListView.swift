@@ -80,12 +80,15 @@ private struct WatchRow: View {
     let watch: WatchRecord
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(watch.name)
-            if let brand = watch.brand {
-                Text(brand)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        HStack(spacing: 8) {
+            PhotoThumbnailView(photoID: watch.coverPhotoID).frame(width: 40, height: 40)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(watch.name)
+                if let brand = watch.brand {
+                    Text(brand)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .accessibilityIdentifier("watchRow-\(watch.id.uuidString)")

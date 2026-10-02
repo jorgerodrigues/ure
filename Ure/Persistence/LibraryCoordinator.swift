@@ -84,6 +84,14 @@ actor LibraryCoordinator {
     }
 
     func importOriginal(from source: URL, maximumByteCount: Int64) throws -> FileAsset {
+        try importOriginal(from: source, maximumByteCount: maximumByteCount) { _, asset, _ in asset
+        }
+    }
+
+    func importOriginal<Value: Sendable>(
+        from source: URL, maximumByteCount: Int64,
+        commit: @Sendable (Database, FileAsset, LibraryDependencies) throws -> Value
+    ) throws -> Value {
         guard let database, let info else { throw LibraryError.notOpen }
         try Task.checkCancellation()
         try LibraryFiles.requireDirectory(root)
@@ -99,7 +107,7 @@ actor LibraryCoordinator {
         else { throw LibraryError.invalidLibrary("The generated original key already exists.") }
         let hasAccess = source.startAccessingSecurityScopedResource()
         defer { if hasAccess { source.stopAccessingSecurityScopedResource() } }
-        var committed: FileAsset?
+        var committed: Value?
         do {
             let fingerprint = try store.copy(
                 from: source, to: staged, maximumByteCount: maximumByteCount,
@@ -113,14 +121,16 @@ actor LibraryCoordinator {
             try store.publish(staged, as: original)
             try dependencies.importCheckpoint(.afterRename)
             try Task.checkCancellation()
-            try database.write { db in
+            let value = try database.write { db in
                 try asset.insert(db)
+                let value = try commit(db, asset, dependencies)
                 try dependencies.importCheckpoint(.beforeCommit)
                 try Task.checkCancellation()
+                return value
             }
-            committed = asset
+            committed = value
             try dependencies.importCheckpoint(.afterCommit)
-            return asset
+            return value
         } catch {
             if let committed { return committed }
             // If reference checking or removal fails, startup recovery retries it.
@@ -200,7 +210,16 @@ actor LibraryCoordinator {
 
     func referenceValues() throws -> AsyncValueObservation<[LibraryItem]> {
         guard let database else { throw LibraryError.notOpen }
-        return ValueObservation.tracking(LibraryItemQueries.fetchAll).values(in: database)
+        return ValueObservation.tracking { db in
+            try LibraryItem.fetchAll(
+                db, sql: "SELECT * FROM libraryItem WHERE kind = 'Link' ORDER BY createdAt DESC, id"
+            )
+        }.values(in: database)
+    }
+
+    func photoValues() throws -> AsyncValueObservation<[PhotoRecord]> {
+        guard let database else { throw LibraryError.notOpen }
+        return ValueObservation.tracking(PhotoQueries.fetchAll).values(in: database)
     }
 
     private func createLibrary() throws -> LibraryInfo {

@@ -4,6 +4,7 @@ struct WatchDetailView: View {
     @Environment(WatchState.self) private var watches
     @Environment(JobState.self) private var jobs
     @Environment(NoteState.self) private var notes
+    @Environment(PhotoState.self) private var photos
     @Environment(ReferenceState.self) private var references
 
     var body: some View {
@@ -13,6 +14,8 @@ struct WatchDetailView: View {
             jobs.watchID == watch.id, jobs.selectedID != nil || jobs.draft != nil
         {
             JobDetailView()
+        } else if let watch = watches.selectedWatch, photos.isPresenting(for: .watch(watch.id)) {
+            PhotoDetailView(owner: .watch(watch.id))
         } else if let watch = watches.selectedWatch, references.isPresenting(for: .watch(watch.id))
         {
             ReferenceDetailView(owner: .watch(watch.id))
@@ -20,6 +23,7 @@ struct WatchDetailView: View {
             NoteDetailView(owner: .watch(watch.id))
         } else if let watch = watches.selectedWatch {
             Form {
+                WatchCoverView(watch: watch)
                 Section("Identity") {
                     LabeledContent("Name", value: watch.name)
                     WatchValue(label: "Brand", value: watch.brand)
@@ -48,6 +52,7 @@ struct WatchDetailView: View {
                 }
                 WatchJobHistoryView(watch: watch)
                 NoteSectionView(owner: .watch(watch.id))
+                PhotoSectionView(owner: .watch(watch.id))
                 ReferenceSectionView(owner: .watch(watch.id))
             }
             .formStyle(.grouped)
