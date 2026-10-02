@@ -17,7 +17,8 @@ struct WorkshopEditingTests {
             watches: watches, calibers: calibers,
             jobs: JobState(service: JobService(coordinator: coordinator)),
             notes: NoteState(service: NoteService(coordinator: coordinator)),
-            references: ReferenceState(service: ReferenceService(coordinator: coordinator)))
+            references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
+            photos: PhotoState(service: PhotoService(coordinator: coordinator)))
         calibers.create()
         calibers.draft?.designation = "Pending caliber"
         var navigated = false
@@ -65,7 +66,8 @@ struct WorkshopEditingTests {
             watches: watches, calibers: calibers,
             jobs: JobState(service: JobService(coordinator: coordinator)),
             notes: NoteState(service: NoteService(coordinator: coordinator)),
-            references: ReferenceState(service: ReferenceService(coordinator: coordinator)))
+            references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
+            photos: PhotoState(service: PhotoService(coordinator: coordinator)))
         calibers.create()
         calibers.draft?.designation = "Keep this draft"
         var closed = false
@@ -93,7 +95,8 @@ struct WorkshopEditingTests {
             watches: watches, calibers: calibers,
             jobs: JobState(service: JobService(coordinator: coordinator)),
             notes: NoteState(service: NoteService(coordinator: coordinator)),
-            references: ReferenceState(service: ReferenceService(coordinator: coordinator)))
+            references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
+            photos: PhotoState(service: PhotoService(coordinator: coordinator)))
         watches.create()
         watches.draft?.name = "Watch draft"
         var navigated = false

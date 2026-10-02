@@ -1,6 +1,6 @@
 # Ure
 
-A native Mac app for watch repair and restoration. The current implementation includes the native shell, recoverable library, watch records, shared caliber records, job intake with repair history, scoped notes, and technical reference links. Further repair features follow in the [planning backlog](docs/planning/issues.md).
+A native Mac app for watch repair and restoration. The current implementation includes the native shell, recoverable library, watch records, shared caliber records, job intake with repair history, scoped notes, technical reference links, and local photos. Further repair features follow in the [planning backlog](docs/planning/issues.md).
 
 ## Requirements
 
@@ -26,7 +26,7 @@ The main window contains Workshop, Watches, Calibers, Parts, and Archive. Use **
 
 Use **Add Watch** in Watches or **Command-N** to create a record. Only a name is required. Optional identity and specification fields remain unknown until entered. Serial numbers and case references preserve leading zeros and punctuation. Case diameter and lug width use millimetres and must be finite positive numbers.
 
-Use **Save** or **Command-S** to commit the draft. **Cancel** discards it. Changing records or sections, closing the main window, and quitting with unsaved changes offer Save, Discard, or Stay. A failed save keeps the draft and reports the error. Saved changes refresh the list and detail. The list search filters watch identity fields. Change physical condition through an open job. Photos belong to later issues.
+Use **Save** or **Command-S** to commit the draft. **Cancel** discards it. Changing records or sections, closing the main window, and quitting with unsaved changes offer Save, Discard, or Stay. A failed save keeps the draft and reports the error. Saved changes refresh the list and detail. The list search filters watch identity fields. Change physical condition through an open job.
 
 ## Shared caliber records
 
@@ -62,9 +62,19 @@ Use **Save**, **Cancel**, or **Command-S**. Invalid URLs and failed writes keep 
 
 Select a saved link to read its details. **Open in Browser** opens its saved URL in the default browser. Links are labelled **External reference**. Their linked content is not saved offline. Loading, selecting, and saving do not open a browser or fetch the page.
 
+## Local photos
+
+Use **Import Photos** in a watch, job, or caliber detail. The system file picker accepts several files. You can also drop local files onto the photo section. Imports accept JPEG, PNG, and HEIC by detected content. The approved limits are 100 MB per original and 200 files per batch. Each file has its own result. Successful imports remain saved when another file fails or the batch is cancelled. Moving or deleting the source does not affect the managed original.
+
+Photos start as **Unclassified**. Open a photo and choose **Edit Photo** to change its title, caption, and stage. Stages are Unclassified, Before, During, and After. The stage filter shows only photos in the current owner scope. Editing uses Save, Cancel, Command-S, and the shared unsaved-draft guard. Closed-job photos remain readable and exportable. Reopen the job to import or edit its photos. The service rejects stale saves after closure.
+
+Select a photo to view its original. Use **Fit**, **Zoom In**, and **Zoom Out**, or pinch to zoom. Drag or scroll to pan. Left and right arrows select the previous and next photos in the filtered scope. **Export Original** uses a save panel and preserves the imported bytes. A failed thumbnail shows a placeholder. It does not remove the photo or prevent original viewing. A failed viewer load offers Retry, and Export Original remains available.
+
+Use **Choose Cover** in the watch detail to select a photo from that watch or one of its jobs. **Remove Cover** clears the reference. Watch rows use the cover thumbnail. Caliber photos stay in their shared caliber scope and cannot become a watch cover.
+
 ## Managed original import infrastructure
 
-W009 ([PR #36](https://github.com/jorgerodrigues/ure/pull/36)) adds the internal `FileImportService` API for JPEG, PNG, HEIC, and PDF originals. The approved limits are 100 MB (100,000,000 bytes) per original and 200 files per batch. It detects content rather than trusting extensions, keeps unchanged original bytes, and stores file size, SHA-256, dimensions, and orientation. Each import uses a generated storage key. Source filenames stay metadata only. Cancellation and per-file failures preserve committed assets. Startup recovery removes unreferenced interrupted imports through the coordinator's mutation gate. Photo and PDF import controls follow in W010 and W011.
+W009 ([PR #36](https://github.com/jorgerodrigues/ure/pull/36)) adds the internal `FileImportService` API for JPEG, PNG, HEIC, and PDF originals. The approved limits are 100 MB (100,000,000 bytes) per original and 200 files per batch. It detects content rather than trusting extensions, keeps unchanged original bytes, and stores file size, SHA-256, dimensions, and orientation. Each import uses a generated storage key. Source filenames stay metadata only. Cancellation and per-file failures preserve committed assets. Startup recovery removes unreferenced interrupted imports through the coordinator's mutation gate. Photo import controls are available in W010. PDF import controls follow in W011.
 
 ## Local library and recovery
 
@@ -127,6 +137,7 @@ The Release configuration enables optimization and whole-module compilation. The
 - [W007 scoped notes verification](docs/planning/note-verification.md)
 - [W008 technical references verification](docs/planning/reference-verification.md)
 - [W009 managed file import verification](docs/planning/file-import-verification.md)
+- [W010 local photo verification](docs/planning/photo-verification.md)
 - [Design: brand, app icon, and macOS 27 screen rules](docs/design/README.md)
 
 The user approved the current-platform direction and W002's SQLite/GRDB storage design on 1 October 2026. Shared caliber records and the repair history rule were approved on 2 October 2026. Watch, caliber, intake, stage, and condition forms use explicit Save and Cancel editing. W003, W004, and W005 are merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29), [PR #31](https://github.com/jorgerodrigues/ure/pull/31), and [PR #32](https://github.com/jorgerodrigues/ure/pull/32). W006 is merged in [PR #33](https://github.com/jorgerodrigues/ure/pull/33). W007 is merged in [PR #34](https://github.com/jorgerodrigues/ure/pull/34). W008 is implemented in [PR #35](https://github.com/jorgerodrigues/ure/pull/35). Native UI and device checks are deferred to release acceptance by agreement. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.

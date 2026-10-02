@@ -35,6 +35,7 @@ nonisolated struct WatchService: Sendable {
                     id: id, createdAt: existing.createdAt, updatedAt: now, locale: locale)
                 record.condition = existing.condition
                 record.conditionNote = existing.conditionNote
+                record.coverPhotoID = existing.coverPhotoID
                 try WatchQueries.update(record, in: db)
                 return record
             }
