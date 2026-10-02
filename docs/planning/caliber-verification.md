@@ -1,6 +1,6 @@
 # Shared caliber verification
 
-Recorded on 2 October 2026. W004 is implemented on `w004-shared-calibers`. The story is [#2](https://github.com/jorgerodrigues/ure/issues/2). W003 was merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29) before this work started. The user approved the shared caliber design and deferred native UI and device checks to release acceptance.
+Recorded on 2 October 2026. W004 is implemented on `w004-shared-calibers` in [PR #31](https://github.com/jorgerodrigues/ure/pull/31). The story is [#2](https://github.com/jorgerodrigues/ure/issues/2). W003 was merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29) before this work started. The user approved the shared caliber design and deferred native UI and device checks to release acceptance.
 
 ## Implementation
 
@@ -18,11 +18,13 @@ Recorded on 2 October 2026. W004 is implemented on `w004-shared-calibers`. The s
 | `make lint` | Passed |
 | Local unsigned Debug build | Passed with `SDK_STAT_CACHE_ENABLE=NO` |
 | Test compilation without execution | Passed with Swift 6 concurrency checks and warnings as errors |
-| `make release` | Local unsigned optimized build passed with `SDK_STAT_CACHE_ENABLE=NO` |
-| Remote `make check` | Pending |
+| `make release` | Local unsigned optimized build and remote CI passed |
+| Remote `make check` | Passed: strict format/lint, Debug build, and 68 isolated unit cases |
 | Native UI and device acceptance | Deferred to release acceptance by user agreement |
 
 Unit coverage includes minimal and complete on-disk round trips, separate designation and variant, unknown values, localized numbers, numeric boundaries, duplicate designations, missing records, shared links, clearing one link, foreign key enforcement, timestamps, committed observation, failed writes, Cancel, draft protection, load retry, repeated pending commands, and migration from W003 with unchanged originals. Tests use isolated temporary libraries.
+
+[CI run 36972586574](https://github.com/jorgerodrigues/ure/actions/runs/36972586574) passed all configured checks. Its 68 unit cases include the existing 46 cases, 12 caliber service cases, seven caliber state cases, and three shared draft-guard cases. There were no failures or skipped cases. The optional SDK file-cache workaround was used for local compilation only.
 
 The native test source adds shared editing across two watches, clearing one link, restart persistence, invalid-field draft preservation, and dirty section navigation. These cases are compiled now and run during release acceptance. The existing watch window-close/quit, minimum-window, and minimum-OS acceptance gates also remain pending. No app test runs on the user's active desktop during story implementation.
 

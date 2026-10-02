@@ -138,10 +138,6 @@ final class CaliberState {
         action?()
     }
 
-    func saveAndContinueCommand() {
-        Task { await saveAndContinue() }
-    }
-
     func saveAndContinue() async {
         guard !isSaving else { return }
         if await save() {
