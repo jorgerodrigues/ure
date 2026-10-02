@@ -2,10 +2,15 @@ import SwiftUI
 
 struct WatchDetailView: View {
     @Environment(WatchState.self) private var watches
+    @Environment(JobState.self) private var jobs
 
     var body: some View {
         if watches.draft != nil {
             WatchEditorView()
+        } else if let watch = watches.selectedWatch,
+            jobs.watchID == watch.id, jobs.selectedID != nil || jobs.draft != nil
+        {
+            JobDetailView()
         } else if let watch = watches.selectedWatch {
             Form {
                 Section("Identity") {
@@ -30,6 +35,7 @@ struct WatchDetailView: View {
                 Section("Shared caliber specifications") {
                     WatchCaliberView(caliberID: watch.caliberID)
                 }
+                WatchJobHistoryView(watch: watch)
             }
             .formStyle(.grouped)
             .textSelection(.enabled)

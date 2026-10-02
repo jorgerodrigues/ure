@@ -1,6 +1,6 @@
 # Ure
 
-A native Mac app for watch repair and restoration. The current implementation includes the native shell, recoverable library, watch records, and shared caliber records. Repair features follow in the [planning backlog](docs/planning/issues.md).
+A native Mac app for watch repair and restoration. The current implementation includes the native shell, recoverable library, watch records, shared caliber records, and job intake with repair history. Further repair features follow in the [planning backlog](docs/planning/issues.md).
 
 ## Requirements
 
@@ -26,13 +26,21 @@ The main window contains Workshop, Watches, Calibers, Parts, and Archive. Use **
 
 Use **Add Watch** in Watches or **Command-N** to create a record. Only a name is required. Optional identity and specification fields remain unknown until entered. Serial numbers and case references preserve leading zeros and punctuation. Case diameter and lug width use millimetres and must be finite positive numbers.
 
-Use **Save** or **Command-S** to commit the draft. **Cancel** discards it. Changing records or sections, closing the main window, and quitting with unsaved changes offer Save, Discard, or Stay. A failed save keeps the draft and reports the error. Saved changes refresh the list and detail. The list search filters watch identity fields. Condition changes, photos, and jobs belong to later issues.
+Use **Save** or **Command-S** to commit the draft. **Cancel** discards it. Changing records or sections, closing the main window, and quitting with unsaved changes offer Save, Discard, or Stay. A failed save keeps the draft and reports the error. Saved changes refresh the list and detail. The list search filters watch identity fields. Condition changes and photos belong to later issues.
 
 ## Shared caliber records
 
 Use **Add Caliber** in Calibers or **Command-N** while that section is selected. Only the exact designation is required. Variant and manufacturer remain separate fields. Unknown numeric specifications stay empty. Beat rate and lift angle must be finite and positive. Jewel count and nominal power reserve may also be zero. Add a source note for technical claims. The library starts without seeded caliber facts.
 
 Select a caliber in the watch editor, or choose **Unknown** to clear its link. Several watches can share one caliber. Its saved specifications appear in each linked watch's detail. The caliber detail lists linked watches and opens their records. Clearing one link preserves the caliber and all other watch links. Caliber editing uses the same Save, Cancel, Command-S, and draft protection as watch editing. Notes, technical files, and general reference links follow in their own issues.
+
+## Job intake and repair history
+
+Use **Start Job** in a watch's repair history. Only a job title is required. Reported problem, agreed scope, intake condition, and owner contact details are optional. Email and phone accept free text. Save creates a Planned job and copies the saved watch identity and exact caliber designation and variant into a versioned intake snapshot. Later watch or caliber edits leave this snapshot unchanged.
+
+Use **Edit Intake** to correct an open job's intake, including its identity snapshot. Those corrections apply to that job only. Job editing uses Save, Cancel, Command-S, and the existing draft protection. A failed write preserves the draft. Cancelling a new intake creates no history entry.
+
+A watch can have several repair jobs, with at most one open job. **Open Job** returns to that existing job. The database also enforces the rule when save requests compete. The watch's history opens earlier jobs for reading. **Back to Watch** returns to its identity and history. Job stage changes and watch condition changes follow in W006; tasks, notes, parts, and files follow in their own issues.
 
 ## Local library and recovery
 
@@ -90,8 +98,9 @@ The Release configuration enables optimization and whole-module compilation. The
 - [W002 library verification](docs/planning/library-verification.md)
 - [W003 watch verification and pending native UI acceptance](docs/planning/watch-verification.md)
 - [W004 caliber verification](docs/planning/caliber-verification.md)
+- [W005 job intake verification](docs/planning/job-verification.md)
 
-The user approved the current-platform direction and W002's SQLite/GRDB design on 1 October 2026. Shared caliber records and their watch links were approved on 2 October 2026. Explicit Save and Cancel editing is approved for W003 and W004. W003 is merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29). W004 is implemented on `w004-shared-calibers`. Native UI and device checks are deferred to release acceptance by agreement. Separate repair jobs remain a proposed product choice. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.
+The user approved the current-platform direction and W002's SQLite/GRDB storage design on 1 October 2026. Shared caliber records and the repair history rule were approved on 2 October 2026. W003 to W005 use explicit Save and Cancel editing. W003 and W004 are merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29) and [PR #31](https://github.com/jorgerodrigues/ure/pull/31). W005 is implemented on `w005-job-intake`. Native UI and device checks are deferred to release acceptance by agreement. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.
 
 The GitHub Actions workflow uses the [macOS 27 arm64 runner](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md) and Xcode 27. It runs `make check` and `make release`, including isolated unit tests. The [GitHub remote](https://github.com/jorgerodrigues/ure) is configured. Native UI and device checks run during release acceptance, not during story implementation.
 

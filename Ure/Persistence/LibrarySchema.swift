@@ -53,6 +53,31 @@ nonisolated enum LibrarySchema {
             }
             try db.create(index: "watch_caliberID", on: "watch", columns: ["caliberID"])
         }
+        migrator.registerMigration("v4-jobs", foreignKeyChecks: .immediate) { db in
+            try db.create(table: "job") { table in
+                table.column("id", .text).primaryKey()
+                table.column("watchID", .text).notNull().references("watch", onDelete: .restrict)
+                table.column("title", .text).notNull().check(sql: "length(trim(title)) > 0")
+                table.column("stage", .text).notNull().check(
+                    sql:
+                        "stage IN ('Planned', 'In progress', 'Waiting', 'Ready', 'Completed', 'Cancelled')"
+                )
+                for column in [
+                    "reportedProblem", "agreedScope", "intakeCondition", "ownerName", "ownerEmail",
+                    "ownerPhone",
+                ] { table.column(column, .text) }
+                table.column("intakeSnapshot", .text).notNull().check(
+                    sql: "json_valid(intakeSnapshot)")
+                table.column("createdAt", .double).notNull()
+                table.column("updatedAt", .double).notNull()
+            }
+            try db.create(index: "job_watchID", on: "job", columns: ["watchID"])
+            try db.execute(
+                sql: """
+                    CREATE UNIQUE INDEX job_one_open_per_watch ON job(watchID)
+                    WHERE stage IN ('Planned', 'In progress', 'Waiting', 'Ready')
+                    """)
+        }
         return migrator
     }
 }

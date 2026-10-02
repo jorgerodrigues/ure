@@ -1,6 +1,6 @@
 # Watch workshop app specification
 
-Version 0.5. Updated on 2 October 2026. This is the first-release contract for review. The current-platform direction, app foundation, and W002 SQLite/GRDB storage design were approved on 1 October 2026. The user approved the shared caliber design on 2 October 2026. Explicit Save and Cancel editing is approved for W003 and W004. Other proposed defaults are not yet an approved product baseline. Job history remains proposed. PDF report creation is deferred. Parts must accept saved links.
+Version 0.6. Updated on 2 October 2026. This is the first-release contract for review. The current-platform direction, app foundation, and W002 SQLite/GRDB storage design were approved on 1 October 2026. The user approved the shared caliber design and repair history rule on 2 October 2026. A watch can have several jobs, with at most one open job. W005 uses the existing Save and Cancel editing pattern. Other proposed defaults are not yet an approved product baseline. PDF report creation is deferred. Parts must accept saved links.
 
 Build a native Mac app that keeps a watch's identity, repair work, and supporting evidence together. A watch is a lasting record. A job is one repair or restoration of that watch. A caliber is reusable technical knowledge. All app data stays on the Mac. The user chooses when to open an external link or export a file.
 
@@ -32,20 +32,20 @@ These choices make the draft concrete. They are recommendations, not user approv
 
 | Decision | Proposed first version |
 | --- | --- |
-| Repair history | Several jobs per watch; at most one open job per watch |
+| Repair history | Approved on 2 October 2026: several jobs per watch; at most one open job per watch |
 | Customers | Optional name, email, and phone on the job; work notes and outcomes for later reference |
 | Shared knowledge | Approved on 2 October 2026: reusable caliber records linked to several watches; notes, photos, PDF files, and links follow in their own issues |
 | Native stack | Approved: Swift 6 and SwiftUI Observation; AppKit and PDFKit where needed |
 | Persistence | Approved: SQLite through GRDB; photos and PDFs in app-managed files |
 | Minimum system | Approved: macOS 27 on Apple silicon; no older-system compatibility layer |
 | Distribution | Run locally from Xcode first; store distribution and automatic updates are later work |
-| Editing | Approved for W003 and W004: explicit Save and Cancel, Cmd-S, and unsaved-draft protection; later notes and immediate status actions remain proposed |
+| Editing | W003 to W005 use explicit Save and Cancel, Cmd-S, and unsaved-draft protection; later notes and immediate status actions remain proposed |
 | Notes | Plain text with selectable and clickable links; no rich text editor |
 | Measurements | Written notes and attached instrument photos in version 1; structured measurement forms later |
 | Parts cost | Optional supplier price and currency; no job accounting or invoice totals |
 | Naming | Ure is the working title; distribution identity remains to be settled |
 
-If separate jobs are rejected, revise the model and backlog before implementation. If shared caliber knowledge changes, revise its dependent issues before implementation. Do not build both alternatives.
+If the repair history or shared caliber rules change, revise the model and dependent issues before implementation. Do not build both alternatives.
 
 ### Outside the first release
 
@@ -305,7 +305,7 @@ The first release passes these journeys:
 
 For a synthetic library of 500 watches, 1,000 jobs, 10,000 tasks, and 5,000 photo items, target a warm list or search response under 300 ms and an initial usable window under 3 seconds on the development Mac. These are proposed performance targets, not measured results. Record hardware and build mode when checking them. Originals load only when viewed. Thumbnail decoding must not freeze task input.
 
-Release acceptance requires running on a Mac with the proposed minimum OS as well as the development OS, or explicitly recording that the minimum-OS run is still pending. The W001 app shell, W002 recoverable library, W003 watch records, and W004 shared caliber records exist. Native UI and device acceptance is deferred to the release stage. Repair behavior is not implemented yet. Full release checks remain future acceptance criteria.
+Release acceptance requires running on a Mac with the proposed minimum OS as well as the development OS, or explicitly recording that the minimum-OS run is still pending. The W001 app shell, W002 recoverable library, W003 watch records, W004 shared caliber records, and W005 job intake and history exist. Native UI and device acceptance is deferred to the release stage. Job stage controls and later bench features follow in their own issues. Full release checks remain future acceptance criteria.
 
 ## 13 Implementation handover
 

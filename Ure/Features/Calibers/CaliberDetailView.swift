@@ -65,6 +65,7 @@ private struct CaliberWatchLink: View {
 
     private func openWatch() {
         editing.requestNavigation {
+            editing.jobs.close()
             watches.searchText = ""
             watches.select(watch.id)
             navigation.selection = .watches
