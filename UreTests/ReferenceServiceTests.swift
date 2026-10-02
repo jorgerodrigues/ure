@@ -259,6 +259,7 @@ nonisolated struct ReferenceServiceTests {
 
 nonisolated enum ReferenceMigrationFixture {
     static func removeLinks(in db: Database) throws {
+        try FileAssetMigrationFixture.removeAssets(in: db)
         try db.execute(sql: "DROP TABLE libraryItem")
         try db.execute(sql: "DELETE FROM grdb_migrations WHERE identifier = 'v7-library-links'")
     }

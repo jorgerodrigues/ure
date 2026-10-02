@@ -156,6 +156,33 @@ nonisolated enum LibrarySchema {
                     columns: [owner, "createdAt"])
             }
         }
+        migrator.registerMigration("v8-file-assets", foreignKeyChecks: .immediate) { db in
+            try db.create(table: "fileAsset") { table in
+                table.column("id", .text).primaryKey()
+                table.column("storageKey", .text).notNull().unique()
+                    .check(sql: "storageKey = id || '.original'")
+                table.column("originalFilename", .text).notNull()
+                table.column("detectedType", .text).notNull().check(
+                    sql:
+                        "detectedType IN ('public.jpeg', 'public.png', 'public.heic', 'com.adobe.pdf')"
+                )
+                table.column("byteCount", .integer).notNull().check { $0 > 0 }
+                table.column("sha256", .text).notNull().check(
+                    sql: "length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*'")
+                table.column("importedAt", .double).notNull()
+                for column in ["pixelWidth", "pixelHeight"] {
+                    table.column(column, .integer).check { $0 > 0 }
+                }
+                table.column("orientation", .integer).check(sql: "orientation BETWEEN 1 AND 8")
+                table.check(
+                    sql: """
+                        (detectedType = 'com.adobe.pdf' AND pixelWidth IS NULL AND pixelHeight IS NULL
+                            AND orientation IS NULL)
+                        OR (detectedType != 'com.adobe.pdf' AND pixelWidth IS NOT NULL
+                            AND pixelHeight IS NOT NULL AND orientation IS NOT NULL)
+                        """)
+            }
+        }
         return migrator
     }
 }

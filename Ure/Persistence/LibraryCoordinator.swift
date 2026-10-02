@@ -83,6 +83,95 @@ actor LibraryCoordinator {
         }
     }
 
+    func importOriginal(from source: URL, maximumByteCount: Int64) throws -> FileAsset {
+        guard let database, let info else { throw LibraryError.notOpen }
+        try Task.checkCancellation()
+        try LibraryFiles.requireDirectory(root)
+        let store = ManagedOriginals(
+            generation: LibraryFiles.generation(info.generationID, in: root))
+        try store.prepare()
+        let id = dependencies.makeID()
+        let staged = store.stagedURL(for: id)
+        let original = try store.originalURL(for: ManagedOriginals.storageKey(id))
+        guard !FileManager.default.fileExists(atPath: staged.path),
+            !FileManager.default.fileExists(atPath: original.path),
+            try database.read({ try FileAssetQueries.fetch(id, in: $0) }) == nil
+        else { throw LibraryError.invalidLibrary("The generated original key already exists.") }
+        let hasAccess = source.startAccessingSecurityScopedResource()
+        defer { if hasAccess { source.stopAccessingSecurityScopedResource() } }
+        var committed: FileAsset?
+        do {
+            let fingerprint = try store.copy(
+                from: source, to: staged, maximumByteCount: maximumByteCount,
+                checkpoint: dependencies.importCheckpoint)
+            let asset = try store.validate(
+                staged, id: id, originalFilename: source.lastPathComponent,
+                byteCount: fingerprint.byteCount, sha256: fingerprint.sha256,
+                importedAt: Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970))
+            try Task.checkCancellation()
+            try dependencies.importCheckpoint(.beforeRename)
+            try store.publish(staged, as: original)
+            try dependencies.importCheckpoint(.afterRename)
+            try Task.checkCancellation()
+            try database.write { db in
+                try asset.insert(db)
+                try dependencies.importCheckpoint(.beforeCommit)
+                try Task.checkCancellation()
+            }
+            committed = asset
+            try dependencies.importCheckpoint(.afterCommit)
+            return asset
+        } catch {
+            if let committed { return committed }
+            // If reference checking or removal fails, startup recovery retries it.
+            if (try? dependencies.importCheckpoint(.beforeCleanup)) != nil {
+                if let referenced = try? database.read({ try FileAssetQueries.fetchAll($0) }),
+                    !referenced.contains(where: { $0.storageKey == original.lastPathComponent })
+                {
+                    try? FileManager.default.removeItem(at: original)
+                    try? FileManager.default.removeItem(at: staged)
+                }
+            }
+            throw error
+        }
+    }
+
+    func originalURL(for id: UUID) throws -> URL {
+        guard let database, let info else { throw LibraryError.notOpen }
+        guard let asset = try database.read({ try FileAssetQueries.fetch(id, in: $0) }) else {
+            throw LibraryError.invalidLibrary("This original is no longer available.")
+        }
+        try LibraryFiles.requireDirectory(root)
+        let store = ManagedOriginals(
+            generation: LibraryFiles.generation(info.generationID, in: root))
+        try LibraryFiles.requireDirectory(store.generation.deletingLastPathComponent())
+        try LibraryFiles.requireDirectory(store.generation)
+        let original = try store.originalURL(for: asset.storageKey)
+        try LibraryFiles.requireRegularFile(original)
+        return original
+    }
+
+    func recoverImports() throws {
+        guard let database, let info else { throw LibraryError.notOpen }
+        try recoverImports(database, generationID: info.generationID)
+    }
+
+    private func recoverImports(_ database: DatabaseQueue, generationID: UUID) throws {
+        try recoverImports(database, directory: LibraryFiles.generation(generationID, in: root))
+    }
+
+    private func recoverImports(_ database: DatabaseQueue, directory: URL) throws {
+        try LibraryFiles.requireDirectory(root)
+        let keys = try database.read { db -> Set<String>? in
+            guard try db.tableExists("fileAsset") else { return nil }
+            return try String.fetchSet(db, sql: "SELECT storageKey FROM fileAsset")
+        }
+        if let keys {
+            let store = ManagedOriginals(generation: directory)
+            try store.recover(referencedKeys: keys)
+        }
+    }
+
     func createSnapshot() throws -> LibrarySnapshot {
         guard let database, let info else { throw LibraryError.notOpen }
         return try snapshot(
@@ -138,6 +227,7 @@ actor LibraryCoordinator {
                 )
             }
             try validateDatabase(writer, manifest: manifest)
+            try recoverImports(writer, generationID: generationID)
             try Task.checkCancellation()
             try publish(generationID)
         } catch {
@@ -163,6 +253,7 @@ actor LibraryCoordinator {
             do {
                 try migrator.migrate(writer)
                 try validateDatabase(writer, manifest: manifest)
+                try recoverImports(writer, generationID: generationID)
                 try Task.checkCancellation()
                 try reader.close()
                 try publish(generationID)
@@ -178,6 +269,7 @@ actor LibraryCoordinator {
     }
 
     private func snapshot(_ database: DatabaseQueue, directory: URL) throws -> LibrarySnapshot {
+        try recoverImports(database, directory: directory)
         let destination = root.appending(path: "recovery", directoryHint: .isDirectory)
             .appending(path: dependencies.makeID().uuidString, directoryHint: .isDirectory)
         return try snapshots.create(
@@ -197,6 +289,12 @@ actor LibraryCoordinator {
     private func activate(_ generationID: UUID, manifest: LibraryManifest) throws -> LibraryInfo {
         let writer = try openDatabase(
             in: LibraryFiles.generation(generationID, in: root), readonly: false)
+        do {
+            try recoverImports(writer, generationID: generationID)
+        } catch {
+            try? writer.close()
+            throw error
+        }
         return install(writer, generationID: generationID, manifest: manifest)
     }
 

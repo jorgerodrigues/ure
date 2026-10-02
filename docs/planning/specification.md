@@ -1,6 +1,6 @@
 # Watch workshop app specification
 
-Version 0.7. Updated on 2 October 2026. This is the first-release contract for review. The current-platform direction, app foundation, and W002 SQLite/GRDB storage design were approved on 1 October 2026. The user approved the shared caliber design and repair history rule on 2 October 2026. A watch can have several jobs, with at most one open job. W005 uses the existing Save and Cancel editing pattern. Other proposed defaults are not yet an approved product baseline. PDF report creation is deferred. Parts must accept saved links.
+Version 0.8. Updated on 2 October 2026. This is the first-release contract for review. The current-platform direction, app foundation, and W002 SQLite/GRDB storage design were approved on 1 October 2026. The user approved the shared caliber design and repair history rule on 2 October 2026. A watch can have several jobs, with at most one open job. W005 uses the existing Save and Cancel editing pattern. Other proposed defaults are not yet an approved product baseline. PDF report creation is deferred. Parts must accept saved links.
 
 Build a native Mac app that keeps a watch's identity, repair work, and supporting evidence together. A watch is a lasting record. A job is one repair or restoration of that watch. A caliber is reusable technical knowledge. All app data stays on the Mac. The user chooses when to open an external link or export a file.
 
@@ -205,13 +205,13 @@ Users can correct a part status. Moving backwards or cancelling requires a reaso
 
 ## 7 Files and reference use
 
-Import JPEG, PNG, HEIC, and PDF through the system file picker or file drag and drop. Detect the actual type. Do not trust the extension. Proposed file limit is 100 MB per original and 200 files per batch. Report unsupported, corrupt, or oversized files individually. Valid files in the batch still import. Repeated imports create separate items in this release; content deduplication is later work.
+Import JPEG, PNG, HEIC, and PDF through the system file picker or file drag and drop. Detect the actual type. Do not trust the extension. The user approved 100 MB (100,000,000 bytes) per original and 200 files per batch on 2 October 2026. Report unsupported, corrupt, or oversized files individually. Valid files in the batch still import. Repeated imports create separate items in this release; content deduplication is later work.
 
 Copy each selected original into app-controlled storage before reporting success. Moving or deleting the source later must not break the reference. Keep original bytes unchanged. Generate thumbnails away from the main thread. Do not decode full-size photos for list rows. Honor orientation. A failed thumbnail shows a placeholder and leaves the original available.
 
 The import sequence is staged copy, validation and hash, atomic move to the final generated filename, then database commit. No committed item may refer to an incomplete original. A failed database commit removes the unreferenced staged original when possible. Startup recovery removes abandoned imports only after confirming that no database record refers to them. File operations and SQLite are not assumed to form one transaction.
 
-The viewer supports fit, zoom, pan, next and previous photo, caption, and original filename. PDF viewing supports page navigation and zoom. Password-protected PDFs are unsupported in version 1. Invalid or unavailable content shows an error with a retry or export-original option where possible. A missing asset never crashes navigation. Imported documents work offline. External links do not promise offline content. Version 1 does not fetch linked pages, thumbnails, or PDFs automatically.
+The viewer supports fit, zoom, pan, next and previous photo, caption, and original filename. PDF viewing supports page navigation and zoom. PDF files that need a password to open are unsupported in version 1. Invalid or unavailable content shows an error with a retry or export-original option where possible. A missing asset never crashes navigation. Imported documents work offline. External links do not promise offline content. Version 1 does not fetch linked pages, thumbnails, or PDFs automatically.
 
 The bench pane pins one reference at a time. Switching job sections keeps it visible. Switching jobs clears the pin unless it belongs to the new job's watch or caliber. A read-only reference window can remain open while tasks are edited in the main window.
 
