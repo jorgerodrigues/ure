@@ -90,6 +90,7 @@ actor LibraryCoordinator {
 
     func importOriginal<Value: Sendable>(
         from source: URL, maximumByteCount: Int64,
+        validate: @Sendable (URL, FileAsset) throws -> Void = { _, _ in },
         commit: @Sendable (Database, FileAsset, LibraryDependencies) throws -> Value
     ) throws -> Value {
         guard let database, let info else { throw LibraryError.notOpen }
@@ -116,6 +117,7 @@ actor LibraryCoordinator {
                 staged, id: id, originalFilename: source.lastPathComponent,
                 byteCount: fingerprint.byteCount, sha256: fingerprint.sha256,
                 importedAt: Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970))
+            try validate(staged, asset)
             try Task.checkCancellation()
             try dependencies.importCheckpoint(.beforeRename)
             try store.publish(staged, as: original)
@@ -220,6 +222,11 @@ actor LibraryCoordinator {
     func photoValues() throws -> AsyncValueObservation<[PhotoRecord]> {
         guard let database else { throw LibraryError.notOpen }
         return ValueObservation.tracking(PhotoQueries.fetchAll).values(in: database)
+    }
+
+    func documentValues() throws -> AsyncValueObservation<[DocumentRecord]> {
+        guard let database else { throw LibraryError.notOpen }
+        return ValueObservation.tracking(DocumentQueries.fetchAll).values(in: database)
     }
 
     private func createLibrary() throws -> LibraryInfo {

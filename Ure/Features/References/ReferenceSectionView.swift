@@ -18,7 +18,7 @@ struct ReferenceSectionView: View {
                     .disabled(editing.isSaving || !references.canWrite(owner, jobs: jobs))
                     .accessibilityIdentifier("addReference")
                 if references.records(for: owner).isEmpty {
-                    Text("No \(owner.scope.lowercased()) references yet.")
+                    Text("No \(owner.scope.lowercased()) external links yet.")
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(references.records(for: owner)) { item in
@@ -26,6 +26,7 @@ struct ReferenceSectionView: View {
                     }
                 }
             }
+            DocumentSectionView(owner: owner)
         }
     }
 

@@ -72,9 +72,17 @@ Select a photo to view its original. Use **Fit**, **Zoom In**, and **Zoom Out**,
 
 Use **Choose Cover** in the watch detail to select a photo from that watch or one of its jobs. **Remove Cover** clears the reference. Watch rows use the cover thumbnail. Caliber photos stay in their shared caliber scope and cannot become a watch cover.
 
+## Technical PDF documents
+
+Use **Import PDFs** in a watch, job, or caliber reference section. Choose several local files or drop them onto the PDF area. Content detection accepts PDFs regardless of extension. The limits are 100 MB per original and 200 files per batch. Each file has its own result. Successful imports remain saved when another file fails or the batch is cancelled. Protected PDFs, including owner-restricted copies that open without a password, are unsupported.
+
+Document rows show **PDF · Offline**. Select one to read its managed original with PDFKit. Use **Previous Page**, **Next Page**, keyboard arrows, **Fit**, **Zoom In**, and **Zoom Out**. PDF loading runs off the main actor. A failed load offers Retry. **Export Original** preserves the imported bytes and stays available after a reader failure when the original remains accessible.
+
+Use **Edit Document** to change its title, optional HTTP/HTTPS source URL, source description, and notes. Save, Cancel, Command-S, and the shared draft guard apply. **Open Source** opens the saved URL only after that action. It does not download the document. Closed-job documents remain readable and exportable. Reopen the job before importing or editing documents. The service also rejects stale saves after closure.
+
 ## Managed original import infrastructure
 
-W009 ([PR #36](https://github.com/jorgerodrigues/ure/pull/36)) adds the internal `FileImportService` API for JPEG, PNG, HEIC, and PDF originals. The approved limits are 100 MB (100,000,000 bytes) per original and 200 files per batch. It detects content rather than trusting extensions, keeps unchanged original bytes, and stores file size, SHA-256, dimensions, and orientation. Each import uses a generated storage key. Source filenames stay metadata only. Cancellation and per-file failures preserve committed assets. Startup recovery removes unreferenced interrupted imports through the coordinator's mutation gate. Photo import controls are available in W010. PDF import controls follow in W011.
+W009 ([PR #36](https://github.com/jorgerodrigues/ure/pull/36)) adds the internal `FileImportService` API for JPEG, PNG, HEIC, and PDF originals. The approved limits are 100 MB (100,000,000 bytes) per original and 200 files per batch. It detects content rather than trusting extensions, keeps unchanged original bytes, and stores file size, SHA-256, dimensions, and orientation. Each import uses a generated storage key. Source filenames stay metadata only. Cancellation and per-file failures preserve committed assets. Startup recovery removes unreferenced interrupted imports through the coordinator's mutation gate. Photo import controls are available in W010. PDF import controls are available in W011.
 
 ## Local library and recovery
 
@@ -138,6 +146,7 @@ The Release configuration enables optimization and whole-module compilation. The
 - [W008 technical references verification](docs/planning/reference-verification.md)
 - [W009 managed file import verification](docs/planning/file-import-verification.md)
 - [W010 local photo verification](docs/planning/photo-verification.md)
+- [W011 technical PDF verification](docs/planning/document-verification.md)
 - [Design: brand, app icon, and macOS 27 screen rules](docs/design/README.md)
 
 The user approved the current-platform direction and W002's SQLite/GRDB storage design on 1 October 2026. Shared caliber records and the repair history rule were approved on 2 October 2026. Watch, caliber, intake, stage, and condition forms use explicit Save and Cancel editing. W003, W004, and W005 are merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29), [PR #31](https://github.com/jorgerodrigues/ure/pull/31), and [PR #32](https://github.com/jorgerodrigues/ure/pull/32). W006 is merged in [PR #33](https://github.com/jorgerodrigues/ure/pull/33). W007 is merged in [PR #34](https://github.com/jorgerodrigues/ure/pull/34). W008 is implemented in [PR #35](https://github.com/jorgerodrigues/ure/pull/35). Native UI and device checks are deferred to release acceptance by agreement. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.

@@ -5,6 +5,7 @@ struct JobDetailView: View {
     @Environment(WorkshopEditing.self) private var editing
     @Environment(WatchState.self) private var watches
     @Environment(NoteState.self) private var notes
+    @Environment(DocumentState.self) private var documents
     @Environment(PhotoState.self) private var photos
     @Environment(ReferenceState.self) private var references
 
@@ -14,6 +15,8 @@ struct JobDetailView: View {
                 JobActionEditorView()
             } else if jobs.draft != nil {
                 JobEditorView()
+            } else if let job = jobs.selectedJob, documents.isPresenting(for: .job(job.id)) {
+                DocumentDetailView(owner: .job(job.id))
             } else if let job = jobs.selectedJob, photos.isPresenting(for: .job(job.id)) {
                 PhotoDetailView(owner: .job(job.id))
             } else if let job = jobs.selectedJob, references.isPresenting(for: .job(job.id)) {
