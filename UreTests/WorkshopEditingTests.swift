@@ -16,7 +16,8 @@ struct WorkshopEditingTests {
         let editing = WorkshopEditing(
             watches: watches, calibers: calibers,
             jobs: JobState(service: JobService(coordinator: coordinator)),
-            notes: NoteState(service: NoteService(coordinator: coordinator)))
+            notes: NoteState(service: NoteService(coordinator: coordinator)),
+            references: ReferenceState(service: ReferenceService(coordinator: coordinator)))
         calibers.create()
         calibers.draft?.designation = "Pending caliber"
         var navigated = false
@@ -63,7 +64,8 @@ struct WorkshopEditingTests {
         let editing = WorkshopEditing(
             watches: watches, calibers: calibers,
             jobs: JobState(service: JobService(coordinator: coordinator)),
-            notes: NoteState(service: NoteService(coordinator: coordinator)))
+            notes: NoteState(service: NoteService(coordinator: coordinator)),
+            references: ReferenceState(service: ReferenceService(coordinator: coordinator)))
         calibers.create()
         calibers.draft?.designation = "Keep this draft"
         var closed = false
@@ -90,7 +92,8 @@ struct WorkshopEditingTests {
         let editing = WorkshopEditing(
             watches: watches, calibers: calibers,
             jobs: JobState(service: JobService(coordinator: coordinator)),
-            notes: NoteState(service: NoteService(coordinator: coordinator)))
+            notes: NoteState(service: NoteService(coordinator: coordinator)),
+            references: ReferenceState(service: ReferenceService(coordinator: coordinator)))
         watches.create()
         watches.draft?.name = "Watch draft"
         var navigated = false

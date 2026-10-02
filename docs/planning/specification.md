@@ -39,7 +39,7 @@ These choices make the draft concrete. They are recommendations, not user approv
 | Persistence | Approved: SQLite through GRDB; photos and PDFs in app-managed files |
 | Minimum system | Approved: macOS 27 on Apple silicon; no older-system compatibility layer |
 | Distribution | Run locally from Xcode first; store distribution and automatic updates are later work |
-| Editing | W003 to W007 forms and note editors use explicit Save and Cancel, Cmd-S, and unsaved-draft protection; later immediate status actions remain proposed |
+| Editing | W003 to W008 forms, note editors, and link editors use explicit Save and Cancel, Cmd-S, and unsaved-draft protection; later immediate status actions remain proposed |
 | Notes | W007 specifies plain-text editing with Save and Cancel; saved text is selectable; no rich text editor. Clickable links within text remain proposed |
 | Measurements | Written notes and attached instrument photos in version 1; structured measurement forms later |
 | Parts cost | Optional supplier price and currency; no job accounting or invoice totals |
@@ -305,7 +305,7 @@ The first release passes these journeys:
 
 For a synthetic library of 500 watches, 1,000 jobs, 10,000 tasks, and 5,000 photo items, target a warm list or search response under 300 ms and an initial usable window under 3 seconds on the development Mac. These are proposed performance targets, not measured results. Record hardware and build mode when checking them. Originals load only when viewed. Thumbnail decoding must not freeze task input.
 
-Release acceptance requires running on a Mac with the proposed minimum OS as well as the development OS, or explicitly recording that the minimum-OS run is still pending. The W001 app shell, W002 recoverable library, W003 watch records, W004 shared caliber records, W005 job intake and history, W006 job stages and watch condition, and W007 scoped notes exist. Native UI and device acceptance is deferred to the release stage. Later bench features follow in their own issues. Full release checks remain future acceptance criteria.
+Release acceptance requires running on a Mac with the proposed minimum OS as well as the development OS, or explicitly recording that the minimum-OS run is still pending. The W001 app shell, W002 recoverable library, W003 watch records, W004 shared caliber records, W005 job intake and history, W006 job stages and watch condition, W007 scoped notes, and W008 technical reference links exist. Native UI and device acceptance is deferred to the release stage. Later bench features follow in their own issues. Full release checks remain future acceptance criteria.
 
 ## 13 Implementation handover
 

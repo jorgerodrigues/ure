@@ -9,6 +9,7 @@ struct UreApp: App {
     @State private var calibers: CaliberState
     @State private var jobs: JobState
     @State private var notes: NoteState
+    @State private var references: ReferenceState
     @State private var editing: WorkshopEditing
 
     init() {
@@ -26,13 +27,15 @@ struct UreApp: App {
         let calibers = CaliberState(service: CaliberService(coordinator: coordinator))
         let jobs = JobState(service: JobService(coordinator: coordinator))
         let notes = NoteState(service: NoteService(coordinator: coordinator))
+        let references = ReferenceState(service: ReferenceService(coordinator: coordinator))
         let editing = WorkshopEditing(
-            watches: watches, calibers: calibers, jobs: jobs, notes: notes)
+            watches: watches, calibers: calibers, jobs: jobs, notes: notes, references: references)
         _library = State(initialValue: LibraryState(coordinator: coordinator))
         _watches = State(initialValue: watches)
         _calibers = State(initialValue: calibers)
         _jobs = State(initialValue: jobs)
         _notes = State(initialValue: notes)
+        _references = State(initialValue: references)
         _editing = State(initialValue: editing)
         applicationDelegate.editing = editing
     }
@@ -46,6 +49,7 @@ struct UreApp: App {
                 .environment(calibers)
                 .environment(jobs)
                 .environment(notes)
+                .environment(references)
                 .environment(editing)
                 .frame(minWidth: 1000, minHeight: 650)
         }

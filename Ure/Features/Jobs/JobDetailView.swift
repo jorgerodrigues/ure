@@ -5,6 +5,7 @@ struct JobDetailView: View {
     @Environment(WorkshopEditing.self) private var editing
     @Environment(WatchState.self) private var watches
     @Environment(NoteState.self) private var notes
+    @Environment(ReferenceState.self) private var references
 
     var body: some View {
         Group {
@@ -12,6 +13,8 @@ struct JobDetailView: View {
                 JobActionEditorView()
             } else if jobs.draft != nil {
                 JobEditorView()
+            } else if let job = jobs.selectedJob, references.isPresenting(for: .job(job.id)) {
+                ReferenceDetailView(owner: .job(job.id))
             } else if let job = jobs.selectedJob, notes.isPresenting(for: .job(job.id)) {
                 NoteDetailView(owner: .job(job.id))
             } else if let job = jobs.selectedJob {
@@ -66,6 +69,7 @@ struct JobDetailView: View {
                         }
                     }
                     NoteSectionView(owner: .job(job.id))
+                    ReferenceSectionView(owner: .job(job.id))
                 }
                 .formStyle(.grouped)
                 .textSelection(.enabled)
