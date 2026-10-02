@@ -1,34 +1,35 @@
 # Ure
 
-Read `README.md`, `docs/planning/specification.md`, the selected issue, and its dependencies before editing. The user approved the current-platform direction. Other product choices marked proposed still need to be settled before affected implementation.
+## Workflow
 
-## Platform and design
+- Read `README.md`, `docs/planning/specification.md`, and the surrounding code before editing.
+- Read the selected GitHub issue and its dependencies with `gh issue view`. `docs/planning/issues.md` maps planning IDs to issues. Start only after dependencies are merged.
+- Settle proposed product choices before affected implementation. Keep changes within the assigned scope. Do not prebuild later features.
+- After verification, commit, push, and open a PR. Include actual check results and any untested acceptance gates.
+- Ask whether addressed review comments should be resolved. Never add tool attribution or coauthor footers.
 
-- Target macOS 27 and Apple silicon. Use Xcode 27 or later and Swift 6 language mode. Do not add older-OS fallbacks.
-- Use SwiftUI and Observation for UI and feature state. Use AppKit or PDFKit only where needed.
-- Use native navigation, controls, menus, focus, and window behavior. Let the system supply appearance and accessibility adaptations.
-- Designs live in the Paper file "Ure" (https://app.paper.design/file/01M3XMBQN7WXTGQBWF7QYKP790). Its Brand page holds the brief and colour, the Logo page holds the app icon, and the macOS 27 page holds the screen rules and the reference main window, in light and dark. Feature screens have one page per issue, such as "Watches · W003", with an implementation-notes artboard. Check Paper for the screen you build before you write UI. Read exact values with the Paper tools (JSX and computed styles), not from screenshots. Translate them into native SwiftUI controls and semantic colours.
+## Development
+
+- Target macOS 27 and Apple silicon with Xcode 27 or later and Swift 6. No older-OS fallbacks.
+- Use SwiftUI, Observation, and native controls. Use AppKit or PDFKit where needed. GRDB is the sole approved runtime package.
+- Views render state and forward commands. Feature state owns loading and drafts. Services own validation and effects. Persistence owns SQL and migrations.
+- Route library access through `LibraryCoordinator`. Preserve existing data and original files. Use forward migrations. Never replace a failed library with an empty one.
+- Keep complete concurrency checks and warnings as errors. Move database, file, hashing, and image work off the main actor. `async` alone does not do this.
+- Do not use force unwraps, force casts, force tries, or unchecked `Sendable`.
+- Use stable list IDs and thumbnails. Load originals only for viewing. Profile Release builds with realistic data before adding caches or extra layers.
+
+## Design
+
+- Designs live in the Paper file "Ure" (https://app.paper.design/file/01M3XMBQN7WXTGQBWF7QYKP790). The Brand page holds the brief and colour. The Logo page holds the app icon. The macOS 27 page holds the screen rules and the reference main window, in light and dark. Feature screens have one page per issue, such as "Watches · W003", with an implementation-notes artboard.
+- Check Paper for the screen you build before you write UI. Read exact values with the Paper tools (JSX and computed styles), not from screenshots. Translate them into native SwiftUI controls and semantic colours.
 - Follow the macOS 27 screen rules in `docs/design/README.md`. Don't put Liquid Glass on content or add toolbar backgrounds.
-- Keep views small. Views render state and forward commands. Feature state owns loading and drafts. Services own validation, mutations, and effects. Persistence owns SQL and migrations.
-- Build only the selected issue. Do not add later-feature placeholders, speculative caches, or a protocol for every type.
-
-## Concurrency and performance
-
-- Keep Swift 6 complete concurrency checking and warnings as errors enabled.
-- UI code defaults to the main actor. Immutable values can explicitly be nonisolated and Sendable.
-- Move database I/O, file I/O, hashing, and image decoding off the main actor. Use dedicated actors or `@concurrent` work where appropriate. `async` alone does not move work off the main actor.
-- Keep Observation reads close to the views that need them. Use stable record IDs in lists.
-- Decode thumbnails for lists. Load full originals only for viewing. Preserve original bytes.
-- Profile optimized Release builds with realistic data before adding a performance abstraction. Report measured results and remaining limits.
-- Do not use force unwraps, force casts, force tries, or unchecked Sendable to silence errors.
 
 ## Verification
 
-- Run `make check` and `make release` for changed app code. Run focused native UI tests for changed interactions.
-- Test behavior and failure boundaries. No test may open the normal user library. Keep the shared scheme's test marker and injected library location.
-- Save test captures and result bundles under `~/Developer/test-assets/<branch>/`. Follow the `test-assets` skill and remove that folder when the branch is done.
-- Record actual results. UI automation authorization, a macOS 27.0 run, and remote CI are pending in `docs/planning/setup-verification.md`.
-- `Config/Local.xcconfig` is ignored and optional. It holds the verified SDK file-cache workaround on the development Mac. Keep machine-specific settings out of committed configuration.
-
-Ask whether the user wants addressed review comments resolved. Do not add tool attribution or coauthor footers to commits, issues, or pull requests.
-
+- During rapid implementation, run `make lint` and `make build` for app changes. Keep behavioral tests current and compile affected tests when needed. Build commands and local setup are in `README.md`.
+- CI runs formatting/lint and an unsigned Debug build only until W032. Restore unit test execution and the Release build in CI as part of W032 before first-release acceptance. Release builds are not a required per-story gate during this phase.
+- Never run macOS or iOS UI tests on GitHub Actions. Skip all tests that need UI or device automation on CI.
+- Run focused macOS UI tests locally on the Mac during W032 release acceptance. Do not run them during story implementation or routine edit cycles. Use simulator devices for local iOS UI automation.
+- Test behavior and failure boundaries. Tests must use isolated libraries. Keep `URE_TESTING=1` and the injected library location.
+- Save captures and result bundles under `~/Developer/test-assets/<branch>/`. Follow the `test-assets` skill. Remove the folder when the branch is done.
+- Keep machine-specific settings in ignored `Config/Local.xcconfig`. Record verification evidence and pending gates in `docs/planning/`.

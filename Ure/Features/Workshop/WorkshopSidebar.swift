@@ -2,15 +2,26 @@ import SwiftUI
 
 struct WorkshopSidebar: View {
     @Environment(WorkshopNavigation.self) private var navigation
+    @Environment(WorkshopEditing.self) private var editing
 
     var body: some View {
-        @Bindable var navigation = navigation
-
-        List(WorkshopSection.allCases, selection: $navigation.selection) { section in
+        List(WorkshopSection.allCases, selection: selection) { section in
             Label(section.title, systemImage: section.symbol)
                 .tag(section)
         }
         .listStyle(.sidebar)
         .accessibilityLabel("Workshop sections")
+        .disabled(editing.isSaving)
+    }
+
+    private var selection: Binding<WorkshopSection?> {
+        Binding(get: currentSection, set: selectSection)
+    }
+
+    private func currentSection() -> WorkshopSection? { navigation.selection }
+
+    private func selectSection(_ section: WorkshopSection?) {
+        guard section != navigation.selection else { return }
+        editing.requestNavigation { navigation.selection = section }
     }
 }

@@ -21,11 +21,13 @@ nonisolated struct AppConfiguration: Equatable, Sendable {
             || environment["XCTestConfigurationFilePath"] != nil
             || environment["XCTestBundlePath"] != nil
         {
+            let testID =
+                environment["URE_TEST_LIBRARY_ID"].flatMap(UUID.init(uuidString:)) ?? identifier
             return Self(
                 libraryRoot:
                     temporaryDirectory
                     .appending(path: "UreTests", directoryHint: .isDirectory)
-                    .appending(path: identifier.uuidString, directoryHint: .isDirectory)
+                    .appending(path: testID.uuidString, directoryHint: .isDirectory)
             )
         }
 

@@ -6,7 +6,8 @@ BRANCH := $(shell git branch --show-current | tr / -)
 TEST_ASSETS ?= $(HOME)/Developer/test-assets/$(if $(BRANCH),$(BRANCH),ure)
 TEST_RESULT := $(TEST_ASSETS)/ure-$(shell date +%Y%m%d-%H%M%S).xcresult
 XCODE_EXTRA_FLAGS ?=
-XCODE_FLAGS := -project Ure.xcodeproj -scheme Ure -destination 'platform=macOS,arch=arm64' -derivedDataPath "$(DERIVED_DATA)" $(XCODE_EXTRA_FLAGS)
+LOCAL_XCODE_FLAGS := $(if $(wildcard Config/Local.xcconfig),-xcconfig "$(CURDIR)/Config/Local.xcconfig")
+XCODE_FLAGS := -project Ure.xcodeproj -scheme Ure -destination 'platform=macOS,arch=arm64' -derivedDataPath "$(DERIVED_DATA)" $(LOCAL_XCODE_FLAGS) $(XCODE_EXTRA_FLAGS)
 
 .PHONY: help build release run test test-ui test-all format lint check
 

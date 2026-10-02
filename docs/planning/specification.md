@@ -1,6 +1,6 @@
 # Watch workshop app specification
 
-Version 0.3. Prepared on 1 October 2026. This is the first-release contract for review. The current-platform direction and app foundation were approved on 1 October 2026. Other proposed defaults are not yet an approved product baseline. Job history and shared caliber knowledge remain proposed defaults. PDF report creation is deferred. Parts must accept saved links.
+Version 0.8. Updated on 2 October 2026. This is the first-release contract for review. The current-platform direction, app foundation, and W002 SQLite/GRDB storage design were approved on 1 October 2026. The user approved the shared caliber design and repair history rule on 2 October 2026. A watch can have several jobs, with at most one open job. W005 uses the existing Save and Cancel editing pattern. Other proposed defaults are not yet an approved product baseline. PDF report creation is deferred. Parts must accept saved links.
 
 Build a native Mac app that keeps a watch's identity, repair work, and supporting evidence together. A watch is a lasting record. A job is one repair or restoration of that watch. A caliber is reusable technical knowledge. All app data stays on the Mac. The user chooses when to open an external link or export a file.
 
@@ -32,20 +32,20 @@ These choices make the draft concrete. They are recommendations, not user approv
 
 | Decision | Proposed first version |
 | --- | --- |
-| Repair history | Several jobs per watch; at most one open job per watch |
+| Repair history | Approved on 2 October 2026: several jobs per watch; at most one open job per watch |
 | Customers | Optional name, email, and phone on the job; work notes and outcomes for later reference |
-| Shared knowledge | A small caliber library with notes, photos, PDF files, and links |
+| Shared knowledge | Approved on 2 October 2026: reusable caliber records linked to several watches; notes, photos, PDF files, and links follow in their own issues |
 | Native stack | Approved: Swift 6 and SwiftUI Observation; AppKit and PDFKit where needed |
-| Persistence | SQLite through GRDB; photos and PDFs in app-managed files |
+| Persistence | Approved: SQLite through GRDB; photos and PDFs in app-managed files |
 | Minimum system | Approved: macOS 27 on Apple silicon; no older-system compatibility layer |
 | Distribution | Run locally from Xcode first; store distribution and automatic updates are later work |
-| Editing | Explicit Save and Cancel for forms and notes; immediate saving for simple status actions |
-| Notes | Plain text with selectable and clickable links; no rich text editor |
+| Editing | W003 to W008 forms, note editors, and link editors use explicit Save and Cancel, Cmd-S, and unsaved-draft protection; later immediate status actions remain proposed |
+| Notes | W007 specifies plain-text editing with Save and Cancel; saved text is selectable; no rich text editor. Clickable links within text remain proposed |
 | Measurements | Written notes and attached instrument photos in version 1; structured measurement forms later |
 | Parts cost | Optional supplier price and currency; no job accounting or invoice totals |
 | Naming | Ure is the working title; distribution identity remains to be settled |
 
-If separate jobs are rejected, revise the model and backlog before implementation. If shared caliber knowledge changes, revise its dependent issues before implementation. Do not build both alternatives.
+If the repair history or shared caliber rules change, revise the model and dependent issues before implementation. Do not build both alternatives.
 
 ### Outside the first release
 
@@ -145,7 +145,7 @@ Current condition is Unknown, Running, Running poorly, Stopped, or Disassembled.
 
 ### Caliber
 
-Required: display designation. Optional: manufacturer, variant, movement type, beat rate in vibrations per hour, jewel count, nominal power reserve in hours, lift angle in degrees, and specification notes. Movement type is Unknown, Manual, Automatic, Quartz, or Other. Numeric fields are optional, finite, and non-negative; nonzero is required for beat rate and lift angle. Add a source note or reference for technical claims. Do not seed unverified technical data.
+Required: display designation. Optional: manufacturer, variant, movement type, beat rate in vibrations per hour, jewel count, nominal power reserve in hours, lift angle in degrees, specification notes, and a source note. Movement type is Unknown, Manual, Automatic, Quartz, or Other. Numeric fields are optional, finite, and non-negative; nonzero is required for beat rate and lift angle. Add a source note or reference for technical claims. Do not seed unverified technical data.
 
 ### Job
 
@@ -205,13 +205,13 @@ Users can correct a part status. Moving backwards or cancelling requires a reaso
 
 ## 7 Files and reference use
 
-Import JPEG, PNG, HEIC, and PDF through the system file picker or file drag and drop. Detect the actual type. Do not trust the extension. Proposed file limit is 100 MB per original and 200 files per batch. Report unsupported, corrupt, or oversized files individually. Valid files in the batch still import. Repeated imports create separate items in this release; content deduplication is later work.
+Import JPEG, PNG, HEIC, and PDF through the system file picker or file drag and drop. Detect the actual type. Do not trust the extension. The user approved 100 MB (100,000,000 bytes) per original and 200 files per batch on 2 October 2026. Report unsupported, corrupt, or oversized files individually. Valid files in the batch still import. Repeated imports create separate items in this release; content deduplication is later work.
 
 Copy each selected original into app-controlled storage before reporting success. Moving or deleting the source later must not break the reference. Keep original bytes unchanged. Generate thumbnails away from the main thread. Do not decode full-size photos for list rows. Honor orientation. A failed thumbnail shows a placeholder and leaves the original available.
 
 The import sequence is staged copy, validation and hash, atomic move to the final generated filename, then database commit. No committed item may refer to an incomplete original. A failed database commit removes the unreferenced staged original when possible. Startup recovery removes abandoned imports only after confirming that no database record refers to them. File operations and SQLite are not assumed to form one transaction.
 
-The viewer supports fit, zoom, pan, next and previous photo, caption, and original filename. PDF viewing supports page navigation and zoom. Password-protected PDFs are unsupported in version 1. Invalid or unavailable content shows an error with a retry or export-original option where possible. A missing asset never crashes navigation. Imported documents work offline. External links do not promise offline content. Version 1 does not fetch linked pages, thumbnails, or PDFs automatically.
+The viewer supports fit, zoom, pan, next and previous photo, caption, and original filename. PDF viewing supports page navigation and zoom. PDF files that need a password to open are unsupported in version 1. Invalid or unavailable content shows an error with a retry or export-original option where possible. A missing asset never crashes navigation. Imported documents work offline. External links do not promise offline content. Version 1 does not fetch linked pages, thumbnails, or PDFs automatically.
 
 The bench pane pins one reference at a time. Switching job sections keeps it visible. Switching jobs clears the pin unless it belongs to the new job's watch or caliber. A read-only reference window can remain open while tasks are edited in the main window.
 
@@ -235,7 +235,7 @@ flowchart LR
 
 Views render state and forward actions. Feature models own loading, drafts, and presentation state. Services own validation, state transitions, and effects. Persistence code owns SQL and migrations. Inject the database, clock, ID source, and file store where tests need control. Avoid a separate protocol for every trivial type. No database writes occur directly in a SwiftUI view.
 
-GRDB is the sole proposed runtime package. It provides SQLite access, observation, migrations, and backup support. Pin the resolved version in the repository. Use Swift Package Manager. Use Apple's frameworks for files, image decoding, and PDF viewing. This is a design choice supported by the [GRDB documentation](https://github.com/groue/GRDB.swift/blob/master/README.md).
+GRDB is the sole approved runtime package. It provides SQLite access, observation, migrations, and backup support. W002 pins version 7.11.1 and its resolved revision through Swift Package Manager. Use Apple's frameworks for files, image decoding, and PDF viewing. This is a design choice supported by the [GRDB documentation](https://github.com/groue/GRDB.swift/blob/master/README.md).
 
 Use Swift 6 language mode with complete concurrency checking and approachable concurrency. UI state uses Observation and defaults to the main actor. Immutable values can be nonisolated. An async function alone does not move CPU or blocking work off the main actor; use dedicated actors or @concurrent functions for that work. Keep I/O and thumbnail work off the main actor. Publish UI state on the main actor. Serialize domain mutations through one application boundary. Use SQL transactions for related rows and their events. Observe committed data to refresh all relevant views. A repeated click while a command is pending must not create a duplicate task or order event.
 
@@ -289,7 +289,7 @@ All status colors have text labels. Keyboard actions cover search, save, cancel,
 
 Use Swift Testing or XCTest for domain and persistence behavior. Use XCUITest for a small number of key journeys. Test real on-disk SQLite migrations and file operations. In-memory tests alone cannot prove persistence or recovery. Use small non-sensitive JPEG, PNG, HEIC, and PDF fixtures. Include rotated images, long identifiers, Unicode text, a corrupt file, and a failed write.
 
-Run focused tests for each issue. Run the build, formatter check, and the project lint command where configured before its PR is ready. The Swift compiler supplies type checking. Do not add an empty lint command or a large new tool suite just to satisfy a checklist. Define reproducible commands in W001. Never use destructive migration defaults. UI capture files follow the user's test-assets skill.
+During rapid implementation, run `make lint` and `make build` before a PR is ready. Keep behavioral tests current and compile affected tests when needed. On 2 October 2026, the user deferred CI unit test execution and Release builds to W032. Restore `make check` and `make release` in CI before first-release acceptance. Release builds are not a per-story gate during this phase. The Swift compiler supplies type checking. Native UI and device checks also remain deferred to release acceptance. Keep the native tests and record pending gates. Never run UI or device automation on CI. Do not launch app tests on the user's active desktop during story implementation. Do not add an empty lint command or a large new tool suite just to satisfy a checklist. Define reproducible commands in W001. Never use destructive migration defaults. UI capture files follow the user's test-assets skill.
 
 The first release passes these journeys:
 
@@ -305,12 +305,12 @@ The first release passes these journeys:
 
 For a synthetic library of 500 watches, 1,000 jobs, 10,000 tasks, and 5,000 photo items, target a warm list or search response under 300 ms and an initial usable window under 3 seconds on the development Mac. These are proposed performance targets, not measured results. Record hardware and build mode when checking them. Originals load only when viewed. Thumbnail decoding must not freeze task input.
 
-Release acceptance requires running on a Mac with the proposed minimum OS as well as the development OS, or explicitly recording that the minimum-OS run is still pending. The W001 app shell exists. Storage and repair behavior are not implemented yet. Full release checks remain future acceptance criteria.
+Release acceptance requires running on a Mac with the proposed minimum OS as well as the development OS, or explicitly recording that the minimum-OS run is still pending. The W001 app shell, W002 recoverable library, W003 watch records, W004 shared caliber records, W005 job intake and history, W006 job stages and watch condition, W007 scoped notes, and W008 technical reference links exist. Native UI and device acceptance is deferred to the release stage. Later bench features follow in their own issues. Full release checks remain future acceptance criteria.
 
 ## 13 Implementation handover
 
-Use the accompanying issue catalog as the delivery order. W001 through W003 produce the smallest running foundation. The first useful bench milestone is W001 through W014 with all dependencies. Parts tracking follows in W015 through W018. Version 1 is complete only when all listed release issues pass.
+Use the [implementation roadmap](issues.md) as the delivery order. Read each story's current scope and acceptance criteria on GitHub. W001 through W003 produce the smallest running foundation. The first useful bench milestone is W001 through W014 with all dependencies. Parts tracking follows in W015 through W018. Version 1 is complete only when all listed release issues pass.
 
 Each PR implements its issue through the relevant schema, validation, service, UI, and tests. Do not split one behavior into separately merged database-only and UI-only tickets unless the issue explicitly defines internal infrastructure. Agents must read this spec and their dependency issues before editing. They must report unresolved decisions rather than silently choosing a conflicting model.
 
-Issue IDs in this package are planning IDs. No GitHub or Linear issues have been created. The implementation workspace is /Users/jorge/Developer/ure/. The local Git repository is initialized. No remote is configured. The app uses local ad-hoc signing; no distribution signing identity is configured. Publishing the backlog needs an issue tracker destination. Product decisions can be settled without it.
+W001 through W032 are stable planning IDs. The [roadmap](issues.md) links the 28 published stories to issues in [jorgerodrigues/ure](https://github.com/jorgerodrigues/ure/issues). GitHub holds story descriptions, acceptance criteria, discussions, and current status. This repository holds the product specification and verification evidence. Update product decisions here and then update the affected GitHub issues. Foundation commits, implementation PRs, and verification reports are linked from the roadmap. The app uses local ad-hoc signing; no distribution signing identity is configured.
