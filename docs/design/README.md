@@ -20,7 +20,7 @@ The mood is **blued steel**: enamel white, dial black, one deep blue, and one ru
 
 ## App icon
 
-The icon is **Pomme**: a Breguet hand in white on a blued-steel gradient, with a ruby jewel at the pivot. The source is [AppIcon.icon](AppIcon.icon), an Icon Composer 2 package for Xcode 27.
+The icon is **Pomme**: a Breguet hand in white on a blued-steel gradient, with a ruby jewel at the pivot. The source is [Ure/AppIcon.icon](../../Ure/AppIcon.icon), an Icon Composer 2 package for Xcode 27. The app target uses it through `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`. The accent colour is `AccentColor` in [Ure/Assets.xcassets](../../Ure/Assets.xcassets), set through `ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME`.
 
 | Group, front to back | Artwork | Settings |
 | --- | --- | --- |
@@ -37,11 +37,11 @@ Render an appearance from the command line:
 
 ```sh
 "$(dirname "$(xcode-select -p)")/Applications/Icon Composer.app/Contents/Executables/ictool" \
-  docs/design/AppIcon.icon --export-image --output-file "$HOME/Developer/test-assets/$(git branch --show-current | tr / -)/AppIcon-Default.png" \
+  Ure/AppIcon.icon --export-image --output-file "$HOME/Developer/test-assets/$(git branch --show-current | tr / -)/AppIcon-Default.png" \
   --platform macOS --rendition Default --width 512 --height 512 --scale 2 --design-generation 27
 ```
 
-Renditions are `Default`, `Dark`, `TintedLight`, `TintedDark`, `ClearLight` and `ClearDark`. The icon is not in the Xcode target yet. Adding it is a separate change, together with the `AccentColor` asset.
+Renditions are `Default`, `Dark`, `TintedLight`, `TintedDark`, `ClearLight` and `ClearDark`.
 
 ## Screens
 
