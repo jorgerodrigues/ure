@@ -55,7 +55,7 @@ struct WorkshopCommands: Commands {
         if editing.isSaving { return false }
         switch navigation.selectedSection {
         case .watches:
-            if editing.jobs.draft != nil { return editing.jobs.canSave }
+            if editing.jobs.isEditing { return editing.jobs.canSave }
             return editing.watches.canSave
         case .calibers: return editing.calibers.canSave
         default: return false
@@ -65,7 +65,7 @@ struct WorkshopCommands: Commands {
     private func save() {
         switch navigation.selectedSection {
         case .watches:
-            if editing.jobs.draft != nil {
+            if editing.jobs.isEditing {
                 editing.jobs.saveCommand()
             } else {
                 editing.watches.saveCommand()

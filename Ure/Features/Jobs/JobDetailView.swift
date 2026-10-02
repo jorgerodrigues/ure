@@ -3,10 +3,13 @@ import SwiftUI
 struct JobDetailView: View {
     @Environment(JobState.self) private var jobs
     @Environment(WorkshopEditing.self) private var editing
+    @Environment(WatchState.self) private var watches
 
     var body: some View {
         Group {
-            if jobs.draft != nil {
+            if jobs.actionDraft != nil {
+                JobActionEditorView()
+            } else if jobs.draft != nil {
                 JobEditorView()
             } else if let job = jobs.selectedJob {
                 Form {
@@ -19,6 +22,31 @@ struct JobDetailView: View {
                         JobValue(label: "Reported problem", value: job.reportedProblem)
                         JobValue(label: "Agreed scope", value: job.agreedScope)
                         JobValue(label: "Intake condition", value: job.intakeCondition)
+                        JobValue(label: "Waiting reason", value: job.waitingReason)
+                        if let startedAt = job.startedAt {
+                            LabeledContent("Started") { Text(startedAt, format: .dateTime) }
+                        }
+                    }
+                    if let watch = watches.watches.first(where: { $0.id == job.watchID }) {
+                        Section("Current watch condition") {
+                            LabeledContent("Condition", value: watch.condition.rawValue)
+                            JobValue(label: "Condition note", value: watch.conditionNote)
+                        }
+                    }
+                    Section("Outcome") {
+                        JobValue(label: "Outcome", value: job.outcome)
+                        JobValue(label: "Recommendations", value: job.recommendations)
+                        JobValue(label: "Cancellation reason", value: job.cancellationReason)
+                        if let completedAt = job.completedAt {
+                            LabeledContent("Completed") { Text(completedAt, format: .dateTime) }
+                        }
+                        if let cancelledAt = job.cancelledAt {
+                            LabeledContent("Cancelled") { Text(cancelledAt, format: .dateTime) }
+                        }
+                        if !job.stage.isOpen {
+                            Text("This job is closed. Reopen it to make changes.")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     Section("Owner contact") {
                         JobValue(label: "Name", value: job.ownerName)
@@ -39,6 +67,15 @@ struct JobDetailView: View {
                 .textSelection(.enabled)
                 .navigationTitle(job.title)
                 .toolbar {
+                    if job.stage.isOpen {
+                        Button("Change Stage", action: changeStage)
+                            .accessibilityIdentifier("changeJobStage")
+                        Button("Change Condition", action: changeCondition)
+                            .accessibilityIdentifier("changeWatchCondition")
+                    } else {
+                        Button("Reopen Job", action: reopen)
+                            .accessibilityIdentifier("reopenJob")
+                    }
                     if job.stage.isOpen && job.intakeSnapshot.version == 1 {
                         Button("Edit Intake", action: jobs.edit)
                             .accessibilityIdentifier("editJob")
@@ -60,6 +97,17 @@ struct JobDetailView: View {
     }
 
     private func backToWatch() { editing.requestNavigation(jobs.close) }
+
+    private func changeStage() { beginAction(.transition) }
+    private func changeCondition() { beginAction(.condition) }
+    private func reopen() { beginAction(.reopen) }
+
+    private func beginAction(_ action: JobAction) {
+        guard let job = jobs.selectedJob,
+            let watch = watches.watches.first(where: { $0.id == job.watchID })
+        else { return }
+        jobs.beginAction(action, watch: watch)
+    }
 }
 
 struct JobIntakeView: View {

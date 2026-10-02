@@ -333,6 +333,7 @@ nonisolated struct JobServiceTests {
             watchDraft, editing: nil, locale: Locale(identifier: "da_DK"))
         let bytes = Data("original evidence".utf8)
         try await old.mutate { db, originals, _ in
+            try JobMigrationFixture.removeStages(in: db)
             try db.execute(sql: "DROP TABLE job")
             try db.execute(sql: "DELETE FROM grdb_migrations WHERE identifier = 'v4-jobs'")
             try bytes.write(to: originals.appending(path: "evidence.bin"))

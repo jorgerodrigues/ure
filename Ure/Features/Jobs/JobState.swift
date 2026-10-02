@@ -6,6 +6,7 @@ import Observation
 final class JobState {
     private let service: JobService
     private var originalDraft: JobDraft?
+    private var originalActionDraft: JobActionDraft?
     private var pendingNavigation: (() -> Void)?
     private var cancelNavigation: (() -> Void)?
     private(set) var jobs: [JobRecord] = []
@@ -18,6 +19,7 @@ final class JobState {
     private(set) var saveError: String?
     private(set) var fieldErrors: [JobField: String] = [:]
     var draft: JobDraft?
+    var actionDraft: JobActionDraft?
     var showsUnsavedChanges = false
 
     init(service: JobService) {
@@ -25,8 +27,9 @@ final class JobState {
     }
 
     var selectedJob: JobRecord? { jobs.first { $0.id == selectedID } }
-    var hasUnsavedChanges: Bool { draft != originalDraft }
-    var canSave: Bool { draft != nil && !isSaving }
+    var hasUnsavedChanges: Bool { draft != originalDraft || actionDraft != originalActionDraft }
+    var canSave: Bool { (draft != nil || actionDraft != nil) && !isSaving }
+    var isEditing: Bool { draft != nil || actionDraft != nil }
     var isNavigationPending: Bool { pendingNavigation != nil }
 
     func history(for watchID: UUID) -> [JobRecord] {
@@ -88,11 +91,23 @@ final class JobState {
     }
 
     func edit() {
-        guard !isSaving, let selectedJob, selectedJob.stage.isOpen,
+        guard !isSaving, !isEditing, let selectedJob, selectedJob.stage.isOpen,
             selectedJob.intakeSnapshot.version == 1
         else { return }
         draft = JobDraft(job: selectedJob)
         originalDraft = draft
+        clearErrors()
+    }
+
+    func beginAction(_ action: JobAction, watch: WatchRecord) {
+        guard !isSaving, !isEditing, let job = selectedJob, job.watchID == watch.id else { return }
+        if action == .reopen {
+            guard !job.stage.isOpen else { return }
+        } else {
+            guard job.stage.isOpen else { return }
+        }
+        actionDraft = JobActionDraft(action: action, job: job, watch: watch)
+        originalActionDraft = actionDraft
         clearErrors()
     }
 
@@ -107,25 +122,46 @@ final class JobState {
         guard !isSaving else { return }
         draft = nil
         originalDraft = nil
+        actionDraft = nil
+        originalActionDraft = nil
         clearErrors()
     }
 
     @discardableResult
     func save() async -> Bool {
-        guard !isSaving, let draft, let watchID else { return false }
+        guard !isSaving, let watchID, isEditing else { return false }
         isSaving = true
         clearErrors()
         defer { isSaving = false }
         do {
-            let saved = try await service.save(draft, for: watchID, editing: selectedID)
-            if let index = jobs.firstIndex(where: { $0.id == saved.id }) {
-                jobs[index] = saved
+            let saved: JobRecord?
+            if let actionDraft, let selectedID {
+                switch actionDraft.action {
+                case .transition:
+                    saved = try await service.transition(selectedID, using: actionDraft.transition)
+                case .reopen:
+                    saved = try await service.reopen(selectedID, using: actionDraft.transition)
+                case .condition:
+                    _ = try await service.setCondition(selectedID, using: actionDraft.condition)
+                    saved = nil
+                }
+            } else if let draft {
+                saved = try await service.save(draft, for: watchID, editing: selectedID)
             } else {
-                jobs.append(saved)
+                return false
             }
-            selectedID = saved.id
+            if let saved {
+                if let index = jobs.firstIndex(where: { $0.id == saved.id }) {
+                    jobs[index] = saved
+                } else {
+                    jobs.append(saved)
+                }
+                selectedID = saved.id
+            }
             self.draft = nil
             originalDraft = nil
+            self.actionDraft = nil
+            originalActionDraft = nil
             return true
         } catch {
             saveError = error.localizedDescription

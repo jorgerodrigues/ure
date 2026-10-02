@@ -26,7 +26,7 @@ The main window contains Workshop, Watches, Calibers, Parts, and Archive. Use **
 
 Use **Add Watch** in Watches or **Command-N** to create a record. Only a name is required. Optional identity and specification fields remain unknown until entered. Serial numbers and case references preserve leading zeros and punctuation. Case diameter and lug width use millimetres and must be finite positive numbers.
 
-Use **Save** or **Command-S** to commit the draft. **Cancel** discards it. Changing records or sections, closing the main window, and quitting with unsaved changes offer Save, Discard, or Stay. A failed save keeps the draft and reports the error. Saved changes refresh the list and detail. The list search filters watch identity fields. Condition changes and photos belong to later issues.
+Use **Save** or **Command-S** to commit the draft. **Cancel** discards it. Changing records or sections, closing the main window, and quitting with unsaved changes offer Save, Discard, or Stay. A failed save keeps the draft and reports the error. Saved changes refresh the list and detail. The list search filters watch identity fields. Change physical condition through an open job. Photos belong to later issues.
 
 ## Shared caliber records
 
@@ -40,7 +40,11 @@ Use **Start Job** in a watch's repair history. Only a job title is required. Rep
 
 Use **Edit Intake** to correct an open job's intake, including its identity snapshot. Those corrections apply to that job only. Job editing uses Save, Cancel, Command-S, and the existing draft protection. A failed write preserves the draft. Cancelling a new intake creates no history entry.
 
-A watch can have several repair jobs, with at most one open job. **Open Job** returns to that existing job. The database also enforces the rule when save requests compete. The watch's history opens earlier jobs for reading. **Back to Watch** returns to its identity and history. Job stage changes and watch condition changes follow in W006; tasks, notes, parts, and files follow in their own issues.
+A watch can have several repair jobs, with at most one open job. **Open Job** returns to that existing job. The database also enforces the rule when save requests compete. The watch's history opens earlier jobs for reading. **Back to Watch** returns to its identity and history. Tasks, notes, parts, and files follow in their own issues.
+
+Use **Change Stage** for Planned, In progress, Waiting, Ready, Completed, or Cancelled. Waiting requires a reason. Completed requires an outcome and accepts optional recommendations. Cancelled requires a reason. Ready means ready for final review. Closing locks operational edits. **Reopen Job** selects an open stage and checks that no other job is open for this watch.
+
+Use **Change Condition** to record Unknown, Running, Running poorly, Stopped, or Disassembled with an optional note. Condition and job stage remain independent. Both forms use Save, Cancel, Command-S, and draft protection. Successful changes retain prior and next values in history. History display follows in W019.
 
 ## Local library and recovery
 
@@ -99,8 +103,9 @@ The Release configuration enables optimization and whole-module compilation. The
 - [W003 watch verification and pending native UI acceptance](docs/planning/watch-verification.md)
 - [W004 caliber verification](docs/planning/caliber-verification.md)
 - [W005 job intake verification](docs/planning/job-verification.md)
+- [W006 job stages and watch condition verification](docs/planning/job-stage-verification.md)
 
-The user approved the current-platform direction and W002's SQLite/GRDB storage design on 1 October 2026. Shared caliber records and the repair history rule were approved on 2 October 2026. W003 to W005 use explicit Save and Cancel editing. W003 and W004 are merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29) and [PR #31](https://github.com/jorgerodrigues/ure/pull/31). W005 is implemented on `w005-job-intake`. Native UI and device checks are deferred to release acceptance by agreement. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.
+The user approved the current-platform direction and W002's SQLite/GRDB storage design on 1 October 2026. Shared caliber records and the repair history rule were approved on 2 October 2026. Watch, caliber, intake, stage, and condition forms use explicit Save and Cancel editing. W003, W004, and W005 are merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29), [PR #31](https://github.com/jorgerodrigues/ure/pull/31), and [PR #32](https://github.com/jorgerodrigues/ure/pull/32). W006 is implemented on `w006-job-stages`. Native UI and device checks are deferred to release acceptance by agreement. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.
 
 The GitHub Actions workflow uses the [macOS 27 arm64 runner](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md) and Xcode 27. During rapid implementation, it runs `make lint` and `make build` only. Unit test execution and the Release build return to CI in [W032 (#28)](https://github.com/jorgerodrigues/ure/issues/28) before first-release acceptance. Release builds are not required for each story during this phase. Keep behavioral tests current and compile affected tests when needed. The [GitHub remote](https://github.com/jorgerodrigues/ure) is configured. Native UI and device checks run locally during release acceptance and never on CI.
 
