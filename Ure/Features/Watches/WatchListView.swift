@@ -2,6 +2,8 @@ import SwiftUI
 
 struct WatchListView: View {
     @Environment(WatchState.self) private var watches
+    @Environment(JobState.self) private var jobs
+    @Environment(WorkshopEditing.self) private var editing
 
     var body: some View {
         @Bindable var watches = watches
@@ -23,7 +25,7 @@ struct WatchListView: View {
                 } description: {
                     Text("Add a watch with a name. Fill in its specifications when you know them.")
                 } actions: {
-                    Button("Add Watch", action: watches.create)
+                    Button("Add Watch", action: createWatch)
                 }
             } else {
                 List(watches.filteredWatches, selection: selection) { watch in
@@ -41,18 +43,33 @@ struct WatchListView: View {
         .navigationTitle("Watches")
         .searchable(text: $watches.searchText, prompt: "Find a watch")
         .toolbar {
-            Button("Add Watch", systemImage: "plus", action: watches.create)
+            Button("Add Watch", systemImage: "plus", action: createWatch)
                 .accessibilityIdentifier("addWatch")
-                .disabled(watches.isSaving || watches.isLoading || watches.loadError != nil)
+                .disabled(editing.isSaving || watches.isLoading || watches.loadError != nil)
         }
-        .disabled(watches.isSaving)
+        .disabled(editing.isSaving)
     }
 
     private var selection: Binding<UUID?> {
-        Binding(get: selectedID, set: watches.select)
+        Binding(get: selectedID, set: selectWatch)
     }
 
     private func selectedID() -> UUID? { watches.selectedID }
+
+    private func selectWatch(_ id: UUID?) {
+        guard id != watches.selectedID else { return }
+        editing.requestNavigation {
+            jobs.close()
+            watches.select(id)
+        }
+    }
+
+    private func createWatch() {
+        editing.requestNavigation {
+            jobs.close()
+            watches.create()
+        }
+    }
 
     private func retry() {
         Task { await watches.observe() }

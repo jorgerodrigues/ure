@@ -24,7 +24,7 @@ Milestones describe implementation order, not separate production releases. Do n
 - Keep the PR within its stated boundary. Do not prebuild later features.
 - Introduce forward migrations. Preserve existing data and originals.
 - Implement the applicable loading, empty, failed-save, and closed-job states.
-- Run focused behavioral tests, the app build, the formatter check, and configured lint checks.
+- Run the app Debug build and formatter/lint checks during rapid implementation. Keep behavioral tests current and compile affected tests when needed. CI unit execution and Release builds are deferred to W032; restore both before first-release acceptance. Native UI and device automation stays off CI.
 - Include actual verification results and any untested gate in the PR.
 - Do not add tool attribution or a coauthor footer.
 - Ask whether the user wants review comments resolved after addressing them.
@@ -37,8 +37,8 @@ Milestones describe implementation order, not separate production releases. Do n
 | W001 | ~~Create the native Mac shell and verification commands~~ ([commit](https://github.com/jorgerodrigues/ure/commit/daa19a4); [verification](setup-verification.md)). Implementation done; native UI acceptance pending. | None |
 | W002 | ~~Open and migrate a recoverable SQLite library~~ ([commit](https://github.com/jorgerodrigues/ure/commit/07bee8e); [verification](library-verification.md)). Implementation done; minimum-OS and remote CI pending. | [W001](setup-verification.md) |
 | W003 | ~~Create and edit watch records (#1)~~ ([PR #29](https://github.com/jorgerodrigues/ure/pull/29); [verification](watch-verification.md)). Merged; remaining native acceptance is deferred to release acceptance. | [W002](library-verification.md) |
-| W004 | [Add the shared caliber library (#2)](https://github.com/jorgerodrigues/ure/issues/2) ([PR #31](https://github.com/jorgerodrigues/ure/pull/31); [verification](caliber-verification.md)). Implemented; awaiting merge. Native acceptance is deferred. | [W003](https://github.com/jorgerodrigues/ure/issues/1) |
-| W005 | [Create job intake and watch repair history (#3)](https://github.com/jorgerodrigues/ure/issues/3) | [W004](https://github.com/jorgerodrigues/ure/issues/2) |
+| W004 | [Add the shared caliber library (#2)](https://github.com/jorgerodrigues/ure/issues/2) ([PR #31](https://github.com/jorgerodrigues/ure/pull/31); [verification](caliber-verification.md)). Merged. Native acceptance is deferred. | [W003](https://github.com/jorgerodrigues/ure/issues/1) |
+| W005 | [Create job intake and watch repair history (#3)](https://github.com/jorgerodrigues/ure/issues/3) ([PR #32](https://github.com/jorgerodrigues/ure/pull/32); [verification](job-verification.md)). Implemented; awaiting merge. | [W004](https://github.com/jorgerodrigues/ure/issues/2) |
 | W006 | [Control job stages and record watch condition (#4)](https://github.com/jorgerodrigues/ure/issues/4) | [W005](https://github.com/jorgerodrigues/ure/issues/3) |
 | W007 | [Save scoped research and work notes (#5)](https://github.com/jorgerodrigues/ure/issues/5) | [W006](https://github.com/jorgerodrigues/ure/issues/4) |
 | W008 | [Store technical links with source context (#6)](https://github.com/jorgerodrigues/ure/issues/6) | [W007](https://github.com/jorgerodrigues/ure/issues/5) |
@@ -63,4 +63,4 @@ Milestones describe implementation order, not separate production releases. Do n
 | W029 | [Verify recovery across upgrades imports and restore (#25)](https://github.com/jorgerodrigues/ure/issues/25) | [W028](https://github.com/jorgerodrigues/ure/issues/24) |
 | W030 | [Verify keyboard access and native window behavior (#26)](https://github.com/jorgerodrigues/ure/issues/26) | [W023](https://github.com/jorgerodrigues/ure/issues/21), [W028](https://github.com/jorgerodrigues/ure/issues/24) |
 | W031 | [Measure and fix library browsing performance (#27)](https://github.com/jorgerodrigues/ure/issues/27) | [W022](https://github.com/jorgerodrigues/ure/issues/20), [W028](https://github.com/jorgerodrigues/ure/issues/24) |
-| W032 | [Run first-release acceptance and write the handover guide (#28)](https://github.com/jorgerodrigues/ure/issues/28) | [W029](https://github.com/jorgerodrigues/ure/issues/25), [W030](https://github.com/jorgerodrigues/ure/issues/26), [W031](https://github.com/jorgerodrigues/ure/issues/27) |
+| W032 | [Run first-release acceptance and write the handover guide (#28)](https://github.com/jorgerodrigues/ure/issues/28). Restore CI unit checks and Release builds before acceptance. | [W029](https://github.com/jorgerodrigues/ure/issues/25), [W030](https://github.com/jorgerodrigues/ure/issues/26), [W031](https://github.com/jorgerodrigues/ure/issues/27) |

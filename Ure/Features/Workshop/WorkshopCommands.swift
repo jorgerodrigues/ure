@@ -54,7 +54,9 @@ struct WorkshopCommands: Commands {
     private var canSave: Bool {
         if editing.isSaving { return false }
         switch navigation.selectedSection {
-        case .watches: return editing.watches.canSave
+        case .watches:
+            if editing.jobs.draft != nil { return editing.jobs.canSave }
+            return editing.watches.canSave
         case .calibers: return editing.calibers.canSave
         default: return false
         }
@@ -62,7 +64,12 @@ struct WorkshopCommands: Commands {
 
     private func save() {
         switch navigation.selectedSection {
-        case .watches: editing.watches.saveCommand()
+        case .watches:
+            if editing.jobs.draft != nil {
+                editing.jobs.saveCommand()
+            } else {
+                editing.watches.saveCommand()
+            }
         case .calibers: editing.calibers.saveCommand()
         default: break
         }
@@ -74,6 +81,7 @@ struct WorkshopCommands: Commands {
             if createsCaliber {
                 editing.calibers.create()
             } else {
+                editing.jobs.close()
                 navigation.selection = .watches
                 editing.watches.create()
             }
