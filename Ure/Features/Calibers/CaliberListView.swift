@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CaliberListView: View {
     @Environment(CaliberState.self) private var calibers
+    @Environment(WorkshopEditing.self) private var editing
 
     var body: some View {
         @Bindable var calibers = calibers
@@ -25,7 +26,7 @@ struct CaliberListView: View {
                         "Add a caliber with its exact designation. Leave unknown specifications empty."
                     )
                 } actions: {
-                    Button("Add Caliber", action: calibers.create)
+                    Button("Add Caliber", action: create)
                 }
             } else {
                 List(calibers.filteredCalibers, selection: selection) { caliber in
@@ -43,18 +44,25 @@ struct CaliberListView: View {
         .navigationTitle("Calibers")
         .searchable(text: $calibers.searchText, prompt: "Find a caliber")
         .toolbar {
-            Button("Add Caliber", systemImage: "plus", action: calibers.create)
+            Button("Add Caliber", systemImage: "plus", action: create)
                 .accessibilityIdentifier("addCaliber")
-                .disabled(calibers.isSaving || calibers.isLoading || calibers.loadError != nil)
+                .disabled(editing.isSaving || calibers.isLoading || calibers.loadError != nil)
         }
-        .disabled(calibers.isSaving)
+        .disabled(editing.isSaving)
     }
 
     private var selection: Binding<UUID?> {
-        Binding(get: selectedID, set: calibers.select)
+        Binding(get: selectedID, set: select)
     }
 
     private func selectedID() -> UUID? { calibers.selectedID }
+
+    private func select(_ id: UUID?) {
+        guard id != calibers.selectedID else { return }
+        editing.requestNavigation { calibers.select(id) }
+    }
+
+    private func create() { editing.requestNavigation(calibers.create) }
 
     private func retry() {
         Task { await calibers.observe() }

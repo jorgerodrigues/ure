@@ -3,15 +3,21 @@ import SwiftUI
 struct CaliberDetailView: View {
     @Environment(CaliberState.self) private var calibers
     @Environment(WatchState.self) private var watches
+    @Environment(NoteState.self) private var notes
 
     var body: some View {
         if calibers.draft != nil {
             CaliberEditorView()
+        } else if let caliber = calibers.selectedCaliber,
+            notes.isPresenting(for: .caliber(caliber.id))
+        {
+            NoteDetailView(owner: .caliber(caliber.id))
         } else if let caliber = calibers.selectedCaliber {
             Form {
                 Section("Shared specifications") {
                     CaliberSpecificationsView(caliber: caliber)
                 }
+                NoteSectionView(owner: .caliber(caliber.id))
                 Section("Linked watches") {
                     if watches.isLoading {
                         ProgressView("Loading watches…")

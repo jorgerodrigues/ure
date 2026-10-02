@@ -111,6 +111,28 @@ nonisolated enum LibrarySchema {
                 index: "activityEvent_jobID_ordering", on: "activityEvent",
                 columns: ["jobID", "ordering"])
         }
+        migrator.registerMigration("v6-notes", foreignKeyChecks: .immediate) { db in
+            try db.create(table: "note") { table in
+                table.column("id", .text).primaryKey()
+                table.column("watchID", .text).references("watch", onDelete: .restrict)
+                table.column("jobID", .text).references("job", onDelete: .restrict)
+                table.column("caliberID", .text).references("caliber", onDelete: .restrict)
+                table.check(
+                    sql: "(watchID IS NOT NULL) + (jobID IS NOT NULL) + (caliberID IS NOT NULL) = 1"
+                )
+                table.column("title", .text).notNull().check(sql: "length(trim(title)) > 0")
+                table.column("body", .text).notNull()
+                table.column("kind", .text).notNull()
+                    .check(sql: "kind IN ('Observation', 'Research', 'Work log', 'Measurement')")
+                for column in ["occurredAt", "createdAt", "updatedAt"] {
+                    table.column(column, .double).notNull()
+                }
+            }
+            for owner in ["watchID", "jobID", "caliberID"] {
+                try db.create(
+                    index: "note_\(owner)_occurredAt", on: "note", columns: [owner, "occurredAt"])
+            }
+        }
         return migrator
     }
 }
