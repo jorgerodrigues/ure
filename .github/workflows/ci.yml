@@ -30,4 +30,5 @@ jobs:
         run: make release
       - name: Run isolated unit tests
         run: make test
-
+      - name: Run native UI tests on the isolated runner
+        run: make test-ui XCODE_EXTRA_FLAGS='-parallel-testing-enabled NO'

@@ -97,7 +97,9 @@ nonisolated final class WatchUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["URE_TESTING"] = "1"
         app.launchEnvironment["URE_TEST_LIBRARY_ID"] = UUID().uuidString
-        app.launchArguments = ["-AppleLocale", "en_US"]
+        app.launchArguments = [
+            "-AppleLocale", "en_US", "-ApplePersistenceIgnoreState", "YES",
+        ]
         return app
     }
 
