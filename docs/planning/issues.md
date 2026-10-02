@@ -36,7 +36,7 @@ Milestones describe implementation order, not separate production releases. Do n
 | --- | --- | --- |
 | W001 | ~~Create the native Mac shell and verification commands~~ ([commit](https://github.com/jorgerodrigues/ure/commit/daa19a4); [verification](setup-verification.md)). Implementation done; native UI acceptance pending. | None |
 | W002 | ~~Open and migrate a recoverable SQLite library~~ ([commit](https://github.com/jorgerodrigues/ure/commit/07bee8e); [verification](library-verification.md)). Implementation done; minimum-OS and remote CI pending. | [W001](setup-verification.md) |
-| W003 | [Create and edit watch records (#1)](https://github.com/jorgerodrigues/ure/issues/1) | [W002](library-verification.md) |
+| W003 | [Create and edit watch records (#1)](https://github.com/jorgerodrigues/ure/issues/1). Implemented on `w003-watch-records`; [native UI acceptance pending](watch-verification.md). | [W002](library-verification.md) |
 | W004 | [Add the shared caliber library (#2)](https://github.com/jorgerodrigues/ure/issues/2) | [W003](https://github.com/jorgerodrigues/ure/issues/1) |
 | W005 | [Create job intake and watch repair history (#3)](https://github.com/jorgerodrigues/ure/issues/3) | [W004](https://github.com/jorgerodrigues/ure/issues/2) |
 | W006 | [Control job stages and record watch condition (#4)](https://github.com/jorgerodrigues/ure/issues/4) | [W005](https://github.com/jorgerodrigues/ure/issues/3) |

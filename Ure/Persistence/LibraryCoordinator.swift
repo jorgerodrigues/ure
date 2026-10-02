@@ -89,6 +89,11 @@ actor LibraryCoordinator {
             database, directory: LibraryFiles.generation(info.generationID, in: root))
     }
 
+    func watchValues() throws -> AsyncValueObservation<[WatchRecord]> {
+        guard let database else { throw LibraryError.notOpen }
+        return ValueObservation.tracking(WatchQueries.fetchAll).values(in: database)
+    }
+
     private func createLibrary() throws -> LibraryInfo {
         let manager = FileManager.default
         let generationID = dependencies.makeID()

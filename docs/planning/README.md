@@ -25,11 +25,12 @@ gh issue view 1 --repo jorgerodrigues/ure
 | [issues.md](issues.md) | Planning IDs, issue links, dependency order, and common completion rules |
 | [setup-verification.md](setup-verification.md) | W001 implementation evidence and remaining checks |
 | [library-verification.md](library-verification.md) | W002 implementation evidence and remaining checks |
+| [watch-verification.md](watch-verification.md) | W003 implementation evidence and pending native UI acceptance |
 
 Change product decisions in the specification, then update the affected GitHub issues. Keep story bodies and status on GitHub. Record actual build, test, and acceptance results in the repository.
 
 ## Product choices
 
-The current-platform direction and W002's SQLite/GRDB design were approved on 1 October 2026. Separate repair jobs, shared caliber knowledge, and other defaults marked proposed in specification section 1 still need approval before affected implementation. Creating a GitHub issue does not approve those choices.
+The current-platform direction and W002's SQLite/GRDB design were approved on 1 October 2026. Explicit Save and Cancel editing is approved for W003. Separate repair jobs, shared caliber knowledge, and other defaults marked proposed in specification section 1 still need approval before affected implementation. Creating a GitHub issue does not approve those choices.
 
-W001 and W002 are implemented. Their remaining verification gates are recorded in the linked reports. The 28 remaining stories are published as GitHub issues. PDF report creation remains outside this release.
+W001 and W002 are implemented. W003 is implemented on `w003-watch-records`, with native UI acceptance pending. Their remaining verification gates are recorded in the linked reports. GitHub holds the 28 published stories and their current status. PDF report creation remains outside this release.

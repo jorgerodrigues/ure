@@ -1,0 +1,69 @@
+import SwiftUI
+
+struct WatchDetailView: View {
+    @Environment(WatchState.self) private var watches
+
+    var body: some View {
+        if watches.draft != nil {
+            WatchEditorView()
+        } else if let watch = watches.selectedWatch {
+            Form {
+                Section("Identity") {
+                    LabeledContent("Name", value: watch.name)
+                    WatchValue(label: "Brand", value: watch.brand)
+                    WatchValue(label: "Model", value: watch.model)
+                    WatchValue(label: "Case reference", value: watch.caseReference)
+                    WatchValue(label: "Serial number", value: watch.serial)
+                    WatchValue(label: "Approximate year", value: watch.approximateYear)
+                }
+                Section("Specifications") {
+                    WatchValue(label: "Case material", value: watch.caseMaterial)
+                    WatchDimension(label: "Case diameter", value: watch.caseDiameter)
+                    WatchDimension(label: "Lug width", value: watch.lugWidth)
+                    WatchValue(label: "Stated water resistance", value: watch.waterResistance)
+                    if let notes = watch.specificationNotes {
+                        LabeledContent("Specification notes") {
+                            Text(notes)
+                        }
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            .textSelection(.enabled)
+            .navigationTitle(watch.name)
+            .toolbar {
+                Button("Edit", action: watches.edit)
+                    .accessibilityIdentifier("editWatch")
+            }
+        } else {
+            ContentUnavailableView(
+                "Select a watch", systemImage: "watch.analog",
+                description: Text("Choose a watch or add a new one.")
+            )
+        }
+    }
+}
+
+private struct WatchValue: View {
+    let label: String
+    let value: String?
+
+    var body: some View {
+        LabeledContent(label, value: value ?? "Unknown")
+    }
+}
+
+private struct WatchDimension: View {
+    let label: String
+    let value: Double?
+
+    var body: some View {
+        LabeledContent(label) {
+            if let value {
+                Text("\(value.formatted()) mm")
+            } else {
+                Text("Unknown")
+            }
+        }
+    }
+}

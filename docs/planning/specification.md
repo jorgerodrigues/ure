@@ -1,6 +1,6 @@
 # Watch workshop app specification
 
-Version 0.3. Prepared on 1 October 2026. This is the first-release contract for review. The current-platform direction, app foundation, and W002 SQLite/GRDB storage design were approved on 1 October 2026. Other proposed defaults are not yet an approved product baseline. Job history and shared caliber knowledge remain proposed defaults. PDF report creation is deferred. Parts must accept saved links.
+Version 0.4. Updated on 2 October 2026. This is the first-release contract for review. The current-platform direction, app foundation, and W002 SQLite/GRDB storage design were approved on 1 October 2026. The user also approved explicit Save and Cancel editing for W003. Other proposed defaults are not yet an approved product baseline. Job history and shared caliber knowledge remain proposed defaults. PDF report creation is deferred. Parts must accept saved links.
 
 Build a native Mac app that keeps a watch's identity, repair work, and supporting evidence together. A watch is a lasting record. A job is one repair or restoration of that watch. A caliber is reusable technical knowledge. All app data stays on the Mac. The user chooses when to open an external link or export a file.
 
@@ -39,7 +39,7 @@ These choices make the draft concrete. They are recommendations, not user approv
 | Persistence | Approved: SQLite through GRDB; photos and PDFs in app-managed files |
 | Minimum system | Approved: macOS 27 on Apple silicon; no older-system compatibility layer |
 | Distribution | Run locally from Xcode first; store distribution and automatic updates are later work |
-| Editing | Explicit Save and Cancel for forms and notes; immediate saving for simple status actions |
+| Editing | Approved for W003: explicit Save and Cancel, Cmd-S, and unsaved-draft protection; later notes and immediate status actions remain proposed |
 | Notes | Plain text with selectable and clickable links; no rich text editor |
 | Measurements | Written notes and attached instrument photos in version 1; structured measurement forms later |
 | Parts cost | Optional supplier price and currency; no job accounting or invoice totals |
@@ -305,7 +305,7 @@ The first release passes these journeys:
 
 For a synthetic library of 500 watches, 1,000 jobs, 10,000 tasks, and 5,000 photo items, target a warm list or search response under 300 ms and an initial usable window under 3 seconds on the development Mac. These are proposed performance targets, not measured results. Record hardware and build mode when checking them. Originals load only when viewed. Thumbnail decoding must not freeze task input.
 
-Release acceptance requires running on a Mac with the proposed minimum OS as well as the development OS, or explicitly recording that the minimum-OS run is still pending. The W001 app shell and W002 recoverable library exist. Watch records and repair behavior are not implemented yet. Full release checks remain future acceptance criteria.
+Release acceptance requires running on a Mac with the proposed minimum OS as well as the development OS, or explicitly recording that the minimum-OS run is still pending. The W001 app shell, W002 recoverable library, and W003 watch records exist. W003 native UI acceptance remains pending. Repair behavior is not implemented yet. Full release checks remain future acceptance criteria.
 
 ## 13 Implementation handover
 
@@ -313,4 +313,4 @@ Use the [implementation roadmap](issues.md) as the delivery order. Read each sto
 
 Each PR implements its issue through the relevant schema, validation, service, UI, and tests. Do not split one behavior into separately merged database-only and UI-only tickets unless the issue explicitly defines internal infrastructure. Agents must read this spec and their dependency issues before editing. They must report unresolved decisions rather than silently choosing a conflicting model.
 
-W001 through W032 are stable planning IDs. The [roadmap](issues.md) links the 28 remaining stories to issues in [jorgerodrigues/ure](https://github.com/jorgerodrigues/ure/issues). GitHub holds story descriptions, acceptance criteria, discussions, and current status. This repository holds the product specification and verification evidence. Update product decisions here and then update the affected GitHub issues. W001 and W002 implementation commits and remaining gates are linked from the roadmap. The app uses local ad-hoc signing; no distribution signing identity is configured.
+W001 through W032 are stable planning IDs. The [roadmap](issues.md) links the 28 published stories to issues in [jorgerodrigues/ure](https://github.com/jorgerodrigues/ure/issues). GitHub holds story descriptions, acceptance criteria, discussions, and current status. This repository holds the product specification and verification evidence. Update product decisions here and then update the affected GitHub issues. W001 and W002 implementation commits and W003 local implementation evidence are linked from the roadmap. The app uses local ad-hoc signing; no distribution signing identity is configured.
