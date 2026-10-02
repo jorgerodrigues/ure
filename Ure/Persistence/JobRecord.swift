@@ -1,7 +1,7 @@
 import Foundation
 import GRDB
 
-nonisolated enum JobStage: String, Codable, Sendable {
+nonisolated enum JobStage: String, Codable, CaseIterable, Sendable {
     case planned = "Planned"
     case inProgress = "In progress"
     case waiting = "Waiting"
@@ -56,7 +56,7 @@ nonisolated struct JobRecord: Codable, Equatable, Identifiable, Sendable, Fetcha
     let id: UUID
     let watchID: UUID
     let title: String
-    let stage: JobStage
+    var stage: JobStage
     let reportedProblem: String?
     let agreedScope: String?
     let intakeCondition: String?
@@ -65,7 +65,14 @@ nonisolated struct JobRecord: Codable, Equatable, Identifiable, Sendable, Fetcha
     let ownerPhone: String?
     let intakeSnapshot: JobIntakeSnapshot
     let createdAt: Date
-    let updatedAt: Date
+    var updatedAt: Date
+    var waitingReason: String? = nil
+    var outcome: String? = nil
+    var recommendations: String? = nil
+    var cancellationReason: String? = nil
+    var startedAt: Date? = nil
+    var completedAt: Date? = nil
+    var cancelledAt: Date? = nil
 
     static func databaseUUIDEncodingStrategy(for column: String) -> DatabaseUUIDEncodingStrategy {
         .uppercaseString
@@ -101,4 +108,13 @@ nonisolated enum JobQueries {
 
     static func insert(_ record: JobRecord, in db: Database) throws { try record.insert(db) }
     static func update(_ record: JobRecord, in db: Database) throws { try record.update(db) }
+
+    static func updateWorkflow(_ record: JobRecord, in db: Database) throws {
+        try record.update(
+            db,
+            columns: [
+                "stage", "waitingReason", "outcome", "recommendations", "cancellationReason",
+                "startedAt", "completedAt", "cancelledAt", "updatedAt",
+            ])
+    }
 }

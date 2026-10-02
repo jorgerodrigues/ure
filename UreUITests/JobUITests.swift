@@ -66,6 +66,53 @@ nonisolated final class JobUITests: XCTestCase {
     }
 
     @MainActor
+    func testIndependentConditionWaitingClosureAndReopen() {
+        let app = isolatedApp()
+        app.launch()
+        defer { app.terminate() }
+        createWatch(app)
+        app.buttons["startWatchJob"].click()
+        enter("Inspect movement", in: "jobTitle", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["changeJobStage"].waitForExistence(timeout: 5))
+        app.buttons["changeWatchCondition"].click()
+        choose("Disassembled", picker: "watchCondition", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["changeJobStage"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Disassembled"].exists)
+        XCTAssertTrue(app.staticTexts["Planned"].exists)
+        app.buttons["changeJobStage"].click()
+        choose("Waiting", picker: "jobStage", app: app)
+        app.buttons["saveJobAction"].click()
+        XCTAssertTrue(app.staticTexts["jobActionSaveError"].waitForExistence(timeout: 5))
+        enter("Await inspection", in: "jobWaitingReason", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["changeJobStage"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Disassembled"].exists)
+        XCTAssertTrue(app.staticTexts["Await inspection"].exists)
+        app.buttons["changeJobStage"].click()
+        choose("Completed", picker: "jobStage", app: app)
+        enter("Service complete", in: "jobOutcome", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["reopenJob"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["editJob"].exists)
+        XCTAssertFalse(app.buttons["changeWatchCondition"].exists)
+        app.buttons["reopenJob"].click()
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["editJob"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["In progress"].exists)
+        XCTAssertTrue(app.staticTexts["Disassembled"].exists)
+    }
+
+    @MainActor
+    private func choose(_ value: String, picker identifier: String, app: XCUIApplication) {
+        let picker = app.popUpButtons[identifier]
+        XCTAssertTrue(picker.waitForExistence(timeout: 3))
+        picker.click()
+        app.menuItems[value].firstMatch.click()
+    }
+
+    @MainActor
     private func isolatedApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["URE_TESTING"] = "1"

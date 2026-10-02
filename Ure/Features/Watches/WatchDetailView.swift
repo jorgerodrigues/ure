@@ -35,6 +35,10 @@ struct WatchDetailView: View {
                 Section("Shared caliber specifications") {
                     WatchCaliberView(caliberID: watch.caliberID)
                 }
+                Section("Current condition") {
+                    LabeledContent("Condition", value: watch.condition.rawValue)
+                    WatchValue(label: "Condition note", value: watch.conditionNote)
+                }
                 WatchJobHistoryView(watch: watch)
             }
             .formStyle(.grouped)

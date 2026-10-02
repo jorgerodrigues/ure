@@ -78,6 +78,39 @@ nonisolated enum LibrarySchema {
                     WHERE stage IN ('Planned', 'In progress', 'Waiting', 'Ready')
                     """)
         }
+        migrator.registerMigration("v5-job-stages", foreignKeyChecks: .immediate) { db in
+            try db.alter(table: "watch") { table in
+                table.add(column: "condition", .text).notNull().defaults(to: "Unknown")
+                    .check(
+                        sql:
+                            "condition IN ('Unknown', 'Running', 'Running poorly', 'Stopped', 'Disassembled')"
+                    )
+                table.add(column: "conditionNote", .text)
+            }
+            try db.alter(table: "job") { table in
+                for column in ["waitingReason", "outcome", "recommendations", "cancellationReason"]
+                {
+                    table.add(column: column, .text)
+                }
+                for column in ["startedAt", "completedAt", "cancelledAt"] {
+                    table.add(column: column, .double)
+                }
+            }
+            try db.create(table: "activityEvent") { table in
+                table.column("id", .text).primaryKey()
+                table.column("jobID", .text).notNull().references("job", onDelete: .restrict)
+                table.column("kind", .text).notNull()
+                    .check(sql: "kind IN ('Job stage changed', 'Watch condition changed')")
+                table.column("occurredAt", .double).notNull()
+                table.column("ordering", .integer).notNull().unique().check { $0 > 0 }
+                for column in ["priorValue", "nextValue"] {
+                    table.column(column, .text).notNull().check(sql: "json_valid(\(column))")
+                }
+            }
+            try db.create(
+                index: "activityEvent_jobID_ordering", on: "activityEvent",
+                columns: ["jobID", "ordering"])
+        }
         return migrator
     }
 }

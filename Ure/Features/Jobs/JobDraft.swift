@@ -3,6 +3,9 @@ import Foundation
 nonisolated enum JobField: Sendable {
     case title
     case watchName
+    case waitingReason
+    case outcome
+    case cancellationReason
 }
 
 nonisolated struct JobValidationError: LocalizedError {
@@ -68,7 +71,7 @@ nonisolated struct JobDraft: Equatable, Sendable {
 
     func record(
         id: UUID, watchID: UUID, stage: JobStage, snapshot: JobIntakeSnapshot,
-        createdAt: Date, updatedAt: Date
+        createdAt: Date, updatedAt: Date, existing: JobRecord? = nil
     ) throws -> JobRecord {
         guard let title = Self.optional(title) else {
             throw JobValidationError(fields: [.title: "Enter a job title."])
@@ -79,7 +82,12 @@ nonisolated struct JobDraft: Equatable, Sendable {
             agreedScope: Self.optional(agreedScope),
             intakeCondition: Self.optional(intakeCondition), ownerName: Self.optional(ownerName),
             ownerEmail: Self.optional(ownerEmail), ownerPhone: Self.optional(ownerPhone),
-            intakeSnapshot: snapshot, createdAt: createdAt, updatedAt: updatedAt)
+            intakeSnapshot: snapshot, createdAt: createdAt, updatedAt: updatedAt,
+            waitingReason: existing?.waitingReason, outcome: existing?.outcome,
+            recommendations: existing?.recommendations,
+            cancellationReason: existing?.cancellationReason,
+            startedAt: existing?.startedAt, completedAt: existing?.completedAt,
+            cancelledAt: existing?.cancelledAt)
     }
 
     static func optional(_ value: String) -> String? {

@@ -305,7 +305,7 @@ The first release passes these journeys:
 
 For a synthetic library of 500 watches, 1,000 jobs, 10,000 tasks, and 5,000 photo items, target a warm list or search response under 300 ms and an initial usable window under 3 seconds on the development Mac. These are proposed performance targets, not measured results. Record hardware and build mode when checking them. Originals load only when viewed. Thumbnail decoding must not freeze task input.
 
-Release acceptance requires running on a Mac with the proposed minimum OS as well as the development OS, or explicitly recording that the minimum-OS run is still pending. The W001 app shell, W002 recoverable library, W003 watch records, W004 shared caliber records, and W005 job intake and history exist. Native UI and device acceptance is deferred to the release stage. Job stage controls and later bench features follow in their own issues. Full release checks remain future acceptance criteria.
+Release acceptance requires running on a Mac with the proposed minimum OS as well as the development OS, or explicitly recording that the minimum-OS run is still pending. The W001 app shell, W002 recoverable library, W003 watch records, W004 shared caliber records, W005 job intake and history, and W006 job stages and watch condition exist. Native UI and device acceptance is deferred to the release stage. Later bench features follow in their own issues. Full release checks remain future acceptance criteria.
 
 ## 13 Implementation handover
 

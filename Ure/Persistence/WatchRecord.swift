@@ -1,6 +1,14 @@
 import Foundation
 import GRDB
 
+nonisolated enum WatchCondition: String, Codable, CaseIterable, Sendable {
+    case unknown = "Unknown"
+    case running = "Running"
+    case runningPoorly = "Running poorly"
+    case stopped = "Stopped"
+    case disassembled = "Disassembled"
+}
+
 nonisolated struct WatchRecord: Codable, Equatable, Identifiable, Sendable, FetchableRecord,
     PersistableRecord
 {
@@ -20,7 +28,9 @@ nonisolated struct WatchRecord: Codable, Equatable, Identifiable, Sendable, Fetc
     let waterResistance: String?
     let specificationNotes: String?
     let createdAt: Date
-    let updatedAt: Date
+    var updatedAt: Date
+    var condition: WatchCondition = .unknown
+    var conditionNote: String? = nil
 
     static func databaseUUIDEncodingStrategy(for column: String) -> DatabaseUUIDEncodingStrategy {
         .uppercaseString
