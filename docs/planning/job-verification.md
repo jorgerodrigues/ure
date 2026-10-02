@@ -1,6 +1,6 @@
 # Job intake verification
 
-Recorded on 2 October 2026. W005 is implemented on `w005-job-intake`. The story is [#3](https://github.com/jorgerodrigues/ure/issues/3). Its dependency, W004, was merged through [PR #31](https://github.com/jorgerodrigues/ure/pull/31) before this work started. The user approved several repair jobs per watch, with at most one open job.
+Recorded on 2 October 2026. W005 is implemented on `w005-job-intake` in [PR #32](https://github.com/jorgerodrigues/ure/pull/32). The story is [#3](https://github.com/jorgerodrigues/ure/issues/3). Its dependency, W004, was merged through [PR #31](https://github.com/jorgerodrigues/ure/pull/31) before this work started. The user approved several repair jobs per watch, with at most one open job.
 
 ## Implementation
 
@@ -18,7 +18,7 @@ Recorded on 2 October 2026. W005 is implemented on `w005-job-intake`. The story 
 | Local unsigned Debug build | Passed with `SDK_STAT_CACHE_ENABLE=NO` |
 | `xcodebuild build-for-testing` | Unit and native UI test sources compiled without execution |
 | `make release XCODE_EXTRA_FLAGS=SDK_STAT_CACHE_ENABLE=NO` | Local optimized build passed |
-| Remote formatting/lint and Debug build | Pending the updated implementation PR's CI run |
+| Remote formatting/lint and Debug build | [CI run 36982178860](https://github.com/jorgerodrigues/ure/actions/runs/36982178860) passed in 1 minute 7 seconds |
 | Unit test execution and CI Release build | Deferred to W032 by user agreement on 2 October 2026 |
 | Native UI and device acceptance | Deferred to release acceptance by the existing user agreement |
 
