@@ -65,6 +65,7 @@ The Release configuration enables optimization and whole-module compilation. The
 - [Implementation issues](docs/planning/issues.md)
 - [W001 foundation](docs/planning/issues/W001.md)
 - [Setup verification and pending gates](docs/planning/setup-verification.md)
+- [Design: brand, app icon, and macOS 27 screen rules](docs/design/README.md)
 
 The user approved the current-platform direction on 1 October 2026. Separate repair jobs and shared caliber knowledge remain proposed product choices. The next infrastructure issue is W002, which adds the recoverable SQLite library.
 
