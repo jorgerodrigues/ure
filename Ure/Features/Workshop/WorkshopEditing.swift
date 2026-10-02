@@ -8,10 +8,11 @@ final class WorkshopEditing {
     let notes: NoteState
     let references: ReferenceState
     let photos: PhotoState
+    let documents: DocumentState
 
     init(
         watches: WatchState, calibers: CaliberState, jobs: JobState, notes: NoteState,
-        references: ReferenceState, photos: PhotoState
+        references: ReferenceState, photos: PhotoState, documents: DocumentState
     ) {
         self.watches = watches
         self.calibers = calibers
@@ -19,27 +20,30 @@ final class WorkshopEditing {
         self.notes = notes
         self.references = references
         self.photos = photos
+        self.documents = documents
     }
 
     var isSaving: Bool {
         watches.isSaving || calibers.isSaving || jobs.isSaving || notes.isSaving
-            || references.isSaving || photos.isSaving || photos.isImporting
+            || references.isSaving || photos.isSaving || photos.isImporting || documents.isSaving
+            || documents.isImporting
     }
     var hasUnsavedChanges: Bool {
         watches.hasUnsavedChanges || calibers.hasUnsavedChanges || jobs.hasUnsavedChanges
             || notes.hasUnsavedChanges || references.hasUnsavedChanges || photos.hasUnsavedChanges
+            || documents.hasUnsavedChanges
     }
     var isNavigationPending: Bool {
         watches.isNavigationPending || calibers.isNavigationPending || jobs.isNavigationPending
             || notes.isNavigationPending || references.isNavigationPending
-            || photos.isNavigationPending
+            || photos.isNavigationPending || documents.isNavigationPending
     }
 
     var showsUnsavedChanges: Bool {
         get {
             watches.showsUnsavedChanges || calibers.showsUnsavedChanges || jobs.showsUnsavedChanges
                 || notes.showsUnsavedChanges || references.showsUnsavedChanges
-                || photos.showsUnsavedChanges
+                || photos.showsUnsavedChanges || documents.showsUnsavedChanges
         }
         set {
             if watches.isNavigationPending {
@@ -52,8 +56,10 @@ final class WorkshopEditing {
                 notes.showsUnsavedChanges = newValue
             } else if references.isNavigationPending {
                 references.showsUnsavedChanges = newValue
-            } else {
+            } else if photos.isNavigationPending {
                 photos.showsUnsavedChanges = newValue
+            } else {
+                documents.showsUnsavedChanges = newValue
             }
         }
     }
@@ -64,7 +70,8 @@ final class WorkshopEditing {
         if jobs.isNavigationPending { return "Save changes to this job?" }
         if notes.isNavigationPending { return "Save changes to this note?" }
         if references.isNavigationPending { return "Save changes to this reference?" }
-        return "Save changes to this photo?"
+        if photos.isNavigationPending { return "Save changes to this photo?" }
+        return "Save changes to this document?"
     }
 
     func requestNavigation(_ action: @escaping () -> Void, onCancel: (() -> Void)? = nil) {
@@ -83,7 +90,11 @@ final class WorkshopEditing {
                                         self.references.requestNavigation(
                                             {
                                                 self.photos.requestNavigation(
-                                                    action, onCancel: onCancel)
+                                                    {
+                                                        self.documents.requestNavigation(
+                                                            action, onCancel: onCancel)
+                                                    },
+                                                    onCancel: onCancel)
                                             }, onCancel: onCancel)
                                     },
                                     onCancel: onCancel)
@@ -104,8 +115,10 @@ final class WorkshopEditing {
             notes.stay()
         } else if references.isNavigationPending {
             references.stay()
-        } else {
+        } else if photos.isNavigationPending {
             photos.stay()
+        } else {
+            documents.stay()
         }
     }
 
@@ -120,8 +133,10 @@ final class WorkshopEditing {
             notes.discardAndContinue()
         } else if references.isNavigationPending {
             references.discardAndContinue()
-        } else {
+        } else if photos.isNavigationPending {
             photos.discardAndContinue()
+        } else {
+            documents.discardAndContinue()
         }
     }
 
@@ -140,8 +155,10 @@ final class WorkshopEditing {
             await notes.saveAndContinue()
         } else if references.isNavigationPending {
             await references.saveAndContinue()
-        } else {
+        } else if photos.isNavigationPending {
             await photos.saveAndContinue()
+        } else {
+            await documents.saveAndContinue()
         }
     }
 }

@@ -82,7 +82,8 @@ struct JobStateTests {
             calibers: CaliberState(service: CaliberService(coordinator: coordinator)), jobs: state,
             notes: NoteState(service: NoteService(coordinator: coordinator)),
             references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
-            photos: PhotoState(service: PhotoService(coordinator: coordinator)))
+            photos: PhotoState(service: PhotoService(coordinator: coordinator)),
+            documents: DocumentState(service: DocumentService(coordinator: coordinator)))
         state.start(for: watch.id)
         state.draft?.title = "Keep this intake"
         var navigated = false

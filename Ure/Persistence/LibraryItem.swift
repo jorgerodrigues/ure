@@ -4,6 +4,7 @@ import GRDB
 nonisolated enum LibraryItemKind: String, Codable, Sendable {
     case link = "Link"
     case photo = "Photo"
+    case document = "Document"
 }
 
 nonisolated enum PhotoStage: String, Codable, CaseIterable, Sendable {

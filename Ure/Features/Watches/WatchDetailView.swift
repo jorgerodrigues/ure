@@ -4,6 +4,7 @@ struct WatchDetailView: View {
     @Environment(WatchState.self) private var watches
     @Environment(JobState.self) private var jobs
     @Environment(NoteState.self) private var notes
+    @Environment(DocumentState.self) private var documents
     @Environment(PhotoState.self) private var photos
     @Environment(ReferenceState.self) private var references
 
@@ -14,6 +15,8 @@ struct WatchDetailView: View {
             jobs.watchID == watch.id, jobs.selectedID != nil || jobs.draft != nil
         {
             JobDetailView()
+        } else if let watch = watches.selectedWatch, documents.isPresenting(for: .watch(watch.id)) {
+            DocumentDetailView(owner: .watch(watch.id))
         } else if let watch = watches.selectedWatch, photos.isPresenting(for: .watch(watch.id)) {
             PhotoDetailView(owner: .watch(watch.id))
         } else if let watch = watches.selectedWatch, references.isPresenting(for: .watch(watch.id))

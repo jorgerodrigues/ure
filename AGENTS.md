@@ -6,6 +6,7 @@
 - Read the selected GitHub issue and its dependencies with `gh issue view`. `docs/planning/issues.md` maps planning IDs to issues. Start only after dependencies are merged.
 - Settle proposed product choices before affected implementation. Keep changes within the assigned scope. Do not prebuild later features.
 - After verification, commit, push, and open a PR. Include actual check results and any untested acceptance gates.
+- The user approved private source transfer to Claude.ai through the read-only Claude CLI review workflow on 2 October 2026. See `docs/planning/review-approval.md` for the approval and its scope.
 - Ask whether addressed review comments should be resolved. Never add tool attribution or coauthor footers.
 
 ## Development

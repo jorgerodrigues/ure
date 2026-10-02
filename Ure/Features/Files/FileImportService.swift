@@ -62,6 +62,7 @@ nonisolated struct FileImportService: Sendable {
 
     func importFiles<Value: Sendable>(
         _ sources: [URL],
+        validate: @Sendable (URL, FileAsset) throws -> Void = { _, _ in },
         commit: @Sendable (Database, FileAsset, LibraryDependencies) throws -> Value
     ) async -> [FileImportResult<Value>] {
         guard sources.count <= maximumFileCount else {
@@ -75,7 +76,8 @@ nonisolated struct FileImportService: Sendable {
             let outcome: Result<Value, any Error>
             do {
                 let asset = try await coordinator.importOriginal(
-                    from: source, maximumByteCount: maximumByteCount, commit: commit)
+                    from: source, maximumByteCount: maximumByteCount, validate: validate,
+                    commit: commit)
                 outcome = .success(asset)
             } catch is CancellationError {
                 outcome = .failure(FileImportError.cancelled)

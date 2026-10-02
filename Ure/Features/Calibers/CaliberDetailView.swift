@@ -4,12 +4,17 @@ struct CaliberDetailView: View {
     @Environment(CaliberState.self) private var calibers
     @Environment(WatchState.self) private var watches
     @Environment(NoteState.self) private var notes
+    @Environment(DocumentState.self) private var documents
     @Environment(PhotoState.self) private var photos
     @Environment(ReferenceState.self) private var references
 
     var body: some View {
         if calibers.draft != nil {
             CaliberEditorView()
+        } else if let caliber = calibers.selectedCaliber,
+            documents.isPresenting(for: .caliber(caliber.id))
+        {
+            DocumentDetailView(owner: .caliber(caliber.id))
         } else if let caliber = calibers.selectedCaliber,
             photos.isPresenting(for: .caliber(caliber.id))
         {

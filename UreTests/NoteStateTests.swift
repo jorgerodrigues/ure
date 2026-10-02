@@ -84,7 +84,8 @@ struct NoteStateTests {
             calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
             jobs: JobState(service: JobService(coordinator: coordinator)), notes: state,
             references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
-            photos: PhotoState(service: PhotoService(coordinator: coordinator)))
+            photos: PhotoState(service: PhotoService(coordinator: coordinator)),
+            documents: DocumentState(service: DocumentService(coordinator: coordinator)))
         state.create(for: owner)
         state.draft?.title = "Keep this note"
         let occurred = state.draft?.occurredAt
