@@ -20,9 +20,10 @@
 
 ## Verification
 
-- For app changes, run `make check` and `make release`. Build commands and local setup are in `README.md`.
+- During rapid implementation, run `make lint` and `make build` for app changes. Keep behavioral tests current and compile affected tests when needed. Build commands and local setup are in `README.md`.
+- CI runs formatting/lint and an unsigned Debug build only until W032. Restore unit test execution and the Release build in CI as part of W032 before first-release acceptance. Release builds are not a required per-story gate during this phase.
 - Never run macOS or iOS UI tests on GitHub Actions. Skip all tests that need UI or device automation on CI.
-- Run focused macOS UI tests locally on the Mac at the end of implementation. Do not run them during routine edit cycles. Use simulator devices for local iOS UI automation.
+- Run focused macOS UI tests locally on the Mac during W032 release acceptance. Do not run them during story implementation or routine edit cycles. Use simulator devices for local iOS UI automation.
 - Test behavior and failure boundaries. Tests must use isolated libraries. Keep `URE_TESTING=1` and the injected library location.
 - Save captures and result bundles under `~/Developer/test-assets/<branch>/`. Follow the `test-assets` skill. Remove the folder when the branch is done.
 - Keep machine-specific settings in ignored `Config/Local.xcconfig`. Record verification evidence and pending gates in `docs/planning/`.
