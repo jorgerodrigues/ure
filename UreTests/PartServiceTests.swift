@@ -244,6 +244,7 @@ nonisolated enum PartFixture {
 
 nonisolated enum PartMigrationFixture {
     static func removeParts(in db: Database) throws {
+        try TaskPartMigrationFixture.removeLinks(in: db)
         try db.drop(table: "partLink")
         try db.drop(table: "partRequirement")
         try db.execute(sql: "ALTER TABLE job DROP COLUMN unfinishedPartsReason")

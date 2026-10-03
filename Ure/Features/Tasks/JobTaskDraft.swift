@@ -18,26 +18,32 @@ nonisolated struct JobTaskDraft: Equatable, Sendable {
     var status: JobTaskStatus = .toDo
     var waitingReason = ""
     var skippedReason = ""
+    var partIDs: Set<UUID> = []
 
     init() {}
 
-    init(task: JobTaskRecord) {
+    init(task: JobTaskRecord, partIDs: Set<UUID> = []) {
         title = task.title
         detail = task.detail ?? ""
         groupLabel = task.groupLabel ?? ""
         status = task.status
         waitingReason = task.waitingReason ?? ""
         skippedReason = task.skippedReason ?? ""
+        self.partIDs = partIDs
     }
 
-    func record(id: UUID, jobID: UUID, position: Int, createdAt: Date, updatedAt: Date) throws
+    func record(
+        id: UUID, jobID: UUID, position: Int, createdAt: Date, updatedAt: Date,
+        allowsLinkedWaiting: Bool = false
+    ) throws
         -> JobTaskRecord
     {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         var fields: [JobTaskField: String] = [:]
         if title.isEmpty { fields[.title] = "Enter a task title." }
-        if status == .waiting && JobDraft.optional(waitingReason) == nil {
-            fields[.waitingReason] = "Enter a waiting reason."
+        if status == .waiting && JobDraft.optional(waitingReason) == nil && !allowsLinkedWaiting {
+            fields[.waitingReason] =
+                "Enter a waiting reason, link a Needed or Ordered part, or choose another status."
         }
         if status == .skipped && JobDraft.optional(skippedReason) == nil {
             fields[.skippedReason] = "Enter a skipped reason."

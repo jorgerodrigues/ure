@@ -33,6 +33,17 @@ struct JobTaskDetailView: View {
                         LabeledContent("Created") { Text(task.createdAt, format: .dateTime) }
                         LabeledContent("Updated") { Text(task.updatedAt, format: .dateTime) }
                     }
+                    if !tasks.linkedParts(for: task.id).isEmpty {
+                        Section("Required parts") {
+                            if let availability = tasks.availability(for: task.id) {
+                                Text(availability.rawValue)
+                                    .accessibilityIdentifier("taskAvailability")
+                            }
+                            ForEach(tasks.linkedParts(for: task.id)) { part in
+                                LabeledContent(part.description, value: part.status.rawValue)
+                            }
+                        }
+                    }
                     Section("Task order") {
                         Button("Move up", action: moveUp)
                             .disabled(!canMove(.up))

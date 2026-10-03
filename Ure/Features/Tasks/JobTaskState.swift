@@ -9,6 +9,8 @@ final class JobTaskState {
     private var pendingNavigation: (() -> Void)?
     private var cancelNavigation: (() -> Void)?
     private(set) var tasks: [JobTaskRecord] = []
+    private(set) var parts: [PartRecord] = []
+    private(set) var links: [TaskPart] = []
     private(set) var jobID: UUID?
     private(set) var selectedID: UUID?
     private(set) var isLoading = true
@@ -37,6 +39,31 @@ final class JobTaskState {
 
     func progress(for jobID: UUID) -> JobTaskProgress {
         JobTaskProgress(tasks: records(for: jobID))
+    }
+
+    func availableParts(for jobID: UUID) -> [PartRecord] {
+        parts.filter { $0.jobID == jobID }
+    }
+
+    func linkedParts(for taskID: UUID) -> [PartRecord] {
+        let ids = Set(links.filter { $0.taskID == taskID }.map(\.partID))
+        return parts.filter { ids.contains($0.id) }
+    }
+
+    func availability(for taskID: UUID) -> TaskPartAvailability? {
+        guard !isLoading, loadError == nil else { return nil }
+        return TaskPartAvailability.label(for: linkedParts(for: taskID))
+    }
+
+    func selectPart(_ id: UUID, selected: Bool) {
+        guard !isSaving, let jobID, draft != nil,
+            parts.contains(where: { $0.id == id && $0.jobID == jobID })
+        else { return }
+        if selected {
+            draft?.partIDs.insert(id)
+        } else {
+            draft?.partIDs.remove(id)
+        }
     }
 
     func canReorder(_ jobID: UUID, jobs: JobState) -> Bool {
@@ -101,8 +128,10 @@ final class JobTaskState {
         loadError = nil
         do {
             let values = try await service.coordinator.taskValues()
-            for try await records in values {
-                tasks = records
+            for try await snapshot in values {
+                tasks = snapshot.tasks
+                parts = snapshot.parts
+                links = snapshot.links
                 isLoading = false
             }
         } catch {
@@ -136,7 +165,8 @@ final class JobTaskState {
         guard !isSaving, draft == nil, let selectedTask,
             canWrite(selectedTask.jobID, jobs: jobs)
         else { return }
-        draft = JobTaskDraft(task: selectedTask)
+        draft = JobTaskDraft(
+            task: selectedTask, partIDs: Set(linkedParts(for: selectedTask.id).map(\.id)))
         originalDraft = draft
         clearErrors()
     }
@@ -169,6 +199,8 @@ final class JobTaskState {
             } else {
                 tasks.append(saved)
             }
+            links.removeAll { $0.taskID == saved.id }
+            links.append(contentsOf: draft.partIDs.map { TaskPart(taskID: saved.id, partID: $0) })
             selectedID = saved.id
             self.draft = nil
             originalDraft = nil

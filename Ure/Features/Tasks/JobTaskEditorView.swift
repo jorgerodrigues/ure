@@ -23,10 +23,23 @@ struct JobTaskEditorView: View {
                     TextField("Waiting reason", text: field(\.waitingReason), axis: .vertical)
                         .accessibilityIdentifier("taskWaitingReason")
                     JobTaskFieldError(message: tasks.fieldErrors[.waitingReason])
+                    Text(
+                        "A Needed or Ordered part can explain the wait. Parts becoming available leave the task Waiting."
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
                 } else if tasks.draft?.status == .skipped {
                     TextField("Skipped reason", text: field(\.skippedReason), axis: .vertical)
                         .accessibilityIdentifier("taskSkippedReason")
                     JobTaskFieldError(message: tasks.fieldErrors[.skippedReason])
+                }
+            }
+            Section("Required parts") {
+                if tasks.availableParts(for: jobID).isEmpty {
+                    Text("No parts recorded for this job.").foregroundStyle(.secondary)
+                } else {
+                    ForEach(tasks.availableParts(for: jobID)) { part in
+                        TaskPartSelectionRow(part: part)
+                    }
                 }
             }
             Section("Detail (optional)") {
@@ -73,6 +86,29 @@ struct JobTaskEditorView: View {
             get: { tasks.draft?[keyPath: keyPath] ?? "" },
             set: { tasks.draft?[keyPath: keyPath] = $0 })
     }
+}
+
+private struct TaskPartSelectionRow: View {
+    @Environment(JobTaskState.self) private var tasks
+    let part: PartRecord
+
+    var body: some View {
+        Toggle(isOn: Binding(get: isSelected, set: select)) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(part.description)
+                Text("Quantity \(part.quantity) · \(part.status.rawValue)")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let reference = part.manufacturerReference {
+                    Text(reference).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .toggleStyle(.checkbox)
+        .accessibilityIdentifier("taskPart-\(part.id.uuidString)")
+    }
+
+    private func isSelected() -> Bool { tasks.draft?.partIDs.contains(part.id) == true }
+    private func select(_ value: Bool) { tasks.selectPart(part.id, selected: value) }
 }
 
 private struct JobTaskFieldError: View {

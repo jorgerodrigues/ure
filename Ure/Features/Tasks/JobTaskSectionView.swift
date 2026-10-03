@@ -63,6 +63,10 @@ private struct JobTaskRow: View {
                     if let group = task.groupLabel {
                         Text(group).font(.caption).foregroundStyle(.secondary)
                     }
+                    if let availability = tasks.availability(for: task.id) {
+                        Text(availability.rawValue).font(.caption).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("taskAvailability-\(task.id.uuidString)")
+                    }
                 }
                 Spacer()
                 Text(task.status.rawValue).foregroundStyle(.secondary)
