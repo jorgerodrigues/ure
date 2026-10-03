@@ -60,7 +60,7 @@ The job header shows Done divided by all non-Skipped tasks, with both counts and
 
 ## Required parts
 
-Use **Add Part** in a job detail. Enter a description and a positive whole-number quantity, default 1. Track each separate unit or lot with its own requirement. Manufacturer reference is optional text and keeps leading zeros and punctuation. Compatibility is Unchecked, Confirmed, or Unsuitable. Confirmed requires an evidence note. New parts start Needed. Procurement actions follow in W017.
+Use **Add Part** in a job detail. Enter a description and a positive whole-number quantity, default 1. Track each separate unit or lot with its own requirement. Manufacturer reference is optional text and keeps leading zeros and punctuation. Compatibility is Unchecked, Confirmed, or Unsuitable. Confirmed requires an evidence note. New parts start Needed or Arrived if the complete lot is already on hand.
 
 Use **Add link** during creation or editing. A complete HTTP or HTTPS URL is enough. A part can have no links or several links. Each saved link has an explicit **Open** action. Saving, loading, and selecting parts do not fetch external content or open the browser. Removing a saved link requires confirmation and takes effect after Save.
 
@@ -69,6 +69,12 @@ Each saved link can also hold a supplier name, listing title, supplier stock cod
 Price is optional. Use a non-negative decimal with a point, such as `12.3400`, and a valid currency code, such as `DKK` or `EUR`. The entered digits are stored exactly. A price requires a currency. Lowercase currency input is accepted and saved in uppercase. No totals or conversion are calculated.
 
 Part editing uses **Save**, **Cancel**, **Command-S**, and the shared draft guard. A failed save keeps all draft fields and links. Pending saves block duplicate writes. Closed-job parts remain readable. Reopen the job before adding or editing a part. The service rejects stale saves after closure. Closing a job shows its parts summary and requires a separate explanation for Needed or Ordered parts. Closing preserves their statuses and saves the explanation in history.
+
+Use **Edit Part** to choose Needed, Ordered, Arrived, Installed, or Cancelled. Save records current milestone dates and the transition history together. Arrived means the whole lot is on hand. Installed means fitted. Installing from Needed, Ordered, or Cancelled requires confirmation that the whole lot is on hand. Save records arrival and installation together. There is no partial-delivery counter.
+
+Ordering saves a copy of the selected supplier option and an optional order reference. No supplier selection is required. Later supplier edits, selection changes, and link removal leave that copy intact. Correcting Arrived, Installed, or Cancelled back to Ordered retains an existing order snapshot. Moving back to Needed clears the current order details. Previous values remain in history.
+
+Backward corrections, cancellation, and restoring a cancelled part require a reason. Save clears milestone dates that no longer apply. Cancellation keeps the supplier snapshot and order reference for reading. Cancel in the editor discards the draft. A status changed by another saved action requires cancelling and reopening the stale editor. Procurement never changes task status, job stage, or watch condition. History display follows in W019.
 
 ## Scoped notes
 

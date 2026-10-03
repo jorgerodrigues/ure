@@ -237,6 +237,79 @@ struct PartStateTests {
         try await coordinator.close()
     }
 
+    @Test(.timeLimit(.minutes(1)))
+    func procurementFailuresKeepDraftsAndPendingCommandsCannotRepeat() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let clock = Date(timeIntervalSince1970: 1_700_000_000)
+        let coordinator = fixture.coordinator(dependencies: LibraryDependencies(now: { clock }))
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        let (state, jobs, observations) = try await makeState(coordinator)
+        defer { observations.forEach { $0.cancel() } }
+        let editing = makeEditing(coordinator, parts: state, jobs: jobs)
+        state.create(for: job.id, jobs: jobs)
+        state.draft = PartFixture.draft()
+        #expect(await state.save())
+        state.edit(jobs: jobs)
+        state.setStatus(.installed)
+        #expect(!(await state.save()))
+        #expect(state.fieldErrors[.onHand] != nil && state.draft?.status == .installed)
+        state.confirmOnHand(true)
+        #expect(await state.save())
+        let installed = try #require(state.selectedPart)
+        state.edit(jobs: jobs)
+        state.setStatus(.ordered)
+        state.draft?.orderReference = "000042–Å"
+        #expect(!(await state.save()))
+        #expect(
+            state.fieldErrors[.statusReason] != nil && state.draft?.orderReference == "000042–Å")
+        state.draft?.statusReason = "Corrected receipt entry"
+        try await JobTaskFixture.failEvents(coordinator)
+        let draft = state.draft
+        var navigated = false
+        editing.requestNavigation { navigated = true }
+        await editing.saveAndContinue()
+        #expect(!navigated && state.draft == draft && state.saveError != nil)
+        #expect(try await coordinator.read(PartQueries.fetchAll) == [installed])
+        try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failTaskEvent")
+        }
+        let started = AsyncStream<Void>.makeStream()
+        let gate = DispatchSemaphore(value: 0)
+        defer { gate.signal() }
+        let blocker = Task {
+            try await coordinator.mutate { _, _, _ in
+                started.continuation.yield(()); gate.wait()
+            }
+        }
+        var iterator = started.stream.makeAsyncIterator()
+        _ = await iterator.next()
+        let saving = Task { await state.save() }
+        try await waitUntil { state.isSaving }
+        #expect(!(await state.save()) && editing.isSaving)
+        state.setStatus(.cancelled)
+        state.confirmOnHand(true)
+        state.edit(jobs: jobs)
+        state.cancel()
+        editing.requestNavigation { navigated = true }
+        #expect(!navigated && state.draft == draft)
+        gate.signal()
+        try await blocker.value
+        #expect(await saving.value)
+        #expect(state.selectedPart?.record.status == .ordered)
+        #expect(
+            state.selectedPart?.record.installedAt == nil
+                && state.selectedPart?.record.arrivedAt == nil)
+        #expect(try await coordinator.read(ActivityQueries.fetchAll).count == 2)
+        state.edit(jobs: jobs)
+        state.setStatus(.cancelled)
+        state.draft?.statusReason = "Unneeded lot"
+        state.cancel()
+        #expect(state.selectedPart?.record.status == .ordered && !state.hasUnsavedChanges)
+        for observation in observations { observation.cancel(); await observation.value }
+        try await coordinator.close()
+    }
+
     private func makeState(_ coordinator: LibraryCoordinator) async throws -> (
         PartState, JobState, [Task<Void, Never>]
     ) {

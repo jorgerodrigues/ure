@@ -32,6 +32,7 @@ struct PartDetailView: View {
                             LabeledContent("Evidence or notes", value: note)
                         }
                     }
+                    PartProcurementSection(record: part.record)
                     Section("Saved links") {
                         if part.links.isEmpty {
                             Text("No links saved.").foregroundStyle(.secondary)
@@ -68,6 +69,46 @@ struct PartDetailView: View {
     private func edit() { parts.edit(jobs: jobs) }
     private func back() { editing.requestNavigation(parts.close) }
     private func retry() { Task { await parts.observe() } }
+}
+
+struct PartProcurementSection: View {
+    let record: PartRecord
+
+    var body: some View {
+        Section("Procurement") {
+            if let date = record.orderedAt { LabeledContent("Ordered", value: date.formatted()) }
+            if let date = record.arrivedAt { LabeledContent("Arrived", value: date.formatted()) }
+            if let date = record.installedAt {
+                LabeledContent("Installed", value: date.formatted())
+            }
+            if let date = record.cancelledAt {
+                LabeledContent("Cancelled", value: date.formatted())
+            }
+            if let reason = record.statusReason { LabeledContent("Reason", value: reason) }
+            if let reference = record.orderReference {
+                LabeledContent("Order reference", value: reference)
+            }
+            if let snapshot = record.supplierSnapshot {
+                Text("Supplier at order time").font(.headline)
+                if let supplier = snapshot.supplierName {
+                    LabeledContent("Supplier", value: supplier)
+                }
+                if let title = snapshot.title { LabeledContent("Listing", value: title) }
+                if let code = snapshot.supplierStockCode {
+                    LabeledContent("Supplier stock code", value: code)
+                }
+                LabeledContent("URL", value: snapshot.url)
+                if let price = snapshot.price, let currency = snapshot.currency {
+                    LabeledContent("Price", value: "\(price) \(currency)")
+                } else if let currency = snapshot.currency {
+                    LabeledContent("Currency", value: currency)
+                }
+                if let notes = snapshot.notes { LabeledContent("Notes", value: notes) }
+            } else if record.status == .ordered {
+                Text("No supplier was selected when ordering.").foregroundStyle(.secondary)
+            }
+        }
+    }
 }
 
 private struct PartLinkRow: View {

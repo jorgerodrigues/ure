@@ -1,0 +1,53 @@
+# W017 procurement verification
+
+Implemented on 3 October 2026 for [W017 (#15)](https://github.com/jorgerodrigues/ure/issues/15). W016 (#14) was verified closed and [PR #44](https://github.com/jorgerodrigues/ure/pull/44) merged before implementation. The clean branch started from default-branch commit caf11fa63c403410a901334345d3d776349e868c.
+
+## Scope and behavior
+
+- The existing part editor now offers procurement status with explicit Save, Cancel, Command-S, and the shared draft guard. New parts can start Needed or Arrived. Saved parts can move between Needed, Ordered, Arrived, Installed, and Cancelled. Each requirement remains one whole unit or lot. There is no receipt quantity or partial-delivery counter. This uses the established editor interaction. Proposed immediate task actions and other product defaults remain unchanged.
+- Save records current ordered, arrived, installed, and cancelled dates using the injected clock. Installed is separate from Arrived. Direct installation from Needed, Ordered, or Cancelled requires explicit confirmation that the complete lot is on hand. Arrival and installation are saved together. Installing an Arrived part retains its arrival date.
+- Backward corrections, cancellation, and restoring a cancelled part require a reason. Returning to Ordered clears arrival and installation. Returning to Arrived clears installation. Returning to Needed clears every milestone and current order details. Cancellation clears the current ordered/arrived/installed dates and sets its cancellation date. It keeps the supplier snapshot and order reference for reading. Restoring a cancelled part clears the cancellation date. History retains the previous dates, supplier details, reason, part identity, description, and whole quantity.
+- Ordering copies the selected option's URL, title, supplier name, stock code, exact decimal price, currency, and notes. Supplier selection and order reference are optional. Metadata/selection edits and link removal do not change the copy. A correction back to Ordered retains an existing order snapshot. A surviving order date is retained. If cancellation cleared it, Ordered records the current transition time. A first order captures the current selected option. Restoring cancellation keeps any existing snapshot even when its link is gone. Returning to Needed clears current order details. Previous snapshots remain in events.
+- The part, supplier writes, current milestones, and history event use one LibraryCoordinator transaction. A failed event or link write rolls everything back. Status and order-reference changes produce events. Already-on-hand creation produces a creation-to-Arrived event. Repeated unchanged saves retain timestamps and produce no duplicate event. Stale drafts with a changed saved status are rejected with the draft retained.
+- PartState owns drafts, loading, errors, pending saves, and navigation guards. Failed validation and writes keep status, reason, order reference, confirmation, and supplier fields. Pending saves block repeated Save, Cancel, status/confirmation commands, link changes, and shared navigation. Observation refreshes saved values without replacing the draft.
+- Closed-job records remain readable. Operational controls are disabled. The service rechecks the current open job before any write and rejects stale saves. The existing closure explanation remains required for Needed or Ordered parts. The closure summary adds saved supplier and order-reference context for those parts. Completing or cancelling preserves every part and task status. Procurement does not move jobs, complete tasks, or change watch condition.
+- The v15-part-procurement forward migration adds nullable procurement fields to existing requirements and extends the activity-event kind constraint. It copies existing events without changing JSON or ordering. Existing parts, selected supplier links, exact prices, job/task records, task order, photos, cover references, and originals remain intact. Earlier part, supplier, and task migration fixtures reconstruct their earlier schema with the new migration record removed.
+- No task-part links, availability indicators, purchasing API, stock, supplier accounts, conversion, returns accounting, task completion, overview, timeline UI, or report creation is added.
+
+## Design inspection
+
+The live Paper file contains Brand, Logo, macOS 27, Watches · W003, and Page 1. There is no W017 feature screen. The macOS Rules artboard was read as inline-style JSX. Computed styles for Rules and both main-window artboards were inspected. Procurement uses the existing native grouped Form, Picker, checkbox, text fields, system text styles, and semantic colors. Pomme, AccentColor, pinned references, reference-window restrictions, and toolbar materials remain unchanged. Native visual acceptance is pending.
+
+## Checks actually run
+
+- `make lint`: passed.
+- `make build XCODE_EXTRA_FLAGS=SDK_STAT_CACHE_ENABLE=NO`: unsigned Debug build passed.
+- `xcodebuild -project Ure.xcodeproj -scheme Ure -destination 'platform=macOS,arch=arm64' -derivedDataPath .build/DerivedData -configuration Debug SDK_STAT_CACHE_ENABLE=NO CODE_SIGNING_ALLOWED=NO build-for-testing`: all unit/native UI sources compiled without execution.
+- `git diff --check`: passed.
+
+The initial restricted build could not write Xcode's package and compiler caches. The build passed with cache access. Xcode automatically wrote a diagnostic bundle for that failure. It was moved into the branch's test-assets folder for cleanup after merge. Xcode retains the existing App Intents no-framework extraction notice. Complete concurrency checks and warnings as errors remain enabled. No app launch, test execution, Release build, or screenshot was run.
+
+## Behavioral sources and pending gates
+
+PartProcurementTests covers every status pair with a fixed clock, no-op transitions, allowed on-hand creation, rejected initial order/install/cancel states, whole-lot quantities, direct-install confirmation, correction/cancellation reasons, separate arrival/install dates across restart, current date cleanup, prior values and subsecond event precision, supplier snapshot immutability across edits/removal/correction/cancellation/restart, optional supplier choice, rollback on event failure, stale status rejection, closure explanation for Needed/Ordered, unchanged tasks, closed-job saves, and migration with supplier metadata, history, task order, cover references, photos, and originals preserved.
+
+PartStateTests adds procurement validation and failure retention, shared navigation Save failure, pending duplicate/action protection, and Cancel retaining saved procurement. PartUITests adds a deferred native journey for ordering, snapshot display after supplier edits, direct-install confirmation, correction validation, Cancel, cancellation, already-on-hand creation, keyboard Save, and restart.
+
+These sources are compiled. Their behavior is not executed during this story.
+
+- W032 executes behavioral tests with isolated libraries and URE_TESTING=1.
+- Verify transitions, date cleanup, snapshots, rollback, migration, stale drafts, and closed-job guards at runtime.
+- Verify native keyboard and VoiceOver access, long values, minimum window resizing, pinned reference editing, focused main/reference-window commands, light/dark and inactive windows, increased contrast, and Reduce Transparency.
+- Unit execution, native UI acceptance, runtime acceptance, and Release builds remain deferred to W032. UI/device automation remains off GitHub Actions.
+
+## Review and delivery
+
+The source-sharing approval was verified against the direct human reply in W011 chat 01a0fcc4-1481-7661-b6a6-f81ea2d06414 and the standing review approval document. Round one completed with no blocked source reads or permission denials. It reported two P3 defects: a hidden reason could be saved after switching to a forward status, and procurement validation errors could be delayed behind other field errors. Both were fixed. Reasons are stored only for transitions that require them. All field validation now uses one draft error map. Regression sources cover saved reason/event values and combined field errors.
+
+Round two completed with one permission denial and no blocked source reads. It reported a P3 mismatch between a retained order reference and a replaced supplier snapshot when restoring cancellation. The implementation agent's full-scope check reached the same issue. Restoring cancellation now retains the existing supplier snapshot with its reference. This is a status correction, within the specification's single-unit/lot scope. A regression restores Cancelled directly to Ordered after removal of the selected link and checks the prior copy and reference. No findings were declined. A third fresh full review followed this correction.
+
+Round three completed with no permission denials or blocked source reads. It identified a P3 restoration case where an original order had no selected supplier, but a later choice could be captured when restoring cancellation. The existing event history now distinguishes an earlier order from a first order. The query stops at the latest Needed reset. Supplier-less orders retain their unknown supplier on restoration. A cancelled requirement that was never ordered can still capture its selected option on its first order. Regression sources cover those cases, repeated cancellation with an intermediate Arrived status, and resetting to Needed. A fourth fresh full review followed this correction.
+
+Round four completed with no permission denials or blocked source reads. It reported no correctness defects and no P0-P2 findings. One P3 design suggestion remains for the user: store order existence on the part row rather than derive it from procurement history. The suggested change would remove the fallback event scan and reduce the lifecycle rule's coupling to event decoding. This remains an optional follow-up under the review skill's P3 rule. Four earlier P3 correctness findings were fixed. No findings were declined. Independent review cleared blocking findings after four rounds. Lint, unsigned Debug, all unit/native UI source compilation, and diff whitespace checks passed on the final source. No tests were executed.
+
+CI runs formatting/lint and an unsigned Debug build. Both must pass on the final PR head before merge. Runtime and native acceptance remain deferred to W032.
