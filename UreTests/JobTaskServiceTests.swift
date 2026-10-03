@@ -275,6 +275,7 @@ nonisolated struct JobTaskServiceTests {
 
 nonisolated enum JobTaskMigrationFixture {
     static func removeTasks(in db: Database) throws {
+        try PartMigrationFixture.removeParts(in: db)
         try db.execute(sql: "DELETE FROM grdb_migrations WHERE identifier = 'v12-task-order'")
         try db.drop(table: "jobTask")
         try db.execute(sql: "ALTER TABLE job DROP COLUMN unfinishedTasksReason")

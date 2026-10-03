@@ -71,6 +71,7 @@ struct JobActionEditorView: View {
                     }
                     if !draft.transition.stage.isOpen, let jobID = jobs.selectedID {
                         JobTaskClosureSummaryView(jobID: jobID)
+                        PartClosureSummaryView(jobID: jobID)
                     }
                 }
             }

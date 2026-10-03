@@ -9,6 +9,7 @@ struct JobDetailView: View {
     @Environment(PhotoState.self) private var photos
     @Environment(ReferenceState.self) private var references
     @Environment(JobTaskState.self) private var tasks
+    @Environment(PartState.self) private var parts
 
     var body: some View {
         Group {
@@ -16,6 +17,8 @@ struct JobDetailView: View {
                 JobActionEditorView()
             } else if jobs.draft != nil {
                 JobEditorView()
+            } else if let job = jobs.selectedJob, parts.isPresenting(for: job.id) {
+                PartDetailView(jobID: job.id)
             } else if let job = jobs.selectedJob, tasks.isPresenting(for: job.id) {
                 JobTaskDetailView(jobID: job.id)
             } else if let job = jobs.selectedJob, documents.isPresenting(for: .job(job.id)) {
@@ -55,6 +58,8 @@ struct JobDetailView: View {
                         JobValue(label: "Cancellation reason", value: job.cancellationReason)
                         JobValue(
                             label: "Unfinished tasks explanation", value: job.unfinishedTasksReason)
+                        JobValue(
+                            label: "Unresolved parts explanation", value: job.unfinishedPartsReason)
                         if let completedAt = job.completedAt {
                             LabeledContent("Completed") { Text(completedAt, format: .dateTime) }
                         }
@@ -81,6 +86,7 @@ struct JobDetailView: View {
                         }
                     }
                     JobTaskSectionView(jobID: job.id)
+                    PartSectionView(jobID: job.id)
                     NoteSectionView(owner: .job(job.id))
                     PhotoSectionView(owner: .job(job.id))
                     ReferenceSectionView(owner: .job(job.id))

@@ -116,13 +116,19 @@ nonisolated struct JobService: Sendable {
         dependencies: LibraryDependencies
     ) throws -> JobRecord {
         let unfinished = try JobTaskQueries.unfinished(for: existing.id, in: db)
-        try draft.validate(hasUnfinishedTasks: !unfinished.isEmpty)
+        let unresolved = try PartQueries.unresolved(for: existing.id, in: db)
+        try draft.validate(
+            hasUnfinishedTasks: !unfinished.isEmpty, hasUnresolvedParts: !unresolved.isEmpty)
         var job = existing
         job.stage = draft.stage
         job.waitingReason = nil
         if draft.stage == .waiting { job.waitingReason = JobDraft.optional(draft.waitingReason) }
         job.cancellationReason = nil
         job.unfinishedTasksReason = nil
+        job.unfinishedPartsReason = nil
+        if !draft.stage.isOpen && !unresolved.isEmpty {
+            job.unfinishedPartsReason = JobDraft.optional(draft.unfinishedPartsReason)
+        }
         if !draft.stage.isOpen && !unfinished.isEmpty {
             job.unfinishedTasksReason = JobDraft.optional(draft.unfinishedTasksReason)
         }
