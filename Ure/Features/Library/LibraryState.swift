@@ -10,11 +10,26 @@ final class LibraryState {
     }
 
     private(set) var phase: Phase = .loading
-    let coordinator: LibraryCoordinator
+    private(set) var coordinator: LibraryCoordinator
     private var isOpening = false
 
     init(coordinator: LibraryCoordinator) {
         self.coordinator = coordinator
+    }
+
+    func beginRestore() { phase = .loading }
+
+    func finishRestore(_ result: RestoreActivation) {
+        coordinator = result.coordinator
+        if let info = result.library {
+            phase = .ready(info)
+        } else {
+            phase = .recovery(result.message)
+        }
+    }
+
+    func restoreFailedBeforeActivation(_ reason: String) {
+        phase = .recovery(reason)
     }
 
     func open() async {

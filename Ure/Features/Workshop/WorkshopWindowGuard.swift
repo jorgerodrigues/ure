@@ -2,16 +2,29 @@ import AppKit
 import SwiftUI
 
 final class WorkshopApplicationDelegate: NSObject, NSApplicationDelegate {
-    var editing: WorkshopEditing?
+    var restore: RestoreState?
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let editing else { return .terminateNow }
+        guard let restore else { return .terminateNow }
+        if restore.isActivating { return .terminateCancel }
+        let editing = restore.session.editing
         if editing.isSaving || editing.isNavigationPending { return .terminateCancel }
-        guard editing.hasUnsavedChanges else { return .terminateNow }
+        if !editing.hasUnsavedChanges {
+            if restore.staged == nil, !restore.isStaging { return .terminateNow }
+            finishTermination(sender, restore: restore)
+            return .terminateLater
+        }
         editing.requestNavigation(
-            { sender.reply(toApplicationShouldTerminate: true) },
+            { self.finishTermination(sender, restore: restore) },
             onCancel: { sender.reply(toApplicationShouldTerminate: false) })
         return .terminateLater
+    }
+
+    private func finishTermination(_ sender: NSApplication, restore: RestoreState) {
+        Task {
+            let discarded = await restore.discardForTermination()
+            sender.reply(toApplicationShouldTerminate: discarded)
+        }
     }
 }
 

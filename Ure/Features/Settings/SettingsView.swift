@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(LibraryState.self) private var library
     @Environment(BackupState.self) private var backup
+    @Environment(RestoreState.self) private var restore
 
     var body: some View {
         Form {
@@ -34,10 +35,13 @@ struct SettingsView: View {
                         .disabled(backup.progress == .publishing)
                 } else {
                     Button("Export Library Backup…", action: backup.chooseDestination)
-                        .disabled(backup.summary == nil || backup.isLoading || !isLibraryReady)
+                        .disabled(
+                            backup.summary == nil || backup.isLoading || !isLibraryReady
+                                || restore.isBusy
+                        )
                         .accessibilityIdentifier("exportLibraryBackup")
                     Button("Refresh Summary", action: refreshSummary)
-                        .disabled(backup.isLoading || !isLibraryReady)
+                        .disabled(backup.isLoading || !isLibraryReady || restore.isBusy)
                 }
                 if let lastExport = backup.lastExport {
                     LabeledContent("Last successful export") {
@@ -55,6 +59,7 @@ struct SettingsView: View {
                 )
                 .font(.callout).foregroundStyle(.secondary)
             }
+            RestoreSectionView()
             Section("About") {
                 LabeledContent("Application", value: "Ure")
                 LabeledContent("Version", value: version)

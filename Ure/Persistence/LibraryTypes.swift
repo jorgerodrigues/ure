@@ -11,6 +11,7 @@ nonisolated struct LibraryDependencies: Sendable {
     var backupCheckpoint: @Sendable (BackupCheckpoint) throws -> Void = { _ in }
     var restoreCheckpoint: @Sendable (RestoreCheckpoint) throws -> Void = { _ in }
     var restoreAvailableCapacity: @Sendable (URL) throws -> Int64 = RestoreFiles.availableCapacity
+    var activationCheckpoint: @Sendable (RestoreActivationCheckpoint) throws -> Void = { _ in }
 }
 
 nonisolated struct LibraryManifest: Codable, Equatable, Sendable {
