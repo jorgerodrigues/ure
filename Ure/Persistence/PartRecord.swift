@@ -56,8 +56,15 @@ nonisolated struct PartLink: Codable, Equatable, Identifiable, Sendable, Fetchab
     let partID: UUID
     let position: Int
     let url: String
+    let title: String?
+    let supplierName: String?
+    let supplierStockCode: String?
+    let price: String?
+    let currency: String?
+    let notes: String?
+    let isSelected: Bool
     let createdAt: Date
-    let updatedAt: Date
+    var updatedAt: Date
 
     static func databaseUUIDEncodingStrategy(for column: String) -> DatabaseUUIDEncodingStrategy {
         .uppercaseString
@@ -74,6 +81,7 @@ nonisolated struct PartRequirement: Equatable, Identifiable, Sendable {
     let record: PartRecord
     let links: [PartLink]
     var id: UUID { record.id }
+    var selectedLink: PartLink? { links.first { $0.isSelected } }
 }
 
 nonisolated enum PartQueries {

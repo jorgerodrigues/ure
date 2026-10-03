@@ -137,8 +137,18 @@ final class PartState {
     }
 
     func setLinkURL(_ url: String, id: UUID) {
+        setLinkField(url, id: id, keyPath: \.url)
+    }
+
+    func setLinkField(_ value: String, id: UUID, keyPath: WritableKeyPath<PartLinkDraft, String>) {
         guard !isSaving, let index = draft?.links.firstIndex(where: { $0.id == id }) else { return }
-        draft?.links[index].url = url
+        draft?.links[index][keyPath: keyPath] = value
+    }
+
+    func selectLink(_ id: UUID?) {
+        guard !isSaving, draft != nil else { return }
+        if let id, draft?.links.contains(where: { $0.id == id }) != true { return }
+        draft?.selectedLinkID = id
     }
 
     func removeLink(_ id: UUID) {
@@ -146,14 +156,19 @@ final class PartState {
         if originalDraft?.links.contains(where: { $0.id == id }) == true {
             linkToRemove = id
         } else {
-            draft?.links.removeAll { $0.id == id }
+            removeDraftLink(id)
         }
     }
 
     func confirmRemoveLink() {
         guard !isSaving, let id = linkToRemove else { return }
-        draft?.links.removeAll { $0.id == id }
+        removeDraftLink(id)
         linkToRemove = nil
+    }
+
+    private func removeDraftLink(_ id: UUID) {
+        draft?.links.removeAll { $0.id == id }
+        if draft?.selectedLinkID == id { draft?.selectedLinkID = nil }
     }
 
     func openLink(_ link: PartLink) {

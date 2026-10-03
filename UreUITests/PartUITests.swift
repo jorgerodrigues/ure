@@ -84,6 +84,91 @@ nonisolated final class PartUITests: XCTestCase {
     }
 
     @MainActor
+    func testSupplierChoiceDetailsRemovalCancelAndRestart() {
+        let app = XCUIApplication()
+        app.launchEnvironment["URE_TESTING"] = "1"
+        app.launchEnvironment["URE_TEST_LIBRARY_ID"] = UUID().uuidString
+        app.launchArguments = ["-AppleLocale", "en_US", "-ApplePersistenceIgnoreState", "YES"]
+        app.launch()
+        defer { app.terminate() }
+        app.windows.firstMatch.typeKey("2", modifierFlags: [.command, .option])
+        XCTAssertTrue(app.buttons["addWatch"].waitForExistence(timeout: 5))
+        app.buttons["addWatch"].click()
+        enter("Supplier watch", identifier: "watchName", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["startWatchJob"].waitForExistence(timeout: 5))
+        app.buttons["startWatchJob"].click()
+        enter("Find replacement spring", identifier: "jobTitle", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["addPart"].waitForExistence(timeout: 5))
+        app.buttons["addPart"].click()
+        enter("Setting lever spring", identifier: "partDescription", app: app)
+        enter("0012.3-A/04", identifier: "partManufacturerReference", app: app)
+        app.buttons["addPartLink"].click()
+        let urls = app.textFields.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "partLinkURL-"))
+        replace("https://example.org/part", field: urls.element(boundBy: 0))
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
+        app.buttons["editPart"].click()
+        let firstID = String(urls.element(boundBy: 0).identifier.dropFirst("partLinkURL-".count))
+        enter("Supplier A", identifier: "partLinkSupplier-\(firstID)", app: app)
+        enter("Spring for caliber 123", identifier: "partLinkTitle-\(firstID)", app: app)
+        enter("00098-A/03", identifier: "partLinkStockCode-\(firstID)", app: app)
+        enter("Old stock", identifier: "partLinkNotes-\(firstID)", app: app)
+        enter("0012.3400", identifier: "partLinkPrice-\(firstID)", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.staticTexts["partSaveError"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.textFields["partLinkPrice-\(firstID)"].value as? String, "0012.3400")
+        enter("ZZZ", identifier: "partLinkCurrency-\(firstID)", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.staticTexts["partSaveError"].waitForExistence(timeout: 3))
+        enter("dkk", identifier: "partLinkCurrency-\(firstID)", app: app)
+        app.buttons["addPartLink"].click()
+        replace("https://example.net/alternate", field: urls.element(boundBy: 1))
+        let secondID = String(urls.element(boundBy: 1).identifier.dropFirst("partLinkURL-".count))
+        enter("Supplier B", identifier: "partLinkSupplier-\(secondID)", app: app)
+        app.checkBoxes["selectPartLink-\(secondID)"].click()
+        app.checkBoxes["selectPartLink-\(firstID)"].click()
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["00098-A/03"].exists)
+        XCTAssertTrue(app.staticTexts["0012.3400 DKK"].exists)
+        XCTAssertTrue(app.staticTexts["0012.3-A/04"].exists)
+        XCTAssertTrue(
+            app.otherElements["selectedPartLink-\(firstID)"].exists
+                || app.staticTexts["selectedPartLink-\(firstID)"].exists)
+        let openActions = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "openPartLink-"))
+        XCTAssertEqual(openActions.count, 2)
+        app.buttons["backFromPart"].click()
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["addPart"].waitForExistence(timeout: 5))
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "part-")).firstMatch
+            .click()
+        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["00098-A/03"].exists)
+        XCTAssertTrue(app.staticTexts["0012.3400 DKK"].exists)
+        app.buttons["editPart"].click()
+        app.buttons["removePartLink-\(firstID)"].click()
+        XCTAssertTrue(app.buttons["Remove"].waitForExistence(timeout: 3))
+        app.buttons["Remove"].click()
+        app.buttons["cancelPart"].click()
+        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
+        XCTAssertEqual(openActions.count, 2)
+        app.buttons["editPart"].click()
+        app.buttons["removePartLink-\(firstID)"].click()
+        XCTAssertTrue(app.buttons["Remove"].waitForExistence(timeout: 3))
+        app.buttons["Remove"].click()
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["No supplier option selected."].exists)
+        XCTAssertTrue(app.staticTexts["Supplier B"].exists)
+        XCTAssertEqual(openActions.count, 1)
+    }
+
+    @MainActor
     private func enter(_ text: String, identifier: String, app: XCUIApplication) {
         replace(text, field: app.textFields[identifier])
     }

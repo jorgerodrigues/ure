@@ -28,6 +28,18 @@ struct PartStateTests {
         #expect(state.fieldErrors[.quantity] != nil && state.fieldErrors[.link(link.id)] != nil)
         state.draft?.quantity = "2"
         state.setLinkURL("https://example.org/part", id: link.id)
+        state.setLinkField("Supplier Å", id: link.id, keyPath: \.supplierName)
+        state.setLinkField("00012–A/03", id: link.id, keyPath: \.supplierStockCode)
+        state.setLinkField("Keep these notes", id: link.id, keyPath: \.notes)
+        state.setLinkField("0012.3400", id: link.id, keyPath: \.price)
+        #expect(!(await state.save()))
+        #expect(
+            state.fieldErrors[.currency(link.id)] != nil
+                && state.draft?.links.first?.price == "0012.3400")
+        state.setLinkField("dkk", id: link.id, keyPath: \.currency)
+        state.selectLink(link.id)
+        state.selectLink(UUID())
+        #expect(state.draft?.selectedLinkID == link.id)
         var navigated = false
         editing.requestNavigation { navigated = true }
         #expect(editing.unsavedChangesTitle == "Save changes to this part?")
@@ -53,19 +65,26 @@ struct PartStateTests {
         await editing.saveAndContinue()
         #expect(navigated && !editing.hasUnsavedChanges)
         #expect(state.selectedPart?.record.quantity == 2 && state.selectedPart?.links.count == 1)
+        #expect(state.selectedPart?.selectedLink?.supplierStockCode == "00012–A/03")
         state.edit(jobs: jobs)
         state.removeLink(link.id)
-        #expect(state.linkToRemove == link.id && state.draft?.links.count == 1)
+        #expect(
+            state.linkToRemove == link.id && state.draft?.links.count == 1
+                && state.draft?.selectedLinkID == link.id)
         state.confirmRemoveLink()
-        #expect(state.draft?.links.isEmpty == true)
+        #expect(state.draft?.links.isEmpty == true && state.draft?.selectedLinkID == nil)
         state.addLink()
         let unsaved = try #require(state.draft?.links.first)
+        state.selectLink(unsaved.id)
         state.removeLink(unsaved.id)
-        #expect(state.draft?.links.isEmpty == true && state.linkToRemove == nil)
+        #expect(
+            state.draft?.links.isEmpty == true && state.linkToRemove == nil
+                && state.draft?.selectedLinkID == nil)
         editing.requestNavigation(state.close)
         editing.discardAndContinue()
         #expect(state.jobID == nil && state.draft == nil)
-        #expect(state.parts.first?.links.count == 1)
+        #expect(
+            state.parts.first?.links.count == 1 && state.parts.first?.selectedLink?.id == link.id)
         for observation in observations { observation.cancel(); await observation.value }
         try await coordinator.close()
     }
@@ -82,6 +101,9 @@ struct PartStateTests {
         let editing = makeEditing(coordinator, parts: state, jobs: jobs)
         state.create(for: job.id, jobs: jobs)
         state.draft = PartFixture.draft()
+        state.addLink()
+        let link = try #require(state.draft?.links.first)
+        state.setLinkURL("https://example.org/part", id: link.id)
         let started = AsyncStream<Void>.makeStream()
         let gate = DispatchSemaphore(value: 0)
         defer { gate.signal() }
@@ -100,7 +122,13 @@ struct PartStateTests {
         editing.requestNavigation { navigated = true }
         state.cancel()
         state.addLink()
-        #expect(!navigated && state.draft?.links.isEmpty == true)
+        state.setLinkField("Blocked supplier", id: link.id, keyPath: \.supplierName)
+        state.selectLink(link.id)
+        state.removeLink(link.id)
+        #expect(
+            !navigated && state.draft?.links.count == 1
+                && state.draft?.links.first?.supplierName == ""
+                && state.draft?.selectedLinkID == nil)
         gate.signal()
         try await blocker.value
         #expect(await saving.value)
@@ -121,18 +149,27 @@ struct PartStateTests {
         defer { observations.forEach { $0.cancel() } }
         state.create(for: job.id, jobs: jobs)
         state.draft = PartFixture.draft()
+        state.addLink()
+        let link = try #require(state.draft?.links.first)
+        state.setLinkURL("https://example.org/part", id: link.id)
+        state.setLinkField("Saved supplier", id: link.id, keyPath: \.supplierName)
+        state.selectLink(link.id)
         #expect(await state.save())
         let saved = try #require(state.selectedPart)
         state.open(saved, for: other.id)
         #expect(state.jobID == job.id && state.records(for: other.id).isEmpty)
         state.edit(jobs: jobs)
         state.draft?.manufacturerReference = "Keep 0012/3"
+        state.setLinkField("Draft supplier", id: link.id, keyPath: \.supplierName)
         var external = PartDraft(part: saved)
         external.quantity = "3"
         let updated = try await PartService(coordinator: coordinator).save(
             external, for: job.id, editing: saved.id)
         try await waitUntil { state.selectedPart == updated }
         #expect(state.draft?.quantity == "1" && state.draft?.manufacturerReference == "Keep 0012/3")
+        #expect(
+            state.draft?.links.first?.supplierName == "Draft supplier"
+                && state.draft?.selectedLinkID == link.id)
         var closure = JobTransitionDraft(stage: .completed)
         closure.outcome = "Inspection complete"
         closure.unfinishedPartsReason = "Owner will source it"
@@ -142,6 +179,9 @@ struct PartStateTests {
         #expect(!state.canSave(jobs: jobs) && !state.canWrite(job.id, jobs: jobs))
         #expect(!(await state.save()))
         #expect(state.draft?.manufacturerReference == "Keep 0012/3")
+        #expect(
+            state.draft?.links.first?.supplierName == "Draft supplier"
+                && state.draft?.selectedLinkID == link.id)
         #expect(state.saveError == JobError.closedJob.localizedDescription)
         state.cancel()
         state.create(for: job.id, jobs: jobs)
@@ -172,6 +212,8 @@ struct PartStateTests {
         state.addLink()
         let draftLink = try #require(state.draft?.links.first)
         state.setLinkURL("https://example.org/part", id: draftLink.id)
+        state.setLinkField("Explicit supplier", id: draftLink.id, keyPath: \.supplierName)
+        state.selectLink(draftLink.id)
         #expect(await state.save())
         let part = try #require(state.selectedPart)
         state.close()
@@ -184,7 +226,10 @@ struct PartStateTests {
         state.openLink(link)
         #expect(state.openError == ReferenceError.browserUnavailable.localizedDescription)
         let invalid = PartLink(
-            id: UUID(), partID: part.id, position: 0, url: "file:///tmp/part", createdAt: Date(),
+            id: UUID(), partID: part.id, position: 0, url: "file:///tmp/part", title: nil,
+            supplierName: nil, supplierStockCode: nil, price: nil, currency: nil, notes: nil,
+            isSelected: false,
+            createdAt: Date(),
             updatedAt: Date())
         #expect(throws: ReferenceError.invalidURL) { try service.open(invalid) }
         #expect(browser.opened.count == 2)
