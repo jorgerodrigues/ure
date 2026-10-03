@@ -9,6 +9,8 @@ actor LibraryCoordinator {
     private var database: DatabaseQueue?
     private var info: LibraryInfo?
     private var isPrepared = false
+    private var isExporting = false
+    private var exportWaiters: [CheckedContinuation<Void, Never>] = []
 
     init(
         root: URL,
@@ -58,7 +60,8 @@ actor LibraryCoordinator {
         return try activate(pointer.generationID, manifest: manifest)
     }
 
-    func close() throws {
+    func close() async throws {
+        try await waitForExport()
         try database?.close()
         database = nil
         info = nil
@@ -73,6 +76,13 @@ actor LibraryCoordinator {
 
     func mutate<Value: Sendable>(
         _ mutation: @Sendable (Database, URL, LibraryDependencies) throws -> Value
+    ) async throws -> Value {
+        try await waitForExport()
+        return try performMutation(mutation)
+    }
+
+    private func performMutation<Value: Sendable>(
+        _ mutation: @Sendable (Database, URL, LibraryDependencies) throws -> Value
     ) throws -> Value {
         guard let database, let info else { throw LibraryError.notOpen }
         try Task.checkCancellation()
@@ -83,14 +93,25 @@ actor LibraryCoordinator {
         }
     }
 
-    func importOriginal(from source: URL, maximumByteCount: Int64) throws -> FileAsset {
-        try importOriginal(from: source, maximumByteCount: maximumByteCount) { _, asset, _ in asset
+    func importOriginal(from source: URL, maximumByteCount: Int64) async throws -> FileAsset {
+        try await importOriginal(from: source, maximumByteCount: maximumByteCount) { _, asset, _ in
+            asset
         }
     }
 
     func importOriginal<Value: Sendable>(
         from source: URL, maximumByteCount: Int64,
         validate: @Sendable (URL, FileAsset) throws -> Void = { _, _ in },
+        commit: @Sendable (Database, FileAsset, LibraryDependencies) throws -> Value
+    ) async throws -> Value {
+        try await waitForExport()
+        return try performImport(
+            from: source, maximumByteCount: maximumByteCount, validate: validate, commit: commit)
+    }
+
+    private func performImport<Value: Sendable>(
+        from source: URL, maximumByteCount: Int64,
+        validate: @Sendable (URL, FileAsset) throws -> Void,
         commit: @Sendable (Database, FileAsset, LibraryDependencies) throws -> Value
     ) throws -> Value {
         guard let database, let info else { throw LibraryError.notOpen }
@@ -163,7 +184,8 @@ actor LibraryCoordinator {
         return original
     }
 
-    func recoverImports() throws {
+    func recoverImports() async throws {
+        try await waitForExport()
         guard let database, let info else { throw LibraryError.notOpen }
         try recoverImports(database, generationID: info.generationID)
     }
@@ -184,10 +206,64 @@ actor LibraryCoordinator {
         }
     }
 
-    func createSnapshot() throws -> LibrarySnapshot {
+    func createSnapshot() async throws -> LibrarySnapshot {
+        try await waitForExport()
         guard let database, let info else { throw LibraryError.notOpen }
         return try snapshot(
             database, directory: LibraryFiles.generation(info.generationID, in: root))
+    }
+
+    func backupSummary() throws -> BackupSummary {
+        let date = dependencies.now()
+        return try read { try BackupQueries.summary($0, date: date) }
+    }
+
+    func exportBackup(
+        to destination: URL, applicationVersion: String,
+        progress: @escaping @Sendable (BackupProgress) -> Void = { _ in }
+    ) async throws -> LibrarySnapshot {
+        try await waitForExport()
+        guard let database, let info else { throw LibraryError.notOpen }
+        let path = destination.resolvingSymlinksInPath().standardizedFileURL.path
+        let libraryPath = root.resolvingSymlinksInPath().standardizedFileURL.path
+        guard destination.isFileURL, destination.pathExtension == "watchbackup",
+            path != libraryPath, !path.hasPrefix(libraryPath + "/"),
+            !libraryPath.hasPrefix(path + "/")
+        else {
+            throw LibraryError.invalidLibrary(
+                "Choose a .watchbackup location outside the library.")
+        }
+        let generation = LibraryFiles.generation(info.generationID, in: root)
+        let snapshots = snapshots
+        let date = dependencies.now()
+        let checkpoint = dependencies.backupCheckpoint
+        isExporting = true
+        defer {
+            isExporting = false
+            let waiters = exportWaiters
+            exportWaiters.removeAll()
+            for waiter in waiters { waiter.resume() }
+        }
+        let operation = Task.detached {
+            let access = destination.startAccessingSecurityScopedResource()
+            defer { if access { destination.stopAccessingSecurityScopedResource() } }
+            try LibraryFiles.requireDirectory(generation)
+            return try snapshots.create(
+                from: database, generation: generation, destination: destination, createdAt: date,
+                exportingVersion: applicationVersion, progress: progress, checkpoint: checkpoint)
+        }
+        return try await withTaskCancellationHandler {
+            try await operation.value
+        } onCancel: {
+            operation.cancel()
+        }
+    }
+
+    private func waitForExport() async throws {
+        while isExporting {
+            await withCheckedContinuation { exportWaiters.append($0) }
+        }
+        try Task.checkCancellation()
     }
 
     func watchValues() throws -> AsyncValueObservation<[WatchRecord]> {

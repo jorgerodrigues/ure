@@ -5,6 +5,7 @@ struct UreApp: App {
     @NSApplicationDelegateAdaptor(WorkshopApplicationDelegate.self) private var applicationDelegate
     @State private var navigation: WorkshopNavigation
     @State private var library: LibraryState
+    @State private var backup: BackupState
     @State private var watches: WatchState
     @State private var calibers: CaliberState
     @State private var jobs: JobState
@@ -44,6 +45,7 @@ struct UreApp: App {
             watches: watches, calibers: calibers, jobs: jobs, notes: notes, references: references,
             photos: photos, documents: documents, tasks: tasks, parts: parts)
         _library = State(initialValue: LibraryState(coordinator: coordinator))
+        _backup = State(initialValue: BackupState(coordinator: coordinator))
         _watches = State(initialValue: watches)
         _calibers = State(initialValue: calibers)
         _jobs = State(initialValue: jobs)
@@ -104,6 +106,7 @@ struct UreApp: App {
         Settings {
             SettingsView()
                 .environment(library)
+                .environment(backup)
         }
     }
 }

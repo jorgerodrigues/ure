@@ -168,6 +168,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Ure;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				PRODUCT_BUNDLE_IDENTIFIER = local.ure.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -184,6 +185,7 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Ure;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				PRODUCT_BUNDLE_IDENTIFIER = local.ure.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
