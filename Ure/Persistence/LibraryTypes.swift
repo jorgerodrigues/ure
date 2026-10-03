@@ -9,6 +9,8 @@ nonisolated struct LibraryDependencies: Sendable {
     }
     var prepareLibrary: @Sendable (URL) throws -> Void = { _ in }
     var backupCheckpoint: @Sendable (BackupCheckpoint) throws -> Void = { _ in }
+    var restoreCheckpoint: @Sendable (RestoreCheckpoint) throws -> Void = { _ in }
+    var restoreAvailableCapacity: @Sendable (URL) throws -> Int64 = RestoreFiles.availableCapacity
 }
 
 nonisolated struct LibraryManifest: Codable, Equatable, Sendable {

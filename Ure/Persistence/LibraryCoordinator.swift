@@ -266,6 +266,27 @@ actor LibraryCoordinator {
         try Task.checkCancellation()
     }
 
+    func stageRestore(from package: URL) async throws -> StagedRestore {
+        guard info != nil, database != nil else { throw LibraryError.notOpen }
+        let path = package.resolvingSymlinksInPath().standardizedFileURL.path
+        let libraryPath = root.resolvingSymlinksInPath().standardizedFileURL.path
+        guard package.isFileURL, package.pathExtension == "watchbackup",
+            path != libraryPath, !path.hasPrefix(libraryPath + "/"),
+            !libraryPath.hasPrefix(path + "/")
+        else {
+            throw RestoreError.invalidItem(
+                "backup package", "Choose a .watchbackup outside the library.")
+        }
+        let service = LibraryRestoreService(migrator: migrator, dependencies: dependencies)
+        let root = root
+        let operation = Task.detached { try service.stage(from: package, in: root) }
+        return try await withTaskCancellationHandler {
+            try await operation.value
+        } onCancel: {
+            operation.cancel()
+        }
+    }
+
     func watchValues() throws -> AsyncValueObservation<[WatchRecord]> {
         guard let database else { throw LibraryError.notOpen }
         return ValueObservation.tracking(WatchQueries.fetchAll).values(in: database)
