@@ -63,6 +63,15 @@ struct NoteDetailView: View {
                     .accessibilityIdentifier("backFromNote")
             }
         }
+        .focusedSceneValue(\.recordMenuActions, menuActions)
+        .focusedSceneValue(\.recordBackAction, backAction)
+    }
+
+    private var menuActions: RecordMenuActions {
+        guard notes.draft == nil, notes.selectedNote != nil, !editing.isSaving,
+            editing.canWrite(owner)
+        else { return RecordMenuActions() }
+        return RecordMenuActions(edit: edit, remove: requestRemoval)
     }
 
     private func requestRemoval() {
@@ -73,5 +82,10 @@ struct NoteDetailView: View {
         guard editing.canWrite(owner) else { return }
         notes.edit()
     }
+    private var backAction: (() -> Void)? {
+        guard !editing.isSaving else { return nil }
+        return back
+    }
+
     private func back() { editing.requestNavigation(notes.close) }
 }

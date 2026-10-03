@@ -254,7 +254,8 @@ nonisolated final class JobUITests: XCTestCase {
         XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
         let progress = app.descendants(matching: .any)["taskProgressSummary"].firstMatch
         XCTAssertTrue(progress.waitForExistence(timeout: 5))
-        XCTAssertTrue(progress.label.contains("No tasks planned"))
+        XCTAssertEqual(progress.label, "Task progress")
+        XCTAssertEqual(progress.value as? String, "No tasks planned. 0 skipped.")
         for (title, status) in [("Inspect", "Done"), ("Polish", "Skipped"), ("Test", "To do")] {
             app.buttons["addTask"].click()
             enter(title, in: "taskTitle", app: app)
@@ -266,8 +267,7 @@ nonisolated final class JobUITests: XCTestCase {
             app.buttons["backFromTask"].click()
             XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
         }
-        XCTAssertTrue(progress.label.contains("1 of 2 done · 50%"))
-        XCTAssertTrue(progress.label.contains("1 skipped"))
+        XCTAssertEqual(progress.value as? String, "1 of 2 tasks done, 50 percent. 1 skipped.")
         let rows = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "task-"))
         rows.element(boundBy: 0).click()
         XCTAssertTrue(app.buttons["moveTaskDown"].waitForExistence(timeout: 5))
@@ -303,7 +303,7 @@ nonisolated final class JobUITests: XCTestCase {
         app.windows.firstMatch.typeKey("s", modifierFlags: .command)
         XCTAssertTrue(app.buttons["backFromTask"].waitForExistence(timeout: 5))
         app.buttons["backFromTask"].click()
-        XCTAssertTrue(progress.label.contains("0 of 2 done · 0%"))
+        XCTAssertEqual(progress.value as? String, "0 of 2 tasks done, 0 percent. 1 skipped.")
     }
 
     @MainActor

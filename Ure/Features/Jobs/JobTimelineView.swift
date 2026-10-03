@@ -45,12 +45,18 @@ struct JobTimelineView: View {
                     .disabled(editing.isSaving).accessibilityIdentifier("backFromActivity")
             }
         }
+        .focusedSceneValue(\.recordBackAction, backAction)
     }
 
     private func observe() async {
         await timeline.observe(jobID: jobID, coordinator: library.coordinator)
     }
     private func retry() { reloadCount += 1 }
+    private var backAction: (() -> Void)? {
+        guard !editing.isSaving else { return nil }
+        return back
+    }
+
     private func back() { editing.requestNavigation(onClose) }
 }
 

@@ -100,6 +100,15 @@ struct JobTaskDetailView: View {
                     .accessibilityIdentifier("backFromTask")
             }
         }
+        .focusedSceneValue(\.recordMenuActions, menuActions)
+        .focusedSceneValue(\.recordBackAction, backAction)
+    }
+
+    private var menuActions: RecordMenuActions {
+        guard tasks.draft == nil, tasks.loadError == nil, tasks.selectedTask != nil,
+            !editing.isSaving, tasks.canWrite(jobID, jobs: jobs)
+        else { return RecordMenuActions() }
+        return RecordMenuActions(edit: edit, remove: requestRemoval)
     }
 
     private func requestRemoval() {
@@ -107,6 +116,11 @@ struct JobTaskDetailView: View {
         editing.requestNavigation(tasks.requestRemoval)
     }
     private func edit() { tasks.edit(jobs: jobs) }
+    private var backAction: (() -> Void)? {
+        guard !editing.isSaving else { return nil }
+        return back
+    }
+
     private func back() { editing.requestNavigation(tasks.close) }
     private func retry() { Task { await tasks.observe() } }
 

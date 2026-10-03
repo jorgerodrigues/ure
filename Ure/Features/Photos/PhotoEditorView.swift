@@ -31,9 +31,11 @@ struct PhotoEditorView: View {
         .disabled(photos.isSaving || !editing.canWrite(owner))
         .navigationTitle("Edit Photo")
         .toolbar {
-            Button("Cancel", action: photos.cancel).disabled(photos.isSaving)
-            Button("Save", action: photos.saveCommand)
-                .disabled(!photos.canSave(jobs: jobs) || !editing.canWrite(owner))
+            ToolbarItemGroup(placement: .confirmationAction) {
+                Button("Cancel", action: photos.cancel).disabled(photos.isSaving)
+                Button("Save", action: photos.saveCommand)
+                    .disabled(!photos.canSave(jobs: jobs) || !editing.canWrite(owner))
+            }
         }
         .onAppear(perform: focusTitle)
     }

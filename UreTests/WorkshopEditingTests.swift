@@ -6,6 +6,43 @@ import Testing
 
 struct WorkshopEditingTests {
     @Test
+    func menuCancelPreservesSavedRecordsAndCannotDismissPendingNavigation() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let session = WorkshopSession(
+            coordinator: coordinator, configuration: AppConfiguration(libraryRoot: fixture.root))
+        let editing = session.editing
+        #expect(!editing.canCancelDraft)
+        session.watches.create()
+        #expect(!editing.hasUnsavedChanges)
+        #expect(editing.canCancelDraft)
+        editing.cancelDraft()
+        #expect(session.watches.draft == nil)
+        session.watches.create()
+        session.watches.draft?.name = "Saved watch"
+        #expect(await session.watches.save())
+        let saved = try #require(session.watches.selectedWatch)
+        session.watches.edit()
+        session.watches.draft?.name = "Keep this draft"
+        var navigated = false
+        editing.requestNavigation { navigated = true }
+        #expect(!editing.canCancelDraft)
+        editing.cancelDraft()
+        #expect(!navigated)
+        #expect(editing.isNavigationPending)
+        #expect(session.watches.draft?.name == "Keep this draft")
+        editing.stay()
+        #expect(editing.canCancelDraft)
+        editing.cancelDraft()
+        #expect(session.watches.draft == nil)
+        #expect(session.watches.selectedWatch == saved)
+        #expect(try await coordinator.read(WatchQueries.fetchAll) == [saved])
+        try await coordinator.close()
+    }
+
+    @Test
     func caliberDraftProtectsSectionNavigationAndSupportsStaySaveAndDiscard() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }

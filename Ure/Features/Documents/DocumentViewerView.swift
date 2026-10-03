@@ -28,7 +28,7 @@ struct DocumentViewerView: View {
                         )
                         .keyboardShortcut(
                             usesKeyboardShortcuts
-                                ? KeyboardShortcut(.leftArrow, modifiers: []) : nil
+                                ? KeyboardShortcut(.leftArrow, modifiers: [.command, .option]) : nil
                         )
                         .disabled(!reader.canPrevious)
                         Text("Page \(reader.pageNumber) of \(reader.pageCount)")
@@ -36,7 +36,8 @@ struct DocumentViewerView: View {
                         Button("Next Page", systemImage: "chevron.right", action: reader.next)
                             .keyboardShortcut(
                                 usesKeyboardShortcuts
-                                    ? KeyboardShortcut(.rightArrow, modifiers: []) : nil
+                                    ? KeyboardShortcut(.rightArrow, modifiers: [.command, .option])
+                                    : nil
                             )
                             .disabled(!reader.canNext)
                         Spacer()

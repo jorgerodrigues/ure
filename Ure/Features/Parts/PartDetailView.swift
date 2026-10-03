@@ -65,8 +65,21 @@ struct PartDetailView: View {
                     .disabled(editing.isSaving).accessibilityIdentifier("backFromPart")
             }
         }
+        .focusedSceneValue(\.recordMenuActions, menuActions)
+        .focusedSceneValue(\.recordBackAction, backAction)
+    }
+    private var menuActions: RecordMenuActions {
+        guard parts.draft == nil, parts.loadError == nil, parts.selectedPart != nil,
+            !editing.isSaving, parts.canWrite(jobID, jobs: jobs)
+        else { return RecordMenuActions() }
+        return RecordMenuActions(edit: edit)
     }
     private func edit() { parts.edit(jobs: jobs) }
+    private var backAction: (() -> Void)? {
+        guard !editing.isSaving else { return nil }
+        return back
+    }
+
     private func back() { editing.requestNavigation(parts.close) }
     private func retry() { Task { await parts.observe() } }
 }

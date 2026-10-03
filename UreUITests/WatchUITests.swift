@@ -3,6 +3,49 @@ import XCTest
 
 nonisolated final class WatchUITests: XCTestCase {
     @MainActor
+    func testKeyboardCreateEditCancelAndStayWithLongName() {
+        let app = isolatedApp()
+        app.launch()
+        defer { app.terminate() }
+        let window = app.windows.firstMatch
+        XCTAssertTrue(app.outlines["Workshop sections"].waitForExistence(timeout: 5))
+        window.typeKey("2", modifierFlags: [.command, .option])
+        XCTAssertTrue(app.buttons["addWatch"].waitForExistence(timeout: 5))
+        window.typeKey("n", modifierFlags: .command)
+        XCTAssertTrue(app.textFields["watchName"].waitForExistence(timeout: 3))
+        let name =
+            "Long bench watch – 00042-A/7 – Å時計 – "
+            + String(repeating: "Service history ", count: 10)
+        window.typeText(name)
+        window.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["editWatch"].waitForExistence(timeout: 5))
+        window.typeKey("e", modifierFlags: [.command, .option])
+        XCTAssertTrue(app.textFields["watchName"].waitForExistence(timeout: 3))
+        window.typeKey("a", modifierFlags: .command)
+        window.typeText("Discard this edit")
+        window.typeKey("f", modifierFlags: [.command, .shift])
+        XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 3))
+        window.typeText("Search while editing")
+        window.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
+        XCTAssertEqual(app.textFields["watchName"].value as? String, "Discard this edit")
+        window.typeKey(".", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["editWatch"].waitForExistence(timeout: 3))
+        window.typeKey("2", modifierFlags: [.command, .option])
+        window.typeKey("e", modifierFlags: [.command, .option])
+        XCTAssertTrue(app.textFields["watchName"].waitForExistence(timeout: 3))
+        XCTAssertEqual(
+            app.textFields["watchName"].value as? String, name.trimmingCharacters(in: .whitespaces))
+        window.typeKey("a", modifierFlags: .command)
+        window.typeText("Stay with this draft")
+        window.typeKey("3", modifierFlags: [.command, .option])
+        XCTAssertTrue(app.sheets.buttons["Stay"].waitForExistence(timeout: 3))
+        app.sheets.firstMatch.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
+        XCTAssertEqual(app.textFields["watchName"].value as? String, "Stay with this draft")
+        window.typeKey(".", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["editWatch"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
     func testCreateEditCancelAndRestart() {
         let app = isolatedApp()
         app.launch()

@@ -30,6 +30,10 @@ Local runs use ad-hoc signing. No Apple developer account is required. App Sandb
 
 The main window contains Workshop, Watches, Calibers, Parts, and Archive. Use **Option-Command-1** through **Option-Command-5** to select a section. **Command-comma** opens Settings. Startup creates or reopens the local library. Workshop shows open jobs. Watches and Calibers have saved-record lists and editors. Parts shows requirements from open jobs. Archive shows archived watches and calibers, plus closed jobs.
 
+Use **Option-Command-E** to edit the displayed record, **Command-S** to save, and **Command-period** to cancel editing. **Command-[** returns to the owner through the draft guard. The Record menu also has removal, job stage, watch condition, and reopening actions. These commands follow the displayed record and its permissions. Editing commands are disabled in the read-only reference window. **Pin Reference** is also in the View menu.
+
+Focus a photo and use the arrow keys to pan. Fit and Zoom controls remain available by keyboard. Use **Option-Command-Left Arrow** and **Option-Command-Right Arrow** for the previous or next photo or PDF page. Plain arrows remain available for text, lists, and photo panning. Reference content scrolls so long titles, filenames, and notes do not hide its actions.
+
 ## Workshop overview
 
 Workshop groups open jobs under Planned, In progress, Waiting, and Ready. Each row shows the saved watch name and cover thumbnail, job title, task counts and rounded-down percentage, skipped count, waiting reason, and number of Needed or Ordered part requirements. Each requirement counts once, regardless of its quantity or task links. Empty and all-skipped task lists show **No tasks planned**.
@@ -144,7 +148,7 @@ Use **Import Photos** in a watch, job, or caliber detail. The system file picker
 
 Photos start as **Unclassified**. Open a photo and choose **Edit Photo** to change its title, caption, and stage. Stages are Unclassified, Before, During, and After. The stage filter shows only photos in the current owner scope. Editing uses Save, Cancel, Command-S, and the shared unsaved-draft guard. Closed-job photos remain readable and exportable. Reopen the job to import or edit its photos. The service rejects stale saves after closure.
 
-Select a photo to view its original. Use **Fit**, **Zoom In**, and **Zoom Out**, or pinch to zoom. Drag or scroll to pan. Left and right arrows select the previous and next photos in the filtered scope. **Export Original** uses a save panel and preserves the imported bytes. A failed thumbnail shows a placeholder. It does not remove the photo or prevent original viewing. A failed viewer load offers Retry, and Export Original remains available.
+Select a photo to view its original. Use **Fit**, **Zoom In**, and **Zoom Out**, or pinch to zoom. Focus the photo and use arrow keys, drag, or scroll to pan. Option-Command-Left Arrow and Option-Command-Right Arrow select the previous and next photos in the filtered scope. **Export Original** uses a save panel and preserves the imported bytes. A failed thumbnail shows a placeholder. It does not remove the photo or prevent original viewing. A failed viewer load offers Retry, and Export Original remains available.
 
 Use **Choose Cover** in the watch detail to select a photo from that watch or one of its jobs. **Remove Cover** clears the reference. Watch rows use the cover thumbnail. Caliber photos stay in their shared caliber scope and cannot become a watch cover.
 
@@ -152,7 +156,7 @@ Use **Choose Cover** in the watch detail to select a photo from that watch or on
 
 Use **Import PDFs** in a watch, job, or caliber reference section. Choose several local files or drop them onto the PDF area. Content detection accepts PDFs regardless of extension. The limits are 100 MB per original and 200 files per batch. Each file has its own result. Successful imports remain saved when another file fails or the batch is cancelled. Protected PDFs, including owner-restricted copies that open without a password, are unsupported.
 
-Document rows show **PDF · Offline**. Select one to read its managed original with PDFKit. Use **Previous Page**, **Next Page**, keyboard arrows, **Fit**, **Zoom In**, and **Zoom Out**. PDF loading runs off the main actor. A failed load offers Retry. **Export Original** preserves the imported bytes and stays available after a reader failure when the original remains accessible.
+Document rows show **PDF · Offline**. Select one to read its managed original with PDFKit. Use **Previous Page**, **Next Page**, Option-Command-Left/Right Arrow, **Fit**, **Zoom In**, and **Zoom Out**. PDF loading runs off the main actor. A failed load offers Retry. **Export Original** preserves the imported bytes and stays available after a reader failure when the original remains accessible.
 
 Use **Edit Document** to change its title, optional HTTP/HTTPS source URL, source description, and notes. Save, Cancel, Command-S, and the shared draft guard apply. **Open Source** opens the saved URL only after that action. It does not download the document. Closed-job documents remain readable and exportable. Reopen the job before importing or editing documents. The service also rejects stale saves after closure.
 

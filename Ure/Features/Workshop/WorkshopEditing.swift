@@ -68,6 +68,36 @@ final class WorkshopEditing {
             || references.isSaving || photos.isSaving || photos.isImporting || documents.isSaving
             || documents.isImporting || tasks.isSaving || parts.isSaving
     }
+    var canCancelDraft: Bool {
+        guard !isSaving, !isNavigationPending else { return false }
+        return parts.draft != nil || tasks.draft != nil || documents.draft != nil
+            || photos.draft != nil || references.draft != nil || notes.draft != nil
+            || jobs.isEditing || calibers.draft != nil || watches.draft != nil
+    }
+
+    func cancelDraft() {
+        guard canCancelDraft else { return }
+        if parts.draft != nil {
+            parts.cancel()
+        } else if tasks.draft != nil {
+            tasks.cancel()
+        } else if documents.draft != nil {
+            documents.cancel()
+        } else if photos.draft != nil {
+            photos.cancel()
+        } else if references.draft != nil {
+            references.cancel()
+        } else if notes.draft != nil {
+            notes.cancel()
+        } else if jobs.isEditing {
+            jobs.cancel()
+        } else if calibers.draft != nil {
+            calibers.cancel()
+        } else {
+            watches.cancel()
+        }
+    }
+
     var canSaveJob: Bool {
         guard jobs.canSave else { return false }
         if let draft = jobs.actionDraft, draft.action == .transition, !draft.transition.stage.isOpen

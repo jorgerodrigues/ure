@@ -39,11 +39,32 @@ final class PhotoScrollView: NSScrollView {
         maxMagnification = 8
         imageView.imageScaling = .scaleNone
         imageView.setAccessibilityElement(true)
-        imageView.setAccessibilityLabel("Photo. Drag to pan and pinch to zoom.")
+        imageView.setAccessibilityLabel("Photo")
+        setAccessibilityHelp(
+            "Use arrow keys to pan. Use the Fit and Zoom controls to change scale.")
         imageView.addGestureRecognizer(NSPanGestureRecognizer(target: self, action: #selector(pan)))
     }
 
     required init?(coder: NSCoder) { nil }
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func keyDown(with event: NSEvent) { interpretKeyEvents([event]) }
+
+    override func moveLeft(_ sender: Any?) { panBy(x: -40, y: 0) }
+    override func moveRight(_ sender: Any?) { panBy(x: 40, y: 0) }
+    override func moveUp(_ sender: Any?) { panBy(x: 0, y: 40) }
+    override func moveDown(_ sender: Any?) { panBy(x: 0, y: -40) }
+
+    private func panBy(x: CGFloat, y: CGFloat) {
+        fitsImage = false
+        let origin = contentView.bounds.origin
+        let proposed = NSRect(
+            origin: NSPoint(x: origin.x + x / magnification, y: origin.y + y / magnification),
+            size: contentView.bounds.size)
+        contentView.scroll(to: contentView.constrainBoundsRect(proposed).origin)
+        reflectScrolledClipView(contentView)
+    }
 
     func update(image: CGImage, assetID: UUID, request: PhotoZoomRequest) {
         if self.assetID != assetID {
