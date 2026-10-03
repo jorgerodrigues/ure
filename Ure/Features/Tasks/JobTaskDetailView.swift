@@ -33,6 +33,18 @@ struct JobTaskDetailView: View {
                         LabeledContent("Created") { Text(task.createdAt, format: .dateTime) }
                         LabeledContent("Updated") { Text(task.updatedAt, format: .dateTime) }
                     }
+                    Section("Task order") {
+                        Button("Move up", action: moveUp)
+                            .disabled(!canMove(.up))
+                            .accessibilityIdentifier("moveTaskUp")
+                        Button("Move down", action: moveDown)
+                            .disabled(!canMove(.down))
+                            .accessibilityIdentifier("moveTaskDown")
+                        if let error = tasks.reorderError {
+                            Label(error, systemImage: "exclamationmark.triangle")
+                                .accessibilityIdentifier("taskReorderError")
+                        }
+                    }
                     if let detail = task.detail {
                         Section("Detail") {
                             Text(detail).frame(maxWidth: .infinity, alignment: .leading)
@@ -66,4 +78,19 @@ struct JobTaskDetailView: View {
     private func edit() { tasks.edit(jobs: jobs) }
     private func back() { editing.requestNavigation(tasks.close) }
     private func retry() { Task { await tasks.observe() } }
+
+    private func canMove(_ destination: JobTaskMove) -> Bool {
+        guard let task = tasks.selectedTask, !editing.isSaving, !editing.hasUnsavedChanges else {
+            return false
+        }
+        return tasks.canMove(task.id, for: jobID, to: destination, jobs: jobs)
+    }
+
+    private func moveUp() { move(.up) }
+    private func moveDown() { move(.down) }
+
+    private func move(_ destination: JobTaskMove) {
+        guard canMove(destination), let task = tasks.selectedTask else { return }
+        tasks.moveCommand(task.id, for: jobID, to: destination, jobs: jobs)
+    }
 }

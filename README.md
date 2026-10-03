@@ -54,7 +54,9 @@ Use **Edit Task**, **Save**, **Cancel**, or **Command-S**. Status changes use th
 
 Task completion and reopening save history in the same transaction as the task change. They do not change the job stage or watch condition. Completing or cancelling a job shows its task summary. If To do, Doing, or Waiting tasks remain, enter a separate explanation. Closing keeps every task's status. The explanation stays with the closed job and its transition history. Reopening clears the current explanation and retains that history.
 
-Task ordering and progress display follow in W014. Part links follow in W018.
+Tasks keep their saved bench order. New tasks go at the end. Drag a row before another row, or drop below the list to move it to the end. The row menu and task detail offer **Move up** and **Move down**. In a saved task detail, **Option-Command-Up Arrow** and **Option-Command-Down Arrow** run the same actions from the Task menu. Optional group labels stay visible without changing the saved order. Failed moves keep the previous order. Closed jobs disable ordering, and the service rejects stale moves after closure.
+
+The job header shows Done divided by all non-Skipped tasks, with both counts and a whole percentage. The percentage rounds down, so unfinished work cannot display 100 percent. Skipped tasks have a separate count. Empty and all-skipped lists show **No tasks planned**. Adding or reopening a task updates progress after Save succeeds. Closing a job keeps the saved task statuses and can leave progress below 100 percent. Part links follow in W018.
 
 ## Scoped notes
 
@@ -166,6 +168,7 @@ The Release configuration enables optimization and whole-module compilation. The
 - [W010 local photo verification](docs/planning/photo-verification.md)
 - [W011 technical PDF verification](docs/planning/document-verification.md)
 - [W013 job task verification](docs/planning/task-verification.md)
+- [W014 task ordering and progress verification](docs/planning/task-order-verification.md)
 - [Design: brand, app icon, and macOS 27 screen rules](docs/design/README.md)
 
 The user approved the current-platform direction and W002's SQLite/GRDB storage design on 1 October 2026. Shared caliber records and the repair history rule were approved on 2 October 2026. Watch, caliber, intake, stage, and condition forms use explicit Save and Cancel editing. W003, W004, and W005 are merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29), [PR #31](https://github.com/jorgerodrigues/ure/pull/31), and [PR #32](https://github.com/jorgerodrigues/ure/pull/32). W006 is merged in [PR #33](https://github.com/jorgerodrigues/ure/pull/33). W007 is merged in [PR #34](https://github.com/jorgerodrigues/ure/pull/34). W008 is implemented in [PR #35](https://github.com/jorgerodrigues/ure/pull/35). Native UI and device checks are deferred to release acceptance by agreement. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.

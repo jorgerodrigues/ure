@@ -30,7 +30,9 @@ nonisolated struct JobTaskDraft: Equatable, Sendable {
         skippedReason = task.skippedReason ?? ""
     }
 
-    func record(id: UUID, jobID: UUID, createdAt: Date, updatedAt: Date) throws -> JobTaskRecord {
+    func record(id: UUID, jobID: UUID, position: Int, createdAt: Date, updatedAt: Date) throws
+        -> JobTaskRecord
+    {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         var fields: [JobTaskField: String] = [:]
         if title.isEmpty { fields[.title] = "Enter a task title." }
@@ -42,7 +44,8 @@ nonisolated struct JobTaskDraft: Equatable, Sendable {
         }
         guard fields.isEmpty else { throw JobTaskValidationError(fields: fields) }
         return JobTaskRecord(
-            id: id, jobID: jobID, title: title, detail: JobDraft.optional(detail),
+            id: id, jobID: jobID, position: position, title: title,
+            detail: JobDraft.optional(detail),
             groupLabel: JobDraft.optional(groupLabel), status: status,
             waitingReason: status == .waiting ? JobDraft.optional(waitingReason) : nil,
             skippedReason: status == .skipped ? JobDraft.optional(skippedReason) : nil,

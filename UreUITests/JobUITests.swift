@@ -187,6 +187,70 @@ nonisolated final class JobUITests: XCTestCase {
     }
 
     @MainActor
+    func testTaskOrderingKeyboardDragProgressAndRestart() {
+        let app = isolatedApp()
+        app.launch()
+        defer { app.terminate() }
+        createWatch(app)
+        app.buttons["startWatchJob"].click()
+        enter("Bench order", in: "jobTitle", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
+        let progress = app.descendants(matching: .any)["taskProgressSummary"].firstMatch
+        XCTAssertTrue(progress.waitForExistence(timeout: 5))
+        XCTAssertTrue(progress.label.contains("No tasks planned"))
+        for (title, status) in [("Inspect", "Done"), ("Polish", "Skipped"), ("Test", "To do")] {
+            app.buttons["addTask"].click()
+            enter(title, in: "taskTitle", app: app)
+            enter("Testing", in: "taskGroupLabel", app: app)
+            choose(status, picker: "taskStatus", app: app)
+            if status == "Skipped" { enter("Outside scope", in: "taskSkippedReason", app: app) }
+            app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+            XCTAssertTrue(app.buttons["editTask"].waitForExistence(timeout: 5))
+            app.buttons["backFromTask"].click()
+            XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
+        }
+        XCTAssertTrue(progress.label.contains("1 of 2 done · 50%"))
+        XCTAssertTrue(progress.label.contains("1 skipped"))
+        let rows = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "task-"))
+        rows.element(boundBy: 0).click()
+        XCTAssertTrue(app.buttons["moveTaskDown"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["moveTaskUp"].isEnabled)
+        app.windows.firstMatch.typeKey(.downArrow, modifierFlags: [.command, .option])
+        let upEnabled = NSPredicate(format: "isEnabled == true")
+        XCTAssertEqual(
+            XCTWaiter.wait(
+                for: [
+                    XCTNSPredicateExpectation(
+                        predicate: upEnabled, object: app.buttons["moveTaskUp"])
+                ], timeout: 5), .completed)
+        app.buttons["backFromTask"].click()
+        XCTAssertTrue(rows.element(boundBy: 0).label.contains("Polish"))
+        XCTAssertTrue(rows.element(boundBy: 1).label.contains("Inspect"))
+        rows.element(boundBy: 2).press(forDuration: 1, thenDragTo: rows.element(boundBy: 0))
+        let testFirst = NSPredicate(format: "label CONTAINS %@", "Test")
+        XCTAssertEqual(
+            XCTWaiter.wait(
+                for: [
+                    XCTNSPredicateExpectation(
+                        predicate: testFirst, object: rows.element(boundBy: 0))
+                ], timeout: 5), .completed)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
+        XCTAssertTrue(rows.element(boundBy: 0).label.contains("Test"))
+        XCTAssertTrue(rows.element(boundBy: 1).label.contains("Polish"))
+        XCTAssertTrue(rows.element(boundBy: 2).label.contains("Inspect"))
+        rows.element(boundBy: 2).click()
+        app.buttons["editTask"].click()
+        choose("Doing", picker: "taskStatus", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["backFromTask"].waitForExistence(timeout: 5))
+        app.buttons["backFromTask"].click()
+        XCTAssertTrue(progress.label.contains("0 of 2 done · 0%"))
+    }
+
+    @MainActor
     private func choose(_ value: String, picker identifier: String, app: XCUIApplication) {
         let picker = app.popUpButtons[identifier]
         XCTAssertTrue(picker.waitForExistence(timeout: 3))

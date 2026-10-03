@@ -31,6 +31,7 @@ struct JobDetailView: View {
                     Section("Job") {
                         LabeledContent("Title", value: job.title)
                         LabeledContent("Stage", value: job.stage.rawValue)
+                        JobTaskProgressView(jobID: job.id)
                         LabeledContent("Created") {
                             Text(job.createdAt, format: .dateTime)
                         }
