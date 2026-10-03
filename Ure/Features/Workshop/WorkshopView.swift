@@ -7,6 +7,7 @@ struct WorkshopView: View {
     @Environment(CaliberState.self) private var calibers
     @Environment(JobState.self) private var jobs
     @Environment(WorkshopOverviewState.self) private var workshop
+    @Environment(PartsOverviewState.self) private var partsOverview
     @Environment(NoteState.self) private var notes
     @Environment(JobTaskState.self) private var tasks
     @Environment(PartState.self) private var parts
@@ -32,6 +33,8 @@ struct WorkshopView: View {
                     WatchListView()
                 } else if navigation.selectedSection == .calibers {
                     CaliberListView()
+                } else if navigation.selectedSection == .parts {
+                    PartsOverviewView()
                 } else {
                     WorkshopSectionView(section: navigation.selectedSection)
                 }
@@ -68,6 +71,7 @@ struct WorkshopView: View {
         .task(calibers.observe)
         .task(jobs.observe)
         .task(id: workshop.observationRevision, workshop.observe)
+        .task(id: partsOverview.observationRevision, partsOverview.observe)
         .task(notes.observe)
         .task(tasks.observe)
         .task(parts.observe)
@@ -133,6 +137,30 @@ struct WorkshopView: View {
                     .accessibilityIdentifier("workshopSelectionMessage")
                 }
             }
+        } else if navigation.selectedSection == .parts {
+            Group {
+                if watches.selectedID == nil, watches.draft == nil {
+                    ContentUnavailableView(
+                        "Select a part", systemImage: "shippingbox",
+                        description: Text("Choose a part to view it in its job."))
+                } else {
+                    WatchDetailView()
+                }
+            }
+            .safeAreaInset(edge: .top) {
+                if let message = partsOverview.selectionMessage(
+                    part: parts.selectedPart, job: jobs.selectedJob)
+                {
+                    HStack {
+                        Text(message).font(.callout)
+                        if jobs.selectedJob?.stage.isOpen == true {
+                            Button("Clear Filters", action: partsOverview.clearFilters)
+                        }
+                    }
+                    .padding()
+                    .accessibilityIdentifier("partsSelectionMessage")
+                }
+            }
         } else if navigation.selectedSection == .watches {
             WatchDetailView()
         } else if navigation.selectedSection == .calibers {
@@ -145,7 +173,8 @@ struct WorkshopView: View {
     }
 
     private var hasActiveJob: Bool {
-        (navigation.selectedSection == .watches || navigation.selectedSection == .workshop)
+        (navigation.selectedSection == .watches || navigation.selectedSection == .workshop
+            || navigation.selectedSection == .parts)
             && watches.draft == nil
             && jobs.selectedID != nil && jobs.watchID == watches.selectedID
     }

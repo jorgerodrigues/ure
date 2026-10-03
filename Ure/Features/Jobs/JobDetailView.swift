@@ -124,6 +124,7 @@ struct JobDetailView: View {
             }
         }
         .onChange(of: jobs.selectedID, resetTimeline)
+        .onChange(of: parts.selectedID, resetTimeline)
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Button("Back to Watch", systemImage: "chevron.left", action: backToWatch)

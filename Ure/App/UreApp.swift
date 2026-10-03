@@ -9,6 +9,7 @@ struct UreApp: App {
     @State private var calibers: CaliberState
     @State private var jobs: JobState
     @State private var workshop: WorkshopOverviewState
+    @State private var partsOverview: PartsOverviewState
     @State private var notes: NoteState
     @State private var tasks: JobTaskState
     @State private var parts: PartState
@@ -46,6 +47,7 @@ struct UreApp: App {
         _calibers = State(initialValue: calibers)
         _jobs = State(initialValue: jobs)
         _workshop = State(initialValue: WorkshopOverviewState(coordinator: coordinator))
+        _partsOverview = State(initialValue: PartsOverviewState(coordinator: coordinator))
         _notes = State(initialValue: notes)
         _tasks = State(initialValue: tasks)
         _parts = State(initialValue: parts)
@@ -69,6 +71,7 @@ struct UreApp: App {
                 .environment(calibers)
                 .environment(jobs)
                 .environment(workshop)
+                .environment(partsOverview)
                 .environment(notes)
                 .environment(tasks)
                 .environment(parts)
