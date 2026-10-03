@@ -129,7 +129,7 @@ Show manufacturer, exact designation and variant, structured specifications, not
 
 ### Save and failure behavior
 
-Forms and note editors show Save and Cancel. Cmd-S saves the active editor. Navigation, window closure, and app termination with an unsaved draft offer Save, Discard, or Stay. A failed save keeps the draft and shows a useful error. Buttons become disabled during their own pending operation. A success state appears only after persistence succeeds. Simple actions such as completing a task save immediately. Failure leaves or restores the previous visible state.
+Forms and note editors show Save and Cancel. Cmd-S saves the active editor. Navigation, window closure, and app termination with an unsaved draft offer Save, Discard, or Stay. A failed save keeps the draft and shows a useful error. Buttons become disabled during their own pending operation. A success state appears only after persistence succeeds. W013 task changes follow the existing Save and Cancel editor pattern. Immediate task-row status actions remain proposed. Failure keeps the draft and the prior saved task state.
 
 ## 5 Records and validation
 

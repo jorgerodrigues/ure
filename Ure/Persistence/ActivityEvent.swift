@@ -4,6 +4,7 @@ import GRDB
 nonisolated enum ActivityKind: String, Codable, Sendable {
     case jobStageChanged = "Job stage changed"
     case watchConditionChanged = "Watch condition changed"
+    case taskStatusChanged = "Task status changed"
 }
 
 nonisolated struct JobStageValue: Codable, Equatable, Sendable {
@@ -15,6 +16,7 @@ nonisolated struct JobStageValue: Codable, Equatable, Sendable {
     let startedAt: Date?
     let completedAt: Date?
     let cancelledAt: Date?
+    let unfinishedTasksReason: String?
 
     init(job: JobRecord) {
         stage = job.stage
@@ -25,6 +27,7 @@ nonisolated struct JobStageValue: Codable, Equatable, Sendable {
         startedAt = job.startedAt
         completedAt = job.completedAt
         cancelledAt = job.cancelledAt
+        unfinishedTasksReason = job.unfinishedTasksReason
     }
 }
 
@@ -41,6 +44,31 @@ nonisolated struct WatchConditionValue: Codable, Equatable, Sendable {
 nonisolated enum ActivityValue: Codable, Equatable, Sendable {
     case job(JobStageValue)
     case condition(WatchConditionValue)
+    case task(JobTaskValue)
+}
+
+nonisolated struct JobTaskValue: Codable, Equatable, Sendable {
+    let taskID: UUID
+    let title: String
+    let status: JobTaskStatus?
+    let waitingReason: String?
+    let skippedReason: String?
+
+    init(task: JobTaskRecord) {
+        taskID = task.id
+        title = task.title
+        status = task.status
+        waitingReason = task.waitingReason
+        skippedReason = task.skippedReason
+    }
+
+    init(newTask: JobTaskRecord) {
+        taskID = newTask.id
+        title = newTask.title
+        status = nil
+        waitingReason = nil
+        skippedReason = nil
+    }
 }
 
 nonisolated struct ActivityEvent: Codable, Equatable, Identifiable, Sendable, FetchableRecord,

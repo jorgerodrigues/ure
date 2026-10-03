@@ -6,6 +6,7 @@ nonisolated struct JobTransitionDraft: Equatable, Sendable {
     var outcome = ""
     var recommendations = ""
     var cancellationReason = ""
+    var unfinishedTasksReason = ""
 
     init(stage: JobStage) { self.stage = stage }
 
@@ -17,7 +18,7 @@ nonisolated struct JobTransitionDraft: Equatable, Sendable {
         cancellationReason = job.cancellationReason ?? ""
     }
 
-    func validate() throws {
+    func validate(hasUnfinishedTasks: Bool = false) throws {
         var fields: [JobField: String] = [:]
         if stage == .waiting && JobDraft.optional(waitingReason) == nil {
             fields[.waitingReason] = "Enter a waiting reason."
@@ -27,6 +28,9 @@ nonisolated struct JobTransitionDraft: Equatable, Sendable {
         }
         if stage == .cancelled && JobDraft.optional(cancellationReason) == nil {
             fields[.cancellationReason] = "Enter a cancellation reason."
+        }
+        if !stage.isOpen && hasUnfinishedTasks && JobDraft.optional(unfinishedTasksReason) == nil {
+            fields[.unfinishedTasksReason] = "Explain why these tasks will stay unfinished."
         }
         guard fields.isEmpty else { throw JobValidationError(fields: fields) }
     }

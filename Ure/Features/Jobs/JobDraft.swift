@@ -6,6 +6,7 @@ nonisolated enum JobField: Sendable {
     case waitingReason
     case outcome
     case cancellationReason
+    case unfinishedTasksReason
 }
 
 nonisolated struct JobValidationError: LocalizedError {
@@ -87,7 +88,8 @@ nonisolated struct JobDraft: Equatable, Sendable {
             recommendations: existing?.recommendations,
             cancellationReason: existing?.cancellationReason,
             startedAt: existing?.startedAt, completedAt: existing?.completedAt,
-            cancelledAt: existing?.cancelledAt)
+            cancelledAt: existing?.cancelledAt,
+            unfinishedTasksReason: existing?.unfinishedTasksReason)
     }
 
     static func optional(_ value: String) -> String? {

@@ -40,11 +40,21 @@ Use **Start Job** in a watch's repair history. Only a job title is required. Rep
 
 Use **Edit Intake** to correct an open job's intake, including its identity snapshot. Those corrections apply to that job only. Job editing uses Save, Cancel, Command-S, and the existing draft protection. A failed write preserves the draft. Cancelling a new intake creates no history entry.
 
-A watch can have several repair jobs, with at most one open job. **Open Job** returns to that existing job. The database also enforces the rule when save requests compete. The watch's history opens earlier jobs for reading. **Back to Watch** returns to its identity and history. Job notes are available in the job detail. Tasks, parts, and files follow in their own issues.
+A watch can have several repair jobs, with at most one open job. **Open Job** returns to that existing job. The database also enforces the rule when save requests compete. The watch's history opens earlier jobs for reading. **Back to Watch** returns to its identity and history. Job notes and tasks are available in the job detail. Parts follow in their own issues.
 
 Use **Change Stage** for Planned, In progress, Waiting, Ready, Completed, or Cancelled. Waiting requires a reason. Completed requires an outcome and accepts optional recommendations. Cancelled requires a reason. Ready means ready for final review. Closing locks operational edits. **Reopen Job** selects an open stage and checks that no other job is open for this watch.
 
 Use **Change Condition** to record Unknown, Running, Running poorly, Stopped, or Disassembled with an optional note. Condition and job stage remain independent. Both forms use Save, Cancel, Command-S, and draft protection. Successful changes retain prior and next values in history. History display follows in W019.
+
+## Job tasks
+
+Use **Add Task** in a job detail. Enter a title and optional detail and group label. Choose To do, Doing, Waiting, Done, or Skipped. Waiting requires a reason. Skipped always requires a reason. Several tasks can be Doing at once.
+
+Use **Edit Task**, **Save**, **Cancel**, or **Command-S**. Status changes use the editor. Failed saves keep the draft. Pending saves block duplicate commands. Task drafts use the shared Save, Discard, or Stay guard for record and section changes, window closure, and quitting. Closed-job tasks remain readable. Reopen the job before adding or changing a task. The service also rejects stale saves after closure.
+
+Task completion and reopening save history in the same transaction as the task change. They do not change the job stage or watch condition. Completing or cancelling a job shows its task summary. If To do, Doing, or Waiting tasks remain, enter a separate explanation. Closing keeps every task's status. The explanation stays with the closed job and its transition history. Reopening clears the current explanation and retains that history.
+
+Task ordering and progress display follow in W014. Part links follow in W018.
 
 ## Scoped notes
 
@@ -155,6 +165,7 @@ The Release configuration enables optimization and whole-module compilation. The
 - [W009 managed file import verification](docs/planning/file-import-verification.md)
 - [W010 local photo verification](docs/planning/photo-verification.md)
 - [W011 technical PDF verification](docs/planning/document-verification.md)
+- [W013 job task verification](docs/planning/task-verification.md)
 - [Design: brand, app icon, and macOS 27 screen rules](docs/design/README.md)
 
 The user approved the current-platform direction and W002's SQLite/GRDB storage design on 1 October 2026. Shared caliber records and the repair history rule were approved on 2 October 2026. Watch, caliber, intake, stage, and condition forms use explicit Save and Cancel editing. W003, W004, and W005 are merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29), [PR #31](https://github.com/jorgerodrigues/ure/pull/31), and [PR #32](https://github.com/jorgerodrigues/ure/pull/32). W006 is merged in [PR #33](https://github.com/jorgerodrigues/ure/pull/33). W007 is merged in [PR #34](https://github.com/jorgerodrigues/ure/pull/34). W008 is implemented in [PR #35](https://github.com/jorgerodrigues/ure/pull/35). Native UI and device checks are deferred to release acceptance by agreement. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.

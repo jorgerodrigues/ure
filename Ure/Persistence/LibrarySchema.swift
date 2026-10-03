@@ -295,6 +295,51 @@ nonisolated enum LibrarySchema {
                         """)
             }
         }
+        migrator.registerMigration("v11-job-tasks", foreignKeyChecks: .immediate) { db in
+            try db.create(table: "jobTask") { table in
+                table.column("id", .text).primaryKey()
+                table.column("jobID", .text).notNull().references("job", onDelete: .restrict)
+                table.column("title", .text).notNull().check(sql: "length(trim(title)) > 0")
+                for column in ["detail", "groupLabel", "waitingReason", "skippedReason"] {
+                    table.column(column, .text)
+                }
+                table.column("status", .text).notNull().check(
+                    sql: "status IN ('To do', 'Doing', 'Waiting', 'Done', 'Skipped')")
+                table.check(
+                    sql:
+                        "status != 'Waiting' OR (waitingReason IS NOT NULL AND length(trim(waitingReason)) > 0)"
+                )
+                table.check(
+                    sql:
+                        "status != 'Skipped' OR (skippedReason IS NOT NULL AND length(trim(skippedReason)) > 0)"
+                )
+                table.column("createdAt", .double).notNull()
+                table.column("updatedAt", .double).notNull()
+            }
+            try db.create(index: "jobTask_jobID", on: "jobTask", columns: ["jobID"])
+            try db.alter(table: "job") { table in
+                table.add(column: "unfinishedTasksReason", .text)
+            }
+            try db.create(table: "activityEvent_new") { table in
+                table.column("id", .text).primaryKey()
+                table.column("jobID", .text).notNull().references("job", onDelete: .restrict)
+                table.column("kind", .text).notNull().check(
+                    sql:
+                        "kind IN ('Job stage changed', 'Watch condition changed', 'Task status changed')"
+                )
+                table.column("occurredAt", .double).notNull()
+                table.column("ordering", .integer).notNull().unique().check { $0 > 0 }
+                for column in ["priorValue", "nextValue"] {
+                    table.column(column, .text).notNull().check(sql: "json_valid(\(column))")
+                }
+            }
+            try db.execute(sql: "INSERT INTO activityEvent_new SELECT * FROM activityEvent")
+            try db.drop(table: "activityEvent")
+            try db.rename(table: "activityEvent_new", to: "activityEvent")
+            try db.create(
+                index: "activityEvent_jobID_ordering", on: "activityEvent",
+                columns: ["jobID", "ordering"])
+        }
         return migrator
     }
 }

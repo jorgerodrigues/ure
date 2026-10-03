@@ -8,6 +8,7 @@ struct JobDetailView: View {
     @Environment(DocumentState.self) private var documents
     @Environment(PhotoState.self) private var photos
     @Environment(ReferenceState.self) private var references
+    @Environment(JobTaskState.self) private var tasks
 
     var body: some View {
         Group {
@@ -15,6 +16,8 @@ struct JobDetailView: View {
                 JobActionEditorView()
             } else if jobs.draft != nil {
                 JobEditorView()
+            } else if let job = jobs.selectedJob, tasks.isPresenting(for: job.id) {
+                JobTaskDetailView(jobID: job.id)
             } else if let job = jobs.selectedJob, documents.isPresenting(for: .job(job.id)) {
                 DocumentDetailView(owner: .job(job.id))
             } else if let job = jobs.selectedJob, photos.isPresenting(for: .job(job.id)) {
@@ -49,6 +52,8 @@ struct JobDetailView: View {
                         JobValue(label: "Outcome", value: job.outcome)
                         JobValue(label: "Recommendations", value: job.recommendations)
                         JobValue(label: "Cancellation reason", value: job.cancellationReason)
+                        JobValue(
+                            label: "Unfinished tasks explanation", value: job.unfinishedTasksReason)
                         if let completedAt = job.completedAt {
                             LabeledContent("Completed") { Text(completedAt, format: .dateTime) }
                         }
@@ -74,6 +79,7 @@ struct JobDetailView: View {
                                 systemImage: "exclamationmark.triangle")
                         }
                     }
+                    JobTaskSectionView(jobID: job.id)
                     NoteSectionView(owner: .job(job.id))
                     PhotoSectionView(owner: .job(job.id))
                     ReferenceSectionView(owner: .job(job.id))
