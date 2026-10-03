@@ -497,29 +497,36 @@ actor LibraryCoordinator {
         _ reader: DatabaseQueue, directory: URL, manifest: LibraryManifest
     ) throws -> LibraryInfo {
         let recovery = try snapshot(reader, directory: directory)
+        try dependencies.upgradeCheckpoint(.afterRecovery)
         let generationID = dependencies.makeID()
         let target = LibraryFiles.generation(generationID, in: root)
         guard !FileManager.default.fileExists(atPath: target.path) else {
             throw LibraryError.invalidLibrary("The new library generation already exists.")
         }
+        var switched = false
         do {
             try FileManager.default.copyItem(at: recovery.directory, to: target)
             try FileManager.default.removeItem(at: target.appending(path: "snapshot.json"))
             let writer = try openDatabase(in: target, readonly: false)
             do {
+                try dependencies.upgradeCheckpoint(.beforeMigration)
                 try migrator.migrate(writer)
+                try dependencies.upgradeCheckpoint(.afterMigration)
                 try validateDatabase(writer, manifest: manifest)
                 try recoverImports(writer, generationID: generationID)
                 try Task.checkCancellation()
                 try reader.close()
+                try dependencies.upgradeCheckpoint(.beforeSwitch)
                 try publish(generationID)
+                switched = true
+                try dependencies.upgradeCheckpoint(.afterSwitch)
             } catch {
                 try? writer.close()
                 throw error
             }
             return install(writer, generationID: generationID, manifest: manifest)
         } catch {
-            try? FileManager.default.removeItem(at: target)
+            if !switched { try? FileManager.default.removeItem(at: target) }
             throw error
         }
     }

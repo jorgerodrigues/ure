@@ -45,6 +45,15 @@ nonisolated enum LibraryFiles {
         }
     }
 
+    static func relativePath(_ url: URL, in directory: URL) throws -> String {
+        let prefix = directory.resolvingSymlinksInPath().path + "/"
+        let path = url.resolvingSymlinksInPath().path
+        guard path.hasPrefix(prefix) else {
+            throw LibraryError.invalidLibrary("A snapshot file is outside its library folder.")
+        }
+        return String(path.dropFirst(prefix.count))
+    }
+
     static func originalFiles(in directory: URL) throws -> [URL] {
         try requireDirectory(directory)
         var files: [URL] = []

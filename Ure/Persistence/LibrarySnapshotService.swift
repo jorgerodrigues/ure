@@ -81,7 +81,7 @@ nonisolated struct LibrarySnapshotService {
             progress(.originals(completed: 0, total: originals.count))
             for (index, original) in originals.enumerated() {
                 try Task.checkCancellation()
-                let relativePath = String(original.path.dropFirst(sourceOriginals.path.count + 1))
+                let relativePath = try LibraryFiles.relativePath(original, in: sourceOriginals)
                 let target = targetOriginals.appending(path: relativePath)
                 try manager.createDirectory(
                     at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -224,7 +224,7 @@ nonisolated struct LibrarySnapshotService {
             byteCount += Int64(data.count)
         }
         return SnapshotFile(
-            path: String(url.path.dropFirst(root.path.count + 1)),
+            path: try LibraryFiles.relativePath(url, in: root),
             byteCount: byteCount,
             sha256: hasher.finalize().map { String(format: "%02x", $0) }.joined()
         )
