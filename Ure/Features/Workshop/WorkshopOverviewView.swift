@@ -86,6 +86,7 @@ private struct WorkshopJobRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.watch.name).font(.body).fontWeight(.semibold)
                 Text(row.job.title).font(.subheadline)
+                Text(row.job.stage.rawValue)
                 if let percentage = row.progress.percentage {
                     Text(
                         "\(row.progress.doneCount) of \(row.progress.countedCount) done · \(percentage)%"

@@ -13,33 +13,44 @@ struct DocumentDetailView: View {
             if documents.draft != nil {
                 DocumentEditorView(owner: owner)
             } else if let document = documents.selectedDocument {
-                VStack(alignment: .leading, spacing: 12) {
-                    Label("\(owner.scope) PDF · Available offline", systemImage: "doc.richtext")
-                        .foregroundStyle(.secondary)
-                    DocumentViewerView(source: documents.reader, assetID: document.asset.id).id(
-                        document.asset.id)
+                GeometryReader { geometry in
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 8) {
-                            LabeledContent(
-                                "Original filename", value: document.asset.originalFilename)
-                            if !document.item.sourceURL.isEmpty {
-                                LabeledContent("Source URL", value: document.item.sourceURL)
-                                Button("Open Source", action: documents.openSource).disabled(
-                                    editing.isSaving)
-                            }
-                            if !document.item.sourceDescription.isEmpty {
-                                LabeledContent("Source", value: document.item.sourceDescription)
-                            }
-                            if !document.item.notes.isEmpty { Text(document.item.notes) }
-                        }.frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .textSelection(.enabled).frame(maxHeight: 130)
-                    if let error = documents.operationError {
-                        Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
-                    }
-                    if !editing.canWrite(owner) {
-                        Text("Unarchive the owner or reopen the job to change this document.")
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label(
+                                "\(owner.scope) PDF · Available offline",
+                                systemImage: "doc.richtext"
+                            )
                             .foregroundStyle(.secondary)
+                            DocumentViewerView(source: documents.reader, assetID: document.asset.id)
+                                .id(
+                                    document.asset.id
+                                )
+                                .frame(height: max(260, geometry.size.height * 0.7))
+                            VStack(alignment: .leading, spacing: 8) {
+                                LabeledContent(
+                                    "Original filename", value: document.asset.originalFilename)
+                                if !document.item.sourceURL.isEmpty {
+                                    LabeledContent("Source URL", value: document.item.sourceURL)
+                                    Button("Open Source", action: documents.openSource).disabled(
+                                        editing.isSaving)
+                                }
+                                if !document.item.sourceDescription.isEmpty {
+                                    LabeledContent("Source", value: document.item.sourceDescription)
+                                }
+                                if !document.item.notes.isEmpty { Text(document.item.notes) }
+                            }.frame(maxWidth: .infinity, alignment: .leading)
+                                .textSelection(.enabled)
+                            if let error = documents.operationError {
+                                Label(error, systemImage: "exclamationmark.triangle")
+                                    .foregroundStyle(.red)
+                            }
+                            if !editing.canWrite(owner) {
+                                Text(
+                                    "Unarchive the owner or reopen the job to change this document."
+                                )
+                                .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
                 .padding()
@@ -74,6 +85,24 @@ struct DocumentDetailView: View {
                     .disabled(editing.isSaving)
             }
         }
+        .focusedSceneValue(\.recordMenuActions, menuActions)
+        .focusedSceneValue(\.recordBackAction, backAction)
+    }
+
+    private var menuActions: RecordMenuActions {
+        guard documents.draft == nil, documents.selectedDocument != nil, !editing.isSaving else {
+            return RecordMenuActions()
+        }
+        if editing.canWrite(owner) {
+            return RecordMenuActions(
+                edit: edit, remove: requestRemoval, exportOriginal: exportOriginal)
+        }
+        return RecordMenuActions(exportOriginal: exportOriginal)
+    }
+
+    private var backAction: (() -> Void)? {
+        guard !editing.isSaving else { return nil }
+        return back
     }
 
     private func back() { editing.requestNavigation(documents.close) }

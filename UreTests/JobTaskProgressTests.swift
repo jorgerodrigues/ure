@@ -11,6 +11,7 @@ nonisolated struct JobTaskProgressTests {
             #expect(progress.doneCount == 0 && progress.countedCount == 0)
             #expect(progress.skippedCount == statuses.count)
             #expect(progress.fraction == nil && progress.percentage == nil)
+            #expect(progress.accessibilitySummary == "No tasks planned. \(statuses.count) skipped.")
         }
     }
 
@@ -20,6 +21,7 @@ nonisolated struct JobTaskProgressTests {
         #expect(progress.doneCount == 2 && progress.countedCount == 5)
         #expect(progress.skippedCount == 1)
         #expect(progress.fraction == 0.4 && progress.percentage == 40)
+        #expect(progress.accessibilitySummary == "2 of 5 tasks done, 40 percent. 1 skipped.")
     }
 
     @Test

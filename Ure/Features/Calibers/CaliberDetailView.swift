@@ -71,6 +71,7 @@ struct CaliberDetailView: View {
             .formStyle(.grouped)
             .textSelection(.enabled)
             .navigationTitle(caliber.label)
+            .focusedSceneValue(\.recordMenuActions, menuActions(for: caliber))
             .toolbar {
                 Button("Edit", action: calibers.edit)
                     .disabled(editing.isSaving || caliber.archivedAt != nil)
@@ -92,6 +93,11 @@ struct CaliberDetailView: View {
         Task { await watches.observe() }
     }
     private func toggleArchive() { editing.requestNavigation(calibers.toggleArchiveCommand) }
+
+    private func menuActions(for caliber: CaliberRecord) -> RecordMenuActions {
+        guard !editing.isSaving, caliber.archivedAt == nil else { return RecordMenuActions() }
+        return RecordMenuActions(edit: calibers.edit)
+    }
 }
 
 private struct CaliberWatchLink: View {

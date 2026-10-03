@@ -95,7 +95,7 @@ struct WorkshopView: View {
             }.visibilityPriority(.high)
             if hasActiveJob {
                 ToolbarItemGroup(placement: .primaryAction) {
-                    BenchPinMenu()
+                    BenchPinMenu(bench: bench)
                         .labelStyle(.iconOnly)
                     Button("Open Reference Window", systemImage: "macwindow", action: openReference)
                         .disabled(bench.reference == nil)

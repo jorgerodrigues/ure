@@ -85,6 +85,7 @@ struct WatchDetailView: View {
             .formStyle(.grouped)
             .textSelection(.enabled)
             .navigationTitle(watch.name)
+            .focusedSceneValue(\.recordMenuActions, menuActions(for: watch))
             .toolbar {
                 Button("Edit", action: watches.edit)
                     .disabled(editing.isSaving || watch.archivedAt != nil)
@@ -98,6 +99,11 @@ struct WatchDetailView: View {
         }
     }
     private func toggleArchive() { editing.requestNavigation(watches.toggleArchiveCommand) }
+
+    private func menuActions(for watch: WatchRecord) -> RecordMenuActions {
+        guard !editing.isSaving, watch.archivedAt == nil else { return RecordMenuActions() }
+        return RecordMenuActions(edit: watches.edit)
+    }
 }
 
 private struct WatchValue: View {

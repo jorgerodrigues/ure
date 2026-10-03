@@ -18,4 +18,10 @@ nonisolated struct JobTaskProgress: Equatable, Sendable {
         guard countedCount > 0 else { return nil }
         return doneCount * 100 / countedCount
     }
+
+    var accessibilitySummary: String {
+        guard let percentage else { return "No tasks planned. \(skippedCount) skipped." }
+        return
+            "\(doneCount) of \(countedCount) tasks done, \(percentage) percent. \(skippedCount) skipped."
+    }
 }

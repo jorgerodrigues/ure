@@ -16,9 +16,9 @@ struct JobDetailView: View {
     var body: some View {
         Group {
             if jobs.actionDraft != nil {
-                JobActionEditorView()
+                JobActionEditorView().focusedSceneValue(\.recordBackAction, backAction)
             } else if jobs.draft != nil {
-                JobEditorView()
+                JobEditorView().focusedSceneValue(\.recordBackAction, backAction)
             } else if let job = jobs.selectedJob, showsTimeline {
                 JobTimelineView(jobID: job.id, onClose: closeTimeline)
             } else if let job = jobs.selectedJob, parts.isPresenting(for: job.id) {
@@ -103,6 +103,8 @@ struct JobDetailView: View {
                 .formStyle(.grouped)
                 .textSelection(.enabled)
                 .navigationTitle(job.title)
+                .focusedSceneValue(\.recordMenuActions, menuActions(for: job))
+                .focusedSceneValue(\.recordBackAction, backAction)
                 .toolbar {
                     if job.stage.isOpen {
                         Button("Change Stage", action: changeStage)
@@ -142,6 +144,11 @@ struct JobDetailView: View {
         }
     }
 
+    private var backAction: (() -> Void)? {
+        guard !editing.isSaving else { return nil }
+        return backToWatch
+    }
+
     private func backToWatch() { editing.requestNavigation(jobs.close) }
     private func showTimeline() { editing.requestNavigation { showsTimeline = true } }
     private func closeTimeline() { showsTimeline = false }
@@ -156,6 +163,19 @@ struct JobDetailView: View {
             let watch = watches.watches.first(where: { $0.id == job.watchID })
         else { return }
         jobs.beginAction(action, watch: watch)
+    }
+
+    private func menuActions(for job: JobRecord) -> RecordMenuActions {
+        guard !editing.isSaving else { return RecordMenuActions() }
+        var actions = RecordMenuActions()
+        if job.stage.isOpen {
+            if job.intakeSnapshot.version == 1 { actions.edit = jobs.edit }
+            actions.changeStage = changeStage
+            actions.changeCondition = changeCondition
+        } else if job.archivedAt == nil && editing.canWrite(LibraryItemOwner.watch(job.watchID)) {
+            actions.reopen = reopen
+        }
+        return actions
     }
 }
 

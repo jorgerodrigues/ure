@@ -10,6 +10,15 @@ struct BenchReferenceView: View {
     @State private var isExporting = false
 
     var body: some View {
+        GeometryReader { geometry in
+            ScrollView {
+                content(viewerHeight: max(360, geometry.size.height * 0.6))
+            }
+        }
+        .onChange(of: reference?.id, resetError)
+    }
+
+    private func content(viewerHeight: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             if let reference {
                 Text(reference.item.title).font(.title3).textSelection(.enabled)
@@ -23,12 +32,14 @@ struct BenchReferenceView: View {
                             onLoadFailure: onLoadFailure, assetID: asset.id
                         )
                         .id(asset.id)
+                        .frame(height: viewerHeight)
                     } else {
                         DocumentViewerView(
                             source: reader, usesKeyboardShortcuts: usesKeyboardShortcuts,
                             onLoadFailure: onLoadFailure, assetID: asset.id
                         )
                         .id(asset.id)
+                        .frame(height: viewerHeight)
                     }
                     Text(asset.originalFilename).font(.caption).textSelection(.enabled)
                     Button("Export Original", action: exportOriginal).disabled(isExporting)
@@ -36,20 +47,18 @@ struct BenchReferenceView: View {
                     Text("External reference · Linked content is not saved offline.")
                         .foregroundStyle(.secondary)
                 }
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
-                        if let caption = reference.item.caption, !caption.isEmpty { Text(caption) }
-                        if !reference.item.sourceURL.isEmpty {
-                            Text(reference.item.sourceURL)
-                            Button("Open in Browser", action: openSource)
-                        }
-                        if !reference.item.sourceDescription.isEmpty {
-                            Text(reference.item.sourceDescription)
-                        }
-                        if !reference.item.notes.isEmpty { Text(reference.item.notes) }
-                    }.frame(maxWidth: .infinity, alignment: .leading)
-                }.textSelection(.enabled)
-                    .frame(maxHeight: reference.asset == nil ? .infinity : 100)
+                VStack(alignment: .leading, spacing: 8) {
+                    if let caption = reference.item.caption, !caption.isEmpty { Text(caption) }
+                    if !reference.item.sourceURL.isEmpty {
+                        Text(reference.item.sourceURL)
+                        Button("Open in Browser", action: openSource)
+                    }
+                    if !reference.item.sourceDescription.isEmpty {
+                        Text(reference.item.sourceDescription)
+                    }
+                    if !reference.item.notes.isEmpty { Text(reference.item.notes) }
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
                 if let operationError {
                     Label(operationError, systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.red)
@@ -61,8 +70,7 @@ struct BenchReferenceView: View {
             }
         }
         .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .onChange(of: reference?.id, resetError)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private func resetError() { operationError = nil }
@@ -139,7 +147,7 @@ struct ReferenceWindowView: View {
 }
 
 struct BenchPinMenu: View {
-    @Environment(BenchReferenceState.self) private var bench
+    let bench: BenchReferenceState
 
     var body: some View {
         Menu("Pin Reference", systemImage: "pin") {

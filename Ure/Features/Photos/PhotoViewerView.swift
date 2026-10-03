@@ -23,8 +23,10 @@ struct PhotoViewerView: View {
             }
             .labelStyle(.iconOnly)
             .disabled(image == nil)
-            Text("Drag to pan. Pinch or use the zoom controls.")
-                .font(.caption).foregroundStyle(.secondary)
+            Text(
+                "Focus the photo and use arrow keys to pan, or drag. Use the zoom controls or pinch."
+            )
+            .font(.caption).foregroundStyle(.secondary)
             if let image {
                 PhotoViewport(image: image, assetID: assetID, request: zoom)
                     .accessibilityLabel("Photo viewer")

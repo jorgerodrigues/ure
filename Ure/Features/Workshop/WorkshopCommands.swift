@@ -7,6 +7,8 @@ struct WorkshopCommands: Commands {
     let bench: BenchReferenceState
     let search: SearchState
     @FocusedValue(\.allowsWorkshopEditing) private var allowsEditing
+    @FocusedValue(\.recordMenuActions) private var recordActions
+    @FocusedValue(\.recordBackAction) private var recordBackAction
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
@@ -23,13 +25,38 @@ struct WorkshopCommands: Commands {
             Button("Save", action: save)
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(!canSave)
+            Button("Cancel Editing", action: editing.cancelDraft)
+                .keyboardShortcut(".", modifiers: .command)
+                .disabled(allowsEditing != true || !editing.canCancelDraft)
         }
         CommandGroup(after: .textEditing) {
             Button("Search Library", action: search.present)
                 .keyboardShortcut("f", modifiers: [.command, .shift])
                 .disabled(allowsEditing != true)
+            Button("Close Search", action: search.close)
+                .disabled(allowsEditing != true || !search.isPresented)
+        }
+        CommandGroup(after: .importExport) {
+            Button("Export Original…", action: exportOriginal)
+                .disabled(!canUseRecordActions || recordActions?.exportOriginal == nil)
         }
         CommandMenu("Record") {
+            Button("Edit Selected Record", action: editRecord)
+                .keyboardShortcut("e", modifiers: [.command, .option])
+                .disabled(!canUseRecordActions || recordActions?.edit == nil)
+            Button("Remove Selected Item…", role: .destructive, action: removeRecord)
+                .disabled(!canUseRecordActions || recordActions?.remove == nil)
+            Button("Back to Owner", action: backToOwner)
+                .keyboardShortcut("[", modifiers: .command)
+                .disabled(!canUseRecordActions || recordBackAction == nil)
+            Divider()
+            Button("Change Job Stage", action: changeStage)
+                .disabled(!canUseRecordActions || recordActions?.changeStage == nil)
+            Button("Change Watch Condition", action: changeCondition)
+                .disabled(!canUseRecordActions || recordActions?.changeCondition == nil)
+            Button("Reopen Job", action: reopenJob)
+                .disabled(!canUseRecordActions || recordActions?.reopen == nil)
+            Divider()
             Button(archiveTitle, action: toggleArchive)
                 .disabled(!canArchive)
         }
@@ -52,6 +79,8 @@ struct WorkshopCommands: Commands {
                 .disabled(allowsEditing != true || editing.isSaving)
             }
             Divider()
+            BenchPinMenu(bench: bench)
+                .disabled(allowsEditing != true || editing.jobs.selectedID == nil)
             Button("Toggle Reference Pane", action: bench.togglePane)
                 .keyboardShortcut("r", modifiers: [.command, .shift])
                 .disabled(allowsEditing != true || editing.jobs.selectedID == nil)
@@ -207,6 +236,19 @@ struct WorkshopCommands: Commands {
     private func closeWindow() {
         NSApp.keyWindow?.performClose(nil)
     }
+
+    private func editRecord() { if canUseRecordActions { recordActions?.edit?() } }
+    private func removeRecord() { if canUseRecordActions { recordActions?.remove?() } }
+    private func exportOriginal() { if canUseRecordActions { recordActions?.exportOriginal?() } }
+    private func backToOwner() { if canUseRecordActions { recordBackAction?() } }
+    private var canUseRecordActions: Bool {
+        allowsEditing == true && !editing.isSaving && !editing.isNavigationPending
+    }
+    private func changeStage() { if canUseRecordActions { recordActions?.changeStage?() } }
+    private func changeCondition() {
+        if canUseRecordActions { recordActions?.changeCondition?() }
+    }
+    private func reopenJob() { if canUseRecordActions { recordActions?.reopen?() } }
 
     private func openReference() { openWindow(id: "reference") }
 
