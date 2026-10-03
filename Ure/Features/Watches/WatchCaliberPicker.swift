@@ -13,7 +13,11 @@ struct WatchCaliberPicker: View {
         } else {
             Picker("Caliber", selection: selection) {
                 Text("Unknown").tag(Optional<UUID>.none)
-                ForEach(calibers.calibers) { caliber in
+                ForEach(
+                    calibers.calibers.filter {
+                        $0.archivedAt == nil || $0.id == watches.draft?.caliberID
+                    }
+                ) { caliber in
                     Text(caliber.label).tag(Optional(caliber.id))
                 }
                 if let id = watches.draft?.caliberID,

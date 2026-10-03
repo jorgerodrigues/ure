@@ -30,8 +30,9 @@ final class CaliberState {
 
     var filteredCalibers: [CaliberRecord] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if query.isEmpty { return calibers }
-        return calibers.filter { caliber in
+        let active = calibers.filter { $0.archivedAt == nil }
+        if query.isEmpty { return active }
+        return active.filter { caliber in
             SearchKey.matches(
                 [caliber.designation, caliber.manufacturer, caliber.variant], query: query)
         }
@@ -67,10 +68,31 @@ final class CaliberState {
     }
 
     func edit() {
-        guard !isSaving, let selectedCaliber else { return }
+        guard !isSaving, let selectedCaliber, selectedCaliber.archivedAt == nil else { return }
         draft = CaliberDraft(caliber: selectedCaliber)
         originalDraft = draft
         clearErrors()
+    }
+
+    func toggleArchiveCommand() { Task { await toggleArchive() } }
+
+    @discardableResult
+    func toggleArchive() async -> Bool {
+        guard !isSaving, draft == nil, let record = selectedCaliber else { return false }
+        isSaving = true
+        saveError = nil
+        defer { isSaving = false }
+        do {
+            let saved = try await ArchiveService(coordinator: service.coordinator).setCaliber(
+                record.id, archived: record.archivedAt == nil)
+            if let index = calibers.firstIndex(where: { $0.id == saved.id }) {
+                calibers[index] = saved
+            }
+            return true
+        } catch {
+            saveError = error.localizedDescription
+            return false
+        }
     }
 
     func cancel() {

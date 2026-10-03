@@ -8,6 +8,7 @@ struct DocumentDetailView: View {
     let owner: LibraryItemOwner
 
     var body: some View {
+        @Bindable var documents = documents
         Group {
             if documents.draft != nil {
                 DocumentEditorView(owner: owner)
@@ -36,20 +37,35 @@ struct DocumentDetailView: View {
                     if let error = documents.operationError {
                         Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                     }
-                    if !documents.canWrite(owner, jobs: jobs) {
-                        Text("This job is closed. Reopen it to edit this document.")
+                    if !editing.canWrite(owner) {
+                        Text("Unarchive the owner or reopen the job to change this document.")
                             .foregroundStyle(.secondary)
                     }
                 }
                 .padding()
                 .navigationTitle(document.item.title)
                 .toolbar {
+                    Button("Remove Document", role: .destructive, action: requestRemoval)
+                        .disabled(editing.isSaving || !editing.canWrite(owner))
+                        .accessibilityIdentifier("removeDocument")
                     Button("Edit Document", action: edit)
-                        .disabled(editing.isSaving || !documents.canWrite(owner, jobs: jobs))
+                        .disabled(editing.isSaving || !editing.canWrite(owner))
                     Button("Export Original", action: exportOriginal).disabled(editing.isSaving)
                 }
             } else {
                 ContentUnavailableView("Document unavailable", systemImage: "doc.richtext")
+            }
+        }
+        .alert("Remove this document?", isPresented: $documents.showsRemovalConfirmation) {
+            Button("Remove", role: .destructive, action: documents.removeCommand)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This document will be removed. This cannot be undone.")
+        }
+        .safeAreaInset(edge: .bottom) {
+            if let error = documents.saveError {
+                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                    .padding()
             }
         }
         .toolbar {
@@ -61,8 +77,12 @@ struct DocumentDetailView: View {
     }
 
     private func back() { editing.requestNavigation(documents.close) }
+    private func requestRemoval() {
+        guard editing.canWrite(owner) else { return }
+        editing.requestNavigation(documents.requestRemoval)
+    }
     private func edit() {
-        guard documents.canWrite(owner, jobs: jobs) else { return }
+        guard editing.canWrite(owner) else { return }
         documents.edit()
     }
     private func exportOriginal() {

@@ -180,7 +180,7 @@ actor LibraryCoordinator {
         }
         if let keys {
             let store = ManagedOriginals(generation: directory)
-            try store.recover(referencedKeys: keys)
+            try store.recover(referencedKeys: keys, removeOriginal: dependencies.removeOriginal)
         }
     }
 

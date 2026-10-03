@@ -24,6 +24,8 @@ final class PhotoState {
     private var importTask: Task<Void, Never>?
     var stageFilter: PhotoStage?
     var draft: PhotoDraft?
+    var showsRemovalConfirmation = false
+    private var removalID: UUID?
     var showsUnsavedChanges = false
 
     init(service: PhotoService) { self.service = service }
@@ -73,6 +75,12 @@ final class PhotoState {
             let values = try await service.coordinator.photoValues()
             for try await records in values {
                 photos = records
+                if let selectedID, draft == nil, !photos.contains(where: { $0.id == selectedID }) {
+                    self.selectedID = nil
+                    self.owner = nil
+                    showsRemovalConfirmation = false
+                    removalID = nil
+                }
                 isLoading = false
             }
         } catch {
@@ -184,6 +192,8 @@ final class PhotoState {
 
     func cancel() {
         guard !isSaving else { return }
+        showsRemovalConfirmation = false
+        removalID = nil
         draft = nil
         originalDraft = nil
         clearErrors()
@@ -204,6 +214,38 @@ final class PhotoState {
             self.selectedID = saved.id
             self.draft = nil
             originalDraft = nil
+            return true
+        } catch {
+            saveError = error.localizedDescription
+            return false
+        }
+    }
+
+    func requestRemoval() {
+        guard !isSaving, !isImporting, draft == nil, !isLoading, loadError == nil,
+            let record = selectedPhoto
+        else { return }
+        removalID = record.id
+        showsRemovalConfirmation = true
+    }
+
+    func removeCommand() { Task { await remove() } }
+
+    @discardableResult
+    func remove() async -> Bool {
+        guard !isSaving, !isImporting, draft == nil, let id = removalID,
+            selectedID == id, let owner
+        else { return false }
+        isSaving = true
+        showsRemovalConfirmation = false
+        clearErrors()
+        defer { isSaving = false; removalID = nil }
+        do {
+            try await ChildRemovalService(coordinator: service.coordinator).removeItem(
+                id, for: owner, kind: .photo)
+            photos.removeAll { $0.id == id }
+            selectedID = nil
+            self.owner = nil
             return true
         } catch {
             saveError = error.localizedDescription

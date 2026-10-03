@@ -7,6 +7,7 @@ struct JobTaskDetailView: View {
     let jobID: UUID
 
     var body: some View {
+        @Bindable var tasks = tasks
         Group {
             if tasks.draft != nil {
                 JobTaskEditorView(jobID: jobID)
@@ -69,12 +70,27 @@ struct JobTaskDetailView: View {
                 .textSelection(.enabled)
                 .navigationTitle(task.title)
                 .toolbar {
+                    Button("Remove Task", role: .destructive, action: requestRemoval)
+                        .disabled(editing.isSaving || !tasks.canWrite(jobID, jobs: jobs))
+                        .accessibilityIdentifier("removeTask")
                     Button("Edit Task", action: edit)
                         .disabled(editing.isSaving || !tasks.canWrite(jobID, jobs: jobs))
                         .accessibilityIdentifier("editTask")
                 }
             } else {
                 ContentUnavailableView("Task unavailable", systemImage: "checklist")
+            }
+        }
+        .alert("Remove this task?", isPresented: $tasks.showsRemovalConfirmation) {
+            Button("Remove", role: .destructive, action: tasks.removeCommand)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(tasks.removalMessage)
+        }
+        .safeAreaInset(edge: .bottom) {
+            if let error = tasks.saveError {
+                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                    .padding()
             }
         }
         .toolbar {
@@ -86,6 +102,10 @@ struct JobTaskDetailView: View {
         }
     }
 
+    private func requestRemoval() {
+        guard tasks.canWrite(jobID, jobs: jobs) else { return }
+        editing.requestNavigation(tasks.requestRemoval)
+    }
     private func edit() { tasks.edit(jobs: jobs) }
     private func back() { editing.requestNavigation(tasks.close) }
     private func retry() { Task { await tasks.observe() } }

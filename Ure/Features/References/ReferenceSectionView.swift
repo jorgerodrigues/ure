@@ -16,7 +16,7 @@ struct ReferenceSectionView: View {
                 Button("Retry", action: retry)
             } else {
                 Button("Add Link", systemImage: "plus", action: create)
-                    .disabled(editing.isSaving || !references.canWrite(owner, jobs: jobs))
+                    .disabled(editing.isSaving || !editing.canWrite(owner))
                     .accessibilityIdentifier("addReference")
                 TextField("Filter links", text: $searchText)
                     .accessibilityIdentifier("referencesLocalSearch")

@@ -153,7 +153,8 @@ nonisolated struct ManagedOriginals {
         }
     }
 
-    func recover(referencedKeys: Set<String>) throws {
+    func recover(referencedKeys: Set<String>, removeOriginal: @Sendable (URL) throws -> Void) throws
+    {
         try prepare()
         for file in try FileManager.default.contentsOfDirectory(
             at: originals, includingPropertiesForKeys: nil)
@@ -162,7 +163,7 @@ nonisolated struct ManagedOriginals {
                 !referencedKeys.contains(file.lastPathComponent)
             else { continue }
             try LibraryFiles.requireRegularFile(file)
-            try FileManager.default.removeItem(at: file)
+            try? removeOriginal(file)
         }
         for file in try FileManager.default.contentsOfDirectory(
             at: staging, includingPropertiesForKeys: nil)
@@ -174,7 +175,7 @@ nonisolated struct ManagedOriginals {
                 !referencedKeys.contains(Self.storageKey(id))
             else { continue }
             try LibraryFiles.requireRegularFile(file)
-            try FileManager.default.removeItem(at: file)
+            try? removeOriginal(file)
         }
     }
 }

@@ -27,26 +27,6 @@ nonisolated enum WorkshopSection: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    var emptyTitle: String {
-        switch self {
-        case .workshop: "No open jobs"
-        case .watches: "No watches"
-        case .calibers: "No calibers"
-        case .parts: "No required parts"
-        case .archive: "No archived records"
-        }
-    }
-
-    var emptyDescription: String {
-        switch self {
-        case .workshop: "Your active repairs will appear here."
-        case .watches: "Your watch collection will appear here."
-        case .calibers: "Shared movement information will appear here."
-        case .parts: "Parts needed for your open jobs will appear here."
-        case .archive: "Archived watches and calibers will appear here."
-        }
-    }
-
     var shortcut: Character {
         switch self {
         case .workshop: "1"

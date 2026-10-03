@@ -20,12 +20,12 @@ struct PhotoSectionView: View {
                 Button("Retry", action: retry)
             } else {
                 Button("Import Photos", systemImage: "photo.badge.plus", action: chooseFiles)
-                    .disabled(editing.isSaving || !photos.canWrite(owner, jobs: jobs))
+                    .disabled(editing.isSaving || !editing.canWrite(owner))
                     .accessibilityIdentifier("importPhotos")
                 Text("Choose or drop JPEG, PNG, or HEIC files here. Up to 200 files, 100 MB each.")
                     .font(.caption).foregroundStyle(.secondary)
-                if !photos.canWrite(owner, jobs: jobs) {
-                    Text("This job is closed. Reopen it to import or edit photos.")
+                if !editing.canWrite(owner) {
+                    Text("Unarchive the owner or reopen the job to import or edit photos.")
                         .foregroundStyle(.secondary)
                 }
                 Picker("Stage", selection: $photos.stageFilter) {
@@ -74,14 +74,14 @@ struct PhotoSectionView: View {
         }
     }
     private func droppedFiles(_ sources: [URL], _ location: CGPoint) -> Bool {
-        guard !sources.isEmpty, !editing.isSaving, photos.canWrite(owner, jobs: jobs) else {
+        guard !sources.isEmpty, !editing.isSaving, editing.canWrite(owner) else {
             return false
         }
         beginImport(sources)
         return true
     }
     private func beginImport(_ sources: [URL]) {
-        guard photos.canWrite(owner, jobs: jobs) else { return }
+        guard editing.canWrite(owner) else { return }
         pickerError = nil
         editing.requestNavigation { photos.importFiles(sources, for: owner) }
     }

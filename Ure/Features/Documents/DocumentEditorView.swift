@@ -3,6 +3,7 @@ import SwiftUI
 struct DocumentEditorView: View {
     @Environment(DocumentState.self) private var documents
     @Environment(JobState.self) private var jobs
+    @Environment(WorkshopEditing.self) private var editing
     @FocusState private var titleFocused: Bool
     let owner: LibraryItemOwner
 
@@ -28,8 +29,8 @@ struct DocumentEditorView: View {
                 TextEditor(text: field(\.notes)).frame(minHeight: 160)
                     .accessibilityLabel("Document notes")
             }
-            if !documents.canWrite(owner, jobs: jobs) {
-                Section { Text("This job is closed. Reopen it to edit this document.") }
+            if !editing.canWrite(owner) {
+                Section { Text("Unarchive the owner or reopen the job to change this document.") }
             }
             if let error = documents.saveError {
                 Section {
@@ -38,13 +39,13 @@ struct DocumentEditorView: View {
             }
         }
         .formStyle(.grouped)
-        .disabled(documents.isSaving)
+        .disabled(documents.isSaving || !editing.canWrite(owner))
         .navigationTitle("Edit Document")
         .toolbar {
             ToolbarItemGroup(placement: .confirmationAction) {
                 Button("Cancel", action: documents.cancel).disabled(documents.isSaving)
                 Button("Save", action: documents.saveCommand).disabled(
-                    !documents.canSave(jobs: jobs))
+                    !documents.canSave(jobs: jobs) || !editing.canWrite(owner))
             }
         }
         .onAppear(perform: focusTitle)

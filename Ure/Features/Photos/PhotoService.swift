@@ -94,6 +94,7 @@ nonisolated struct PhotoService: Sendable {
             guard var watch = try WatchQueries.fetch(watchID, in: db) else {
                 throw PhotoError.unavailableOwner
             }
+            try RecordAccess.requireWatch(watchID, in: db)
             if let photoID {
                 guard let item = try LibraryItemQueries.fetch(photoID, in: db), item.kind == .photo
                 else {
@@ -119,10 +120,12 @@ nonisolated struct PhotoService: Sendable {
             guard try WatchQueries.fetch(id, in: db) != nil else {
                 throw PhotoError.unavailableOwner
             }
+            try RecordAccess.requireWatch(id, in: db)
         case .caliber(let id):
             guard try CaliberQueries.fetch(id, in: db) != nil else {
                 throw PhotoError.unavailableOwner
             }
+            try RecordAccess.requireCaliber(id, in: db)
         }
     }
 

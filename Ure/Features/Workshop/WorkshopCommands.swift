@@ -29,6 +29,10 @@ struct WorkshopCommands: Commands {
                 .keyboardShortcut("f", modifiers: [.command, .shift])
                 .disabled(allowsEditing != true)
         }
+        CommandMenu("Record") {
+            Button(archiveTitle, action: toggleArchive)
+                .disabled(!canArchive)
+        }
         CommandMenu("Task") {
             Button("Move up", action: moveTaskUp)
                 .keyboardShortcut(.upArrow, modifiers: [.command, .option])
@@ -54,6 +58,45 @@ struct WorkshopCommands: Commands {
             Button("Open Reference Window", action: openReference)
                 .keyboardShortcut("r", modifiers: [.command, .option])
                 .disabled(allowsEditing != true || bench.reference == nil)
+        }
+    }
+
+    private var archiveTitle: String {
+        if navigation.selectedSection == .calibers
+            || (navigation.selectedSection == .archive
+                && editing.archive.isShowingCaliber(editing: editing))
+        {
+            if editing.calibers.selectedCaliber?.archivedAt != nil { return "Unarchive Caliber" }
+            return "Archive Caliber"
+        }
+        if editing.watches.selectedWatch?.archivedAt != nil { return "Unarchive Watch" }
+        return "Archive Watch"
+    }
+    private var canArchive: Bool {
+        guard allowsEditing == true, !editing.isSaving, !editing.hasUnsavedChanges else {
+            return false
+        }
+        if navigation.selectedSection == .calibers
+            || (navigation.selectedSection == .archive
+                && editing.archive.isShowingCaliber(editing: editing))
+        {
+            return editing.calibers.draft == nil && editing.calibers.selectedCaliber != nil
+        }
+        guard navigation.selectedSection == .watches || navigation.selectedSection == .archive,
+            let watch = editing.watches.selectedWatch, editing.watches.draft == nil,
+            !editing.jobs.isLoading, editing.jobs.loadError == nil
+        else { return false }
+        return watch.archivedAt != nil || editing.jobs.openJob(for: watch.id) == nil
+    }
+    private func toggleArchive() {
+        guard canArchive else { return }
+        if navigation.selectedSection == .calibers
+            || (navigation.selectedSection == .archive
+                && editing.archive.isShowingCaliber(editing: editing))
+        {
+            editing.requestNavigation(editing.calibers.toggleArchiveCommand)
+        } else {
+            editing.requestNavigation(editing.watches.toggleArchiveCommand)
         }
     }
 
@@ -84,10 +127,22 @@ struct WorkshopCommands: Commands {
         if editing.isSaving { return false }
         if editing.parts.draft != nil { return editing.parts.canSave(jobs: editing.jobs) }
         if editing.tasks.draft != nil { return editing.tasks.canSave(jobs: editing.jobs) }
-        if editing.documents.draft != nil { return editing.documents.canSave(jobs: editing.jobs) }
-        if editing.photos.draft != nil { return editing.photos.canSave(jobs: editing.jobs) }
-        if editing.references.draft != nil { return editing.references.canSave }
-        if editing.notes.draft != nil { return editing.notes.canSave }
+        if editing.documents.draft != nil {
+            guard let owner = editing.documents.owner else { return false }
+            return editing.documents.canSave(jobs: editing.jobs) && editing.canWrite(owner)
+        }
+        if editing.photos.draft != nil {
+            guard let owner = editing.photos.owner else { return false }
+            return editing.photos.canSave(jobs: editing.jobs) && editing.canWrite(owner)
+        }
+        if editing.references.draft != nil {
+            guard let owner = editing.references.owner else { return false }
+            return editing.references.canSave && editing.canWrite(owner)
+        }
+        if editing.notes.draft != nil {
+            guard let owner = editing.notes.owner else { return false }
+            return editing.notes.canSave && editing.canWrite(owner)
+        }
         switch navigation.selectedSection {
         case .workshop, .watches, .parts:
             if editing.jobs.isEditing { return editing.canSaveJob }

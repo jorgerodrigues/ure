@@ -2,6 +2,7 @@ import Observation
 
 @Observable
 final class WorkshopEditing {
+    let archive = ArchiveState()
     let watches: WatchState
     let calibers: CaliberState
     let jobs: JobState
@@ -26,6 +27,40 @@ final class WorkshopEditing {
         self.documents = documents
         self.tasks = tasks
         self.parts = parts
+    }
+
+    func canWrite(_ owner: NoteOwner) -> Bool {
+        switch owner {
+        case .watch(let id): return canWrite(LibraryItemOwner.watch(id))
+        case .job(let id): return canWrite(LibraryItemOwner.job(id))
+        case .caliber(let id): return canWrite(LibraryItemOwner.caliber(id))
+        }
+    }
+
+    func canWrite(_ owner: LibraryItemOwner) -> Bool {
+        switch owner {
+        case .watch(let id):
+            return !watches.isLoading && watches.loadError == nil
+                && watches.watches.contains { $0.id == id && $0.archivedAt == nil }
+        case .caliber(let id):
+            return !calibers.isLoading && calibers.loadError == nil
+                && calibers.calibers.contains { $0.id == id && $0.archivedAt == nil }
+        case .job(let id):
+            guard !jobs.isLoading, jobs.loadError == nil,
+                let job = jobs.jobs.first(where: { $0.id == id }), job.stage.isOpen,
+                job.archivedAt == nil
+            else { return false }
+            return canWrite(LibraryItemOwner.watch(job.watchID))
+        }
+    }
+
+    func closeChildren() {
+        tasks.close()
+        parts.close()
+        notes.close()
+        references.close()
+        photos.close()
+        documents.close()
     }
 
     var isSaving: Bool {

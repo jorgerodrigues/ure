@@ -7,6 +7,7 @@ struct ReferenceDetailView: View {
     let owner: LibraryItemOwner
 
     var body: some View {
+        @Bindable var references = references
         Group {
             if references.draft != nil {
                 ReferenceEditorView(owner: owner)
@@ -37,20 +38,37 @@ struct ReferenceDetailView: View {
                     Section("Notes") {
                         Text(item.notes).frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    if !references.canWrite(owner, jobs: jobs) {
-                        Section { Text("This job is closed. Reopen it to change its references.") }
+                    if !editing.canWrite(owner) {
+                        Section {
+                            Text("Unarchive the owner or reopen the job to change its references.")
+                        }
                     }
                 }
                 .formStyle(.grouped)
                 .textSelection(.enabled)
                 .navigationTitle(item.title)
                 .toolbar {
+                    Button("Remove Link", role: .destructive, action: requestRemoval)
+                        .disabled(editing.isSaving || !editing.canWrite(owner))
+                        .accessibilityIdentifier("removeLink")
                     Button("Edit Link", action: edit)
-                        .disabled(editing.isSaving || !references.canWrite(owner, jobs: jobs))
+                        .disabled(editing.isSaving || !editing.canWrite(owner))
                         .accessibilityIdentifier("editReference")
                 }
             } else {
                 ContentUnavailableView("Reference unavailable", systemImage: "link")
+            }
+        }
+        .alert("Remove this link?", isPresented: $references.showsRemovalConfirmation) {
+            Button("Remove", role: .destructive, action: references.removeCommand)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This link will be removed. This cannot be undone.")
+        }
+        .safeAreaInset(edge: .bottom) {
+            if let error = references.saveError {
+                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                    .padding()
             }
         }
         .toolbar {
@@ -62,8 +80,12 @@ struct ReferenceDetailView: View {
         }
     }
 
+    private func requestRemoval() {
+        guard editing.canWrite(owner) else { return }
+        editing.requestNavigation(references.requestRemoval)
+    }
     private func edit() {
-        guard references.canWrite(owner, jobs: jobs) else { return }
+        guard editing.canWrite(owner) else { return }
         references.edit()
     }
     private func open() { references.openInBrowser() }

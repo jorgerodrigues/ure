@@ -20,7 +20,7 @@ make run
 
 Local runs use ad-hoc signing. No Apple developer account is required. App Sandbox is enabled. Hardened Runtime is configured for distribution; Xcode disables it for local ad-hoc builds. The current bundle identifier is `local.ure.app`; settle an owner-controlled identifier before distribution and before storing valuable data.
 
-The main window contains Workshop, Watches, Calibers, Parts, and Archive. Use **Option-Command-1** through **Option-Command-5** to select a section. **Command-comma** opens Settings. Startup creates or reopens the local library. Workshop shows open jobs. Watches and Calibers have saved-record lists and editors. Parts shows requirements from open jobs. Archive remains empty until its feature is implemented.
+The main window contains Workshop, Watches, Calibers, Parts, and Archive. Use **Option-Command-1** through **Option-Command-5** to select a section. **Command-comma** opens Settings. Startup creates or reopens the local library. Workshop shows open jobs. Watches and Calibers have saved-record lists and editors. Parts shows requirements from open jobs. Archive shows archived watches and calibers, plus closed jobs.
 
 ## Workshop overview
 
@@ -32,11 +32,19 @@ Select a row to open that exact watch and job in Workshop. The existing editors,
 
 ## Search
 
-Use **Search Library** in the toolbar or **Shift-Command-F** for global search. Results group watches, calibers, jobs, notes, parts, links, photos, and PDFs. Each result names its watch, job, or shared caliber. Selecting it opens the exact saved record through the existing draft guard. Closed jobs remain searchable. **Include Archived** also searches archived watches, jobs, calibers, and their owned records. Archive controls follow in W023.
+Use **Search Library** in the toolbar or **Shift-Command-F** for global search. Results group watches, calibers, jobs, notes, parts, links, photos, and PDFs. Each result names its watch, job, or shared caliber. Selecting it opens the exact saved record through the existing draft guard. Closed jobs remain searchable. **Include Archived** also searches archived watches, jobs, calibers, and their owned records. Use Archive to read archived owners and closed jobs.
 
 Search matches saved watch identity, caliber designation, job titles, note titles and bodies, part descriptions, manufacturer references, supplier stock codes, and library item titles and captions. It preserves leading zeros and punctuation. Unicode case matching uses the same rule in every local filter. SQL characters such as `%`, `_`, and quotes are literal search text. PDF contents and text within images are not indexed.
 
 The normal Watches, Calibers, Workshop, and Parts lists have local search. Job history, notes, parts, links, photos, and PDFs also have local text filters. Photo text combines with the stage filter. Part text includes supplier options and the saved order-time stock code. Filtering keeps an already open detail readable.
+
+## Archive and removal
+
+Use **Archive Watch** or **Archive Caliber** in its saved detail or the Record menu. A watch cannot archive while it has an open job. **Unarchive** restores normal list visibility. Existing watch links to archived calibers stay readable. Archived owners reject changes until restored. Closed jobs require Reopen, and their watch must first be unarchived.
+
+Tasks, notes, photos, PDFs, and external references have a **Remove** action in saved detail. Removal requires confirmation. Task confirmation lists its part links. Parts and historical activity summaries stay saved. Supplier removal stays in the part editor and commits with **Save**. Part requirements use **Cancelled** rather than deletion.
+
+Removing a photo clears its cover reference and any pin. Removed file items close their viewers. The database commits before unreferenced originals are removed. Failed file cleanup retries at startup. Originals still used by another item stay saved. There is no permanent watch or job deletion.
 
 ## Parts overview
 
@@ -222,6 +230,7 @@ The Release configuration enables optimization and whole-module compilation. The
 - [W019 job activity timeline verification](docs/planning/timeline-verification.md)
 - [W020 workshop overview verification](docs/planning/workshop-verification.md)
 - [W021 parts overview verification](docs/planning/parts-overview-verification.md)
+- [W023 archive and removal verification](docs/planning/archive-verification.md)
 - [Design: brand, app icon, and macOS 27 screen rules](docs/design/README.md)
 
 The user approved the current-platform direction and W002's SQLite/GRDB storage design on 1 October 2026. Shared caliber records and the repair history rule were approved on 2 October 2026. Watch, caliber, intake, stage, and condition forms use explicit Save and Cancel editing. W003, W004, and W005 are merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29), [PR #31](https://github.com/jorgerodrigues/ure/pull/31), and [PR #32](https://github.com/jorgerodrigues/ure/pull/32). W006 is merged in [PR #33](https://github.com/jorgerodrigues/ure/pull/33). W007 is merged in [PR #34](https://github.com/jorgerodrigues/ure/pull/34). W008 is implemented in [PR #35](https://github.com/jorgerodrigues/ure/pull/35). Native UI and device checks are deferred to release acceptance by agreement. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.

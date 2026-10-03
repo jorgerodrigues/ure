@@ -33,6 +33,7 @@ nonisolated struct JobService: Sendable {
             guard let watch = try WatchQueries.fetch(watchID, in: db) else {
                 throw JobError.unavailableWatch
             }
+            try RecordAccess.requireWatch(watchID, in: db)
             let now = Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
             if let id {
                 let existing = try Self.requireOpenJob(id, in: db)
@@ -65,6 +66,8 @@ nonisolated struct JobService: Sendable {
 
     static func requireOpenJob(_ id: UUID, in db: Database) throws -> JobRecord {
         guard let job = try JobQueries.fetch(id, in: db) else { throw JobError.missingRecord }
+        try RecordAccess.requireWatch(job.watchID, in: db)
+        guard job.archivedAt == nil else { throw ArchiveError.archived }
         guard job.stage.isOpen else { throw JobError.closedJob }
         return job
     }
@@ -81,6 +84,8 @@ nonisolated struct JobService: Sendable {
             guard let existing = try JobQueries.fetch(id, in: db) else {
                 throw JobError.missingRecord
             }
+            try RecordAccess.requireWatch(existing.watchID, in: db)
+            guard existing.archivedAt == nil else { throw ArchiveError.archived }
             guard !existing.stage.isOpen else { throw JobError.notClosed }
             guard draft.stage.isOpen else { throw JobError.invalidReopenStage }
             if let open = try JobQueries.openJob(for: existing.watchID, in: db) {

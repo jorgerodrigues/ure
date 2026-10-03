@@ -111,6 +111,11 @@ struct JobDetailView: View {
                             .accessibilityIdentifier("changeWatchCondition")
                     } else {
                         Button("Reopen Job", action: reopen)
+                            .disabled(
+                                editing.isSaving
+                                    || !editing.canWrite(LibraryItemOwner.watch(job.watchID))
+                                    || job.archivedAt != nil
+                            )
                             .accessibilityIdentifier("reopenJob")
                     }
                     if job.stage.isOpen && job.intakeSnapshot.version == 1 {
@@ -127,6 +132,7 @@ struct JobDetailView: View {
         .onChange(of: jobs.selectedID, resetTimeline)
         .onChange(of: parts.selectedID, resetTimeline)
         .onChange(of: search.navigationRevision, resetTimeline)
+        .onChange(of: editing.archive.navigationRevision, resetTimeline)
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Button("Back to Watch", systemImage: "chevron.left", action: backToWatch)

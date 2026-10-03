@@ -16,7 +16,7 @@ struct NoteSectionView: View {
                 Button("Retry", action: retry)
             } else {
                 Button("Add Note", systemImage: "plus", action: create)
-                    .disabled(editing.isSaving || !notes.canWrite(owner, jobs: jobs))
+                    .disabled(editing.isSaving || !editing.canWrite(owner))
                     .accessibilityIdentifier("addNote")
                 TextField("Filter notes", text: $searchText)
                     .accessibilityIdentifier("notesLocalSearch")

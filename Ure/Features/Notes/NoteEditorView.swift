@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NoteEditorView: View {
     @Environment(NoteState.self) private var notes
+    @Environment(WorkshopEditing.self) private var editing
     @FocusState private var titleFocused: Bool
     let owner: NoteOwner
 
@@ -36,15 +37,17 @@ struct NoteEditorView: View {
             }
         }
         .formStyle(.grouped)
-        .disabled(notes.isSaving)
+        .disabled(notes.isSaving || !editing.canWrite(owner))
         .navigationTitle(editorTitle)
         .toolbar {
             ToolbarItemGroup(placement: .confirmationAction) {
                 if notes.isSaving { ProgressView().controlSize(.small) }
                 Button("Cancel", action: notes.cancel).disabled(notes.isSaving)
                     .accessibilityIdentifier("cancelNote")
-                Button("Save", action: notes.saveCommand).disabled(!notes.canSave)
-                    .accessibilityIdentifier("saveNote")
+                Button("Save", action: notes.saveCommand).disabled(
+                    !notes.canSave || !editing.canWrite(owner)
+                )
+                .accessibilityIdentifier("saveNote")
             }
         }
         .onAppear(perform: focusTitle)
