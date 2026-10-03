@@ -39,7 +39,7 @@ struct WorkshopView: View {
                 } else if navigation.selectedSection == .parts {
                     PartsOverviewView()
                 } else {
-                    WorkshopSectionView(section: navigation.selectedSection)
+                    ArchiveView()
                 }
             }
             .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 400)
@@ -172,6 +172,13 @@ struct WorkshopView: View {
             WatchDetailView()
         } else if navigation.selectedSection == .calibers {
             CaliberDetailView()
+        } else if navigation.selectedSection == .archive {
+            switch editing.archive.displayedTarget(editing: editing) {
+            case .caliber: CaliberDetailView()
+            case .watch, .job: WatchDetailView()
+            case nil:
+                ContentUnavailableView("Select an archive record", systemImage: "archivebox")
+            }
         } else {
             ContentUnavailableView(
                 "Select a record", systemImage: navigation.selectedSection.symbol,
@@ -181,7 +188,7 @@ struct WorkshopView: View {
 
     private var hasActiveJob: Bool {
         (navigation.selectedSection == .watches || navigation.selectedSection == .workshop
-            || navigation.selectedSection == .parts)
+            || navigation.selectedSection == .parts || navigation.selectedSection == .archive)
             && watches.draft == nil
             && jobs.selectedID != nil && jobs.watchID == watches.selectedID
     }

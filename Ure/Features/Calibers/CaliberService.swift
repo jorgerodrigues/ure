@@ -20,6 +20,7 @@ nonisolated struct CaliberService: Sendable {
                 guard let existing = try CaliberQueries.fetch(id, in: db) else {
                     throw CaliberError.missingRecord
                 }
+                try RecordAccess.requireCaliber(id, in: db)
                 let record = try draft.record(
                     id: id, createdAt: existing.createdAt, updatedAt: now, locale: locale)
                 try CaliberQueries.update(record, in: db)

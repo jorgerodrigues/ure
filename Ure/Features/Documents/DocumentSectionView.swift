@@ -13,14 +13,14 @@ struct DocumentSectionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Button("Import PDFs", systemImage: "doc.badge.plus", action: chooseFiles)
-                .disabled(editing.isSaving || !documents.canWrite(owner, jobs: jobs))
+                .disabled(editing.isSaving || !editing.canWrite(owner))
                 .accessibilityIdentifier("importDocuments")
             Text(
                 "Choose or drop PDF files here. Up to 200 files, 100 MB each. Protected PDFs are unsupported."
             )
             .font(.caption).foregroundStyle(.secondary)
-            if !documents.canWrite(owner, jobs: jobs) {
-                Text("This job is closed. Reopen it to import or edit documents.")
+            if !editing.canWrite(owner) {
+                Text("Unarchive the owner or reopen the job to import or edit documents.")
                     .foregroundStyle(.secondary)
             }
             if documents.isLoading {
@@ -65,14 +65,14 @@ struct DocumentSectionView: View {
         }
     }
     private func droppedFiles(_ sources: [URL], _ location: CGPoint) -> Bool {
-        guard !sources.isEmpty, !editing.isSaving, documents.canWrite(owner, jobs: jobs) else {
+        guard !sources.isEmpty, !editing.isSaving, editing.canWrite(owner) else {
             return false
         }
         beginImport(sources)
         return true
     }
     private func beginImport(_ sources: [URL]) {
-        guard documents.canWrite(owner, jobs: jobs) else { return }
+        guard editing.canWrite(owner) else { return }
         pickerError = nil
         editing.requestNavigation { documents.importFiles(sources, for: owner) }
     }

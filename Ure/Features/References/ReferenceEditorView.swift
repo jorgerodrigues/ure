@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ReferenceEditorView: View {
     @Environment(ReferenceState.self) private var references
+    @Environment(WorkshopEditing.self) private var editing
     @FocusState private var titleFocused: Bool
     let owner: LibraryItemOwner
 
@@ -38,15 +39,17 @@ struct ReferenceEditorView: View {
             }
         }
         .formStyle(.grouped)
-        .disabled(references.isSaving)
+        .disabled(references.isSaving || !editing.canWrite(owner))
         .navigationTitle(editorTitle)
         .toolbar {
             ToolbarItemGroup(placement: .confirmationAction) {
                 if references.isSaving { ProgressView().controlSize(.small) }
                 Button("Cancel", action: references.cancel).disabled(references.isSaving)
                     .accessibilityIdentifier("cancelReference")
-                Button("Save", action: references.saveCommand).disabled(!references.canSave)
-                    .accessibilityIdentifier("saveReference")
+                Button("Save", action: references.saveCommand).disabled(
+                    !references.canSave || !editing.canWrite(owner)
+                )
+                .accessibilityIdentifier("saveReference")
             }
         }
         .onAppear(perform: focusTitle)

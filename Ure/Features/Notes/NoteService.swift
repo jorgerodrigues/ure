@@ -29,10 +29,12 @@ nonisolated struct NoteService: Sendable {
                 guard try WatchQueries.fetch(id, in: db) != nil else {
                     throw NoteError.unavailableOwner
                 }
+                try RecordAccess.requireWatch(id, in: db)
             case .caliber(let id):
                 guard try CaliberQueries.fetch(id, in: db) != nil else {
                     throw NoteError.unavailableOwner
                 }
+                try RecordAccess.requireCaliber(id, in: db)
             }
             let now = Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
             if let id {

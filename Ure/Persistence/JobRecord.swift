@@ -76,6 +76,8 @@ nonisolated struct JobRecord: Codable, Equatable, Identifiable, Sendable, Fetcha
     var unfinishedTasksReason: String? = nil
     var unfinishedPartsReason: String? = nil
 
+    var archivedAt: Date? = nil
+
     static func databaseUUIDEncodingStrategy(for column: String) -> DatabaseUUIDEncodingStrategy {
         .uppercaseString
     }

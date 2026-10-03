@@ -8,6 +8,8 @@ struct WatchDetailView: View {
     @Environment(PhotoState.self) private var photos
     @Environment(ReferenceState.self) private var references
 
+    @Environment(WorkshopEditing.self) private var editing
+
     var body: some View {
         if watches.draft != nil {
             WatchEditorView()
@@ -26,6 +28,28 @@ struct WatchDetailView: View {
             NoteDetailView(owner: .watch(watch.id))
         } else if let watch = watches.selectedWatch {
             Form {
+                Section {
+                    if watch.archivedAt != nil {
+                        Label("Archived. Unarchive to make changes.", systemImage: "archivebox")
+                    }
+                    Button(
+                        watch.archivedAt == nil ? "Archive Watch" : "Unarchive Watch",
+                        action: toggleArchive
+                    )
+                    .disabled(
+                        editing.isSaving || jobs.isLoading || jobs.loadError != nil
+                            || (watch.archivedAt == nil && jobs.openJob(for: watch.id) != nil)
+                    )
+                    .accessibilityIdentifier("archiveWatch")
+                    if watch.archivedAt == nil, jobs.openJob(for: watch.id) != nil {
+                        Text("Close the open job before archiving this watch.").foregroundStyle(
+                            .secondary)
+                    }
+                    if let error = watches.saveError {
+                        Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                    }
+                }
+
                 WatchCoverView(watch: watch)
                 Section("Identity") {
                     LabeledContent("Name", value: watch.name)
@@ -63,6 +87,7 @@ struct WatchDetailView: View {
             .navigationTitle(watch.name)
             .toolbar {
                 Button("Edit", action: watches.edit)
+                    .disabled(editing.isSaving || watch.archivedAt != nil)
                     .accessibilityIdentifier("editWatch")
             }
         } else {
@@ -72,6 +97,7 @@ struct WatchDetailView: View {
             )
         }
     }
+    private func toggleArchive() { editing.requestNavigation(watches.toggleArchiveCommand) }
 }
 
 private struct WatchValue: View {

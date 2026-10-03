@@ -35,6 +35,8 @@ nonisolated struct CaliberRecord: Codable, Equatable, Identifiable, Sendable, Fe
         return designation
     }
 
+    var archivedAt: Date? = nil
+
     static func databaseUUIDEncodingStrategy(for column: String) -> DatabaseUUIDEncodingStrategy {
         .uppercaseString
     }

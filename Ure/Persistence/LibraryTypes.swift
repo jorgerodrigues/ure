@@ -4,6 +4,9 @@ nonisolated struct LibraryDependencies: Sendable {
     var makeID: @Sendable () -> UUID = { UUID() }
     var now: @Sendable () -> Date = { Date() }
     var importCheckpoint: @Sendable (FileImportCheckpoint) throws -> Void = { _ in }
+    var removeOriginal: @Sendable (URL) throws -> Void = {
+        try FileManager.default.removeItem(at: $0)
+    }
     var prepareLibrary: @Sendable (URL) throws -> Void = { _ in }
 }
 

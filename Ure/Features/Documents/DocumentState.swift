@@ -23,6 +23,8 @@ final class DocumentState {
     private(set) var isImporting = false
     private var importTask: Task<Void, Never>?
     var draft: DocumentDraft?
+    var showsRemovalConfirmation = false
+    private var removalID: UUID?
     var showsUnsavedChanges = false
 
     init(service: DocumentService) { self.service = service }
@@ -69,6 +71,13 @@ final class DocumentState {
             let values = try await service.coordinator.documentValues()
             for try await records in values {
                 documents = records
+                if let selectedID, draft == nil, !documents.contains(where: { $0.id == selectedID })
+                {
+                    self.selectedID = nil
+                    self.owner = nil
+                    showsRemovalConfirmation = false
+                    removalID = nil
+                }
                 isLoading = false
             }
         } catch {
@@ -146,6 +155,8 @@ final class DocumentState {
 
     func cancel() {
         guard !isSaving else { return }
+        showsRemovalConfirmation = false
+        removalID = nil
         draft = nil
         originalDraft = nil
         clearErrors()
@@ -172,6 +183,38 @@ final class DocumentState {
             if let validation = error as? ReferenceValidationError {
                 fieldErrors = validation.fields
             }
+            return false
+        }
+    }
+
+    func requestRemoval() {
+        guard !isSaving, !isImporting, draft == nil, !isLoading, loadError == nil,
+            let record = selectedDocument
+        else { return }
+        removalID = record.id
+        showsRemovalConfirmation = true
+    }
+
+    func removeCommand() { Task { await remove() } }
+
+    @discardableResult
+    func remove() async -> Bool {
+        guard !isSaving, !isImporting, draft == nil, let id = removalID,
+            selectedID == id, let owner
+        else { return false }
+        isSaving = true
+        showsRemovalConfirmation = false
+        clearErrors()
+        defer { isSaving = false; removalID = nil }
+        do {
+            try await ChildRemovalService(coordinator: service.coordinator).removeItem(
+                id, for: owner, kind: .document)
+            documents.removeAll { $0.id == id }
+            selectedID = nil
+            self.owner = nil
+            return true
+        } catch {
+            saveError = error.localizedDescription
             return false
         }
     }

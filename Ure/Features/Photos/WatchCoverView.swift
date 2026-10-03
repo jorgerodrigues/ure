@@ -24,10 +24,11 @@ struct WatchCoverView: View {
                 ForEach(choices) { photo in WatchCoverOption(photo: photo, watchID: watch.id) }
             }
             .disabled(
-                editing.isSaving || photos.isLoading || photos.loadError != nil
+                watch.archivedAt != nil || editing.isSaving || photos.isLoading
+                    || photos.loadError != nil
                     || jobs.isLoading || jobs.loadError != nil || choices.isEmpty)
             Button("Remove Cover", action: removeCover)
-                .disabled(editing.isSaving || watch.coverPhotoID == nil)
+                .disabled(watch.archivedAt != nil || editing.isSaving || watch.coverPhotoID == nil)
             if let error = photos.operationError {
                 Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
             }

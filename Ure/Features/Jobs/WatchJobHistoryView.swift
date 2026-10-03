@@ -16,7 +16,7 @@ struct WatchJobHistoryView: View {
             } else {
                 Button(actionTitle, action: startJob)
                     .accessibilityIdentifier("startWatchJob")
-                    .disabled(editing.isSaving)
+                    .disabled(editing.isSaving || watch.archivedAt != nil)
                 TextField("Filter job titles", text: $searchText)
                     .accessibilityIdentifier("jobsLocalSearch")
                 if filteredJobs.isEmpty {

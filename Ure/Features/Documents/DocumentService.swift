@@ -109,10 +109,12 @@ nonisolated struct DocumentService: Sendable {
             guard try WatchQueries.fetch(id, in: db) != nil else {
                 throw DocumentError.unavailableOwner
             }
+            try RecordAccess.requireWatch(id, in: db)
         case .caliber(let id):
             guard try CaliberQueries.fetch(id, in: db) != nil else {
                 throw DocumentError.unavailableOwner
             }
+            try RecordAccess.requireCaliber(id, in: db)
         }
     }
 

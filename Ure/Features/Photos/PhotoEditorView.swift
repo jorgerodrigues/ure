@@ -3,6 +3,7 @@ import SwiftUI
 struct PhotoEditorView: View {
     @Environment(PhotoState.self) private var photos
     @Environment(JobState.self) private var jobs
+    @Environment(WorkshopEditing.self) private var editing
     @FocusState private var titleFocused: Bool
     let owner: LibraryItemOwner
 
@@ -27,12 +28,12 @@ struct PhotoEditorView: View {
             }
         }
         .formStyle(.grouped)
-        .disabled(photos.isSaving)
+        .disabled(photos.isSaving || !editing.canWrite(owner))
         .navigationTitle("Edit Photo")
         .toolbar {
             Button("Cancel", action: photos.cancel).disabled(photos.isSaving)
             Button("Save", action: photos.saveCommand)
-                .disabled(!photos.canSave(jobs: jobs))
+                .disabled(!photos.canSave(jobs: jobs) || !editing.canWrite(owner))
         }
         .onAppear(perform: focusTitle)
     }

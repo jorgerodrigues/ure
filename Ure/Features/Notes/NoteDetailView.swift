@@ -7,6 +7,7 @@ struct NoteDetailView: View {
     let owner: NoteOwner
 
     var body: some View {
+        @Bindable var notes = notes
         Group {
             if notes.draft != nil {
                 NoteEditorView(owner: owner)
@@ -22,20 +23,37 @@ struct NoteDetailView: View {
                     Section("Text") {
                         Text(note.body).frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    if !notes.canWrite(owner, jobs: jobs) {
-                        Section { Text("This job is closed. Reopen it to change its notes.") }
+                    if !editing.canWrite(owner) {
+                        Section {
+                            Text("Unarchive the owner or reopen the job to change this note.")
+                        }
                     }
                 }
                 .formStyle(.grouped)
                 .textSelection(.enabled)
                 .navigationTitle(note.title)
                 .toolbar {
+                    Button("Remove Note", role: .destructive, action: requestRemoval)
+                        .disabled(editing.isSaving || !editing.canWrite(owner))
+                        .accessibilityIdentifier("removeNote")
                     Button("Edit Note", action: edit)
-                        .disabled(editing.isSaving || !notes.canWrite(owner, jobs: jobs))
+                        .disabled(editing.isSaving || !editing.canWrite(owner))
                         .accessibilityIdentifier("editNote")
                 }
             } else {
                 ContentUnavailableView("Note unavailable", systemImage: "note.text")
+            }
+        }
+        .alert("Remove this note?", isPresented: $notes.showsRemovalConfirmation) {
+            Button("Remove", role: .destructive, action: notes.removeCommand)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This note will be removed. This cannot be undone.")
+        }
+        .safeAreaInset(edge: .bottom) {
+            if let error = notes.saveError {
+                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                    .padding()
             }
         }
         .toolbar {
@@ -47,8 +65,12 @@ struct NoteDetailView: View {
         }
     }
 
+    private func requestRemoval() {
+        guard editing.canWrite(owner) else { return }
+        editing.requestNavigation(notes.requestRemoval)
+    }
     private func edit() {
-        guard notes.canWrite(owner, jobs: jobs) else { return }
+        guard editing.canWrite(owner) else { return }
         notes.edit()
     }
     private func back() { editing.requestNavigation(notes.close) }

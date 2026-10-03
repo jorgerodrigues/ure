@@ -8,6 +8,7 @@ struct PhotoDetailView: View {
     let owner: LibraryItemOwner
 
     var body: some View {
+        @Bindable var photos = photos
         Group {
             if photos.draft != nil {
                 PhotoEditorView(owner: owner)
@@ -36,20 +37,35 @@ struct PhotoDetailView: View {
                     if let error = photos.operationError {
                         Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                     }
-                    if !photos.canWrite(owner, jobs: jobs) {
-                        Text("This job is closed. Reopen it to edit this photo.")
+                    if !editing.canWrite(owner) {
+                        Text("Unarchive the owner or reopen the job to change this photo.")
                             .foregroundStyle(.secondary)
                     }
                 }
                 .padding()
                 .navigationTitle(photo.item.title)
                 .toolbar {
+                    Button("Remove Photo", role: .destructive, action: requestRemoval)
+                        .disabled(editing.isSaving || !editing.canWrite(owner))
+                        .accessibilityIdentifier("removePhoto")
                     Button("Edit Photo", action: edit)
-                        .disabled(editing.isSaving || !photos.canWrite(owner, jobs: jobs))
+                        .disabled(editing.isSaving || !editing.canWrite(owner))
                     Button("Export Original", action: exportOriginal).disabled(editing.isSaving)
                 }
             } else {
                 ContentUnavailableView("Photo unavailable", systemImage: "photo")
+            }
+        }
+        .alert("Remove this photo?", isPresented: $photos.showsRemovalConfirmation) {
+            Button("Remove", role: .destructive, action: photos.removeCommand)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This photo will be removed. This cannot be undone.")
+        }
+        .safeAreaInset(edge: .bottom) {
+            if let error = photos.saveError {
+                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                    .padding()
             }
         }
         .toolbar {
@@ -63,8 +79,12 @@ struct PhotoDetailView: View {
     private func previous() { photos.moveSelection(by: -1) }
     private func next() { photos.moveSelection(by: 1) }
     private func back() { editing.requestNavigation(photos.close) }
+    private func requestRemoval() {
+        guard editing.canWrite(owner) else { return }
+        editing.requestNavigation(photos.requestRemoval)
+    }
     private func edit() {
-        guard photos.canWrite(owner, jobs: jobs) else { return }
+        guard editing.canWrite(owner) else { return }
         photos.edit()
     }
     private func exportOriginal() {

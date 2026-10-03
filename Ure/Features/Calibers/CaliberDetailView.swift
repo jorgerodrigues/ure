@@ -8,6 +8,8 @@ struct CaliberDetailView: View {
     @Environment(PhotoState.self) private var photos
     @Environment(ReferenceState.self) private var references
 
+    @Environment(WorkshopEditing.self) private var editing
+
     var body: some View {
         if calibers.draft != nil {
             CaliberEditorView()
@@ -29,6 +31,21 @@ struct CaliberDetailView: View {
             NoteDetailView(owner: .caliber(caliber.id))
         } else if let caliber = calibers.selectedCaliber {
             Form {
+                Section {
+                    if caliber.archivedAt != nil {
+                        Label("Archived. Unarchive to make changes.", systemImage: "archivebox")
+                    }
+                    Button(
+                        caliber.archivedAt == nil ? "Archive Caliber" : "Unarchive Caliber",
+                        action: toggleArchive
+                    )
+                    .disabled(editing.isSaving)
+                    .accessibilityIdentifier("archiveCaliber")
+                    if let error = calibers.saveError {
+                        Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                    }
+                }
+
                 Section("Shared specifications") {
                     CaliberSpecificationsView(caliber: caliber)
                 }
@@ -56,6 +73,7 @@ struct CaliberDetailView: View {
             .navigationTitle(caliber.label)
             .toolbar {
                 Button("Edit", action: calibers.edit)
+                    .disabled(editing.isSaving || caliber.archivedAt != nil)
                     .accessibilityIdentifier("editCaliber")
             }
         } else {
@@ -73,6 +91,7 @@ struct CaliberDetailView: View {
     private func retryWatches() {
         Task { await watches.observe() }
     }
+    private func toggleArchive() { editing.requestNavigation(calibers.toggleArchiveCommand) }
 }
 
 private struct CaliberWatchLink: View {

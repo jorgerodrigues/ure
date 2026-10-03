@@ -20,6 +20,9 @@ final class JobTaskState {
     private(set) var reorderError: String?
     private(set) var fieldErrors: [JobTaskField: String] = [:]
     var draft: JobTaskDraft?
+    var showsRemovalConfirmation = false
+    private var removalID: UUID?
+    private var removalPartIDs: Set<UUID> = []
     var showsUnsavedChanges = false
 
     init(service: JobTaskService) { self.service = service }
@@ -132,6 +135,12 @@ final class JobTaskState {
                 tasks = snapshot.tasks
                 parts = snapshot.parts
                 links = snapshot.links
+                if let selectedID, draft == nil, !tasks.contains(where: { $0.id == selectedID }) {
+                    self.selectedID = nil
+                    self.jobID = nil
+                    showsRemovalConfirmation = false
+                    removalID = nil
+                }
                 isLoading = false
             }
         } catch {
@@ -180,6 +189,8 @@ final class JobTaskState {
 
     func cancel() {
         guard !isSaving else { return }
+        showsRemovalConfirmation = false
+        removalID = nil
         draft = nil
         originalDraft = nil
         clearErrors()
@@ -210,6 +221,52 @@ final class JobTaskState {
             if let validation = error as? JobTaskValidationError { fieldErrors = validation.fields }
             return false
         }
+    }
+
+    func requestRemoval() {
+        guard !isSaving, draft == nil, !isLoading, loadError == nil,
+            let record = selectedTask
+        else { return }
+        removalID = record.id
+        removalPartIDs = Set(linkedParts(for: record.id).map(\.id))
+        showsRemovalConfirmation = true
+    }
+
+    func removeCommand() { Task { await remove() } }
+
+    @discardableResult
+    func remove() async -> Bool {
+        guard !isSaving, draft == nil, let id = removalID,
+            selectedID == id, let jobID
+        else { return false }
+        isSaving = true
+        showsRemovalConfirmation = false
+        clearErrors()
+        defer { isSaving = false; removalID = nil }
+        do {
+            let saved = try await ChildRemovalService(coordinator: service.coordinator).removeTask(
+                id, for: jobID, confirmedPartIDs: removalPartIDs)
+            tasks.removeAll { $0.jobID == jobID }
+            tasks.append(contentsOf: saved)
+            links.removeAll { $0.taskID == id }
+            selectedID = nil
+            self.jobID = nil
+            return true
+        } catch {
+            saveError = error.localizedDescription
+            return false
+        }
+    }
+
+    var removalMessage: String {
+        guard let id = removalID else { return "Remove this task?" }
+        let names = linkedParts(for: id).sorted { $0.id.uuidString < $1.id.uuidString }.map {
+            "• \($0.description) (\($0.status.rawValue))"
+        }
+        if names.isEmpty { return "The task will be removed. Its activity summaries will be kept." }
+        return
+            "The task and these links will be removed. The parts and activity summaries will be kept.\n"
+            + names.joined(separator: "\n")
     }
 
     func saveCommand() { Task { await save() } }

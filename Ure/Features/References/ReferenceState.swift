@@ -18,6 +18,8 @@ final class ReferenceState {
     private(set) var saveError: String?
     private(set) var fieldErrors: [ReferenceField: String] = [:]
     var draft: ReferenceDraft?
+    var showsRemovalConfirmation = false
+    private var removalID: UUID?
     var showsUnsavedChanges = false
 
     init(service: ReferenceService) { self.service = service }
@@ -59,6 +61,14 @@ final class ReferenceState {
             let values = try await service.coordinator.referenceValues()
             for try await records in values {
                 references = records
+                if let selectedID, draft == nil,
+                    !references.contains(where: { $0.id == selectedID })
+                {
+                    self.selectedID = nil
+                    self.owner = nil
+                    showsRemovalConfirmation = false
+                    removalID = nil
+                }
                 isLoading = false
             }
         } catch {
@@ -104,6 +114,8 @@ final class ReferenceState {
 
     func cancel() {
         guard !isSaving else { return }
+        showsRemovalConfirmation = false
+        removalID = nil
         draft = nil
         originalDraft = nil
         clearErrors()
@@ -132,6 +144,38 @@ final class ReferenceState {
             if let validation = error as? ReferenceValidationError {
                 fieldErrors = validation.fields
             }
+            return false
+        }
+    }
+
+    func requestRemoval() {
+        guard !isSaving, draft == nil, !isLoading, loadError == nil,
+            let record = selectedReference
+        else { return }
+        removalID = record.id
+        showsRemovalConfirmation = true
+    }
+
+    func removeCommand() { Task { await remove() } }
+
+    @discardableResult
+    func remove() async -> Bool {
+        guard !isSaving, draft == nil, let id = removalID,
+            selectedID == id, let owner
+        else { return false }
+        isSaving = true
+        showsRemovalConfirmation = false
+        clearErrors()
+        defer { isSaving = false; removalID = nil }
+        do {
+            try await ChildRemovalService(coordinator: service.coordinator).removeItem(
+                id, for: owner, kind: .link)
+            references.removeAll { $0.id == id }
+            selectedID = nil
+            self.owner = nil
+            return true
+        } catch {
+            saveError = error.localizedDescription
             return false
         }
     }
