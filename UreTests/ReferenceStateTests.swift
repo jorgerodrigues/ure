@@ -81,7 +81,8 @@ struct ReferenceStateTests {
             jobs: JobState(service: JobService(coordinator: coordinator)),
             notes: NoteState(service: NoteService(coordinator: coordinator)), references: state,
             photos: PhotoState(service: PhotoService(coordinator: coordinator)),
-            documents: DocumentState(service: DocumentService(coordinator: coordinator)))
+            documents: DocumentState(service: DocumentService(coordinator: coordinator)),
+            tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)))
         let started = AsyncStream<Void>.makeStream()
         let gate = DispatchSemaphore(value: 0)
         defer { gate.signal() }
@@ -204,7 +205,8 @@ struct ReferenceStateTests {
             jobs: JobState(service: JobService(coordinator: coordinator)),
             notes: NoteState(service: NoteService(coordinator: coordinator)),
             references: state, photos: PhotoState(service: PhotoService(coordinator: coordinator)),
-            documents: DocumentState(service: DocumentService(coordinator: coordinator)))
+            documents: DocumentState(service: DocumentService(coordinator: coordinator)),
+            tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)))
         state.create(for: owner)
         state.draft?.sourceURL = ReferenceFixture.draft.sourceURL
         state.draft?.title = "Keep this reference"

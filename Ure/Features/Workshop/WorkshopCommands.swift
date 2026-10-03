@@ -66,13 +66,14 @@ struct WorkshopCommands: Commands {
     private var canSave: Bool {
         guard allowsEditing == true else { return false }
         if editing.isSaving { return false }
+        if editing.tasks.draft != nil { return editing.tasks.canSave(jobs: editing.jobs) }
         if editing.documents.draft != nil { return editing.documents.canSave(jobs: editing.jobs) }
         if editing.photos.draft != nil { return editing.photos.canSave(jobs: editing.jobs) }
         if editing.references.draft != nil { return editing.references.canSave }
         if editing.notes.draft != nil { return editing.notes.canSave }
         switch navigation.selectedSection {
         case .watches:
-            if editing.jobs.isEditing { return editing.jobs.canSave }
+            if editing.jobs.isEditing { return editing.canSaveJob }
             return editing.watches.canSave
         case .calibers: return editing.calibers.canSave
         default: return false
@@ -80,7 +81,11 @@ struct WorkshopCommands: Commands {
     }
 
     private func save() {
-        guard allowsEditing == true else { return }
+        guard allowsEditing == true, canSave else { return }
+        if editing.tasks.draft != nil {
+            editing.tasks.saveCommand()
+            return
+        }
         if editing.documents.draft != nil {
             editing.documents.saveCommand()
             return
@@ -100,7 +105,7 @@ struct WorkshopCommands: Commands {
         switch navigation.selectedSection {
         case .watches:
             if editing.jobs.isEditing {
-                editing.jobs.saveCommand()
+                editing.saveJobCommand()
             } else {
                 editing.watches.saveCommand()
             }

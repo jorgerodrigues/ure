@@ -141,6 +141,52 @@ nonisolated final class JobUITests: XCTestCase {
     }
 
     @MainActor
+    func testTaskValidationDraftGuardClosureAndRestart() {
+        let app = isolatedApp()
+        app.launch()
+        defer { app.terminate() }
+        createWatch(app)
+        app.buttons["startWatchJob"].click()
+        enter("Bench repair", in: "jobTitle", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
+        app.buttons["addTask"].click()
+        enter("Inspect escapement", in: "taskTitle", app: app)
+        enter("Inspection", in: "taskGroupLabel", app: app)
+        choose("Waiting", picker: "taskStatus", app: app)
+        app.buttons["saveTask"].click()
+        XCTAssertTrue(app.staticTexts["taskSaveError"].waitForExistence(timeout: 5))
+        enter("Need technical sheet", in: "taskWaitingReason", app: app)
+        app.buttons["backFromTask"].click()
+        XCTAssertTrue(app.sheets.buttons["Stay"].waitForExistence(timeout: 3))
+        app.sheets.buttons["Stay"].click()
+        XCTAssertEqual(app.textFields["taskTitle"].value as? String, "Inspect escapement")
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["editTask"].waitForExistence(timeout: 5))
+        app.buttons["backFromTask"].click()
+        XCTAssertTrue(app.staticTexts["Planned"].waitForExistence(timeout: 5))
+        app.buttons["changeJobStage"].click()
+        choose("Completed", picker: "jobStage", app: app)
+        enter("Service complete", in: "jobOutcome", app: app)
+        app.buttons["saveJobAction"].click()
+        XCTAssertTrue(app.staticTexts["jobActionSaveError"].waitForExistence(timeout: 5))
+        enter("Owner will handle inspection", in: "jobUnfinishedTasksReason", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["reopenJob"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["addTask"].isEnabled)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["reopenJob"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Owner will handle inspection"].exists)
+        XCTAssertTrue(
+            app.buttons.containing(.staticText, identifier: "Inspect escapement").firstMatch.exists)
+        app.buttons["reopenJob"].click()
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["addTask"].isEnabled)
+    }
+
+    @MainActor
     private func choose(_ value: String, picker identifier: String, app: XCUIApplication) {
         let picker = app.popUpButtons[identifier]
         XCTAssertTrue(picker.waitForExistence(timeout: 3))

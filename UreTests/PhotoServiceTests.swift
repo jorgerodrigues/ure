@@ -295,6 +295,7 @@ nonisolated private extension Result where Success == PhotoRecord, Failure == an
 
 nonisolated enum PhotoMigrationFixture {
     static func removePhotos(in db: Database) throws {
+        try JobTaskMigrationFixture.removeTasks(in: db)
         try db.execute(sql: "DELETE FROM grdb_migrations WHERE identifier = 'v10-documents'")
         try db.execute(sql: "DROP TRIGGER watch_cover_insert")
         try db.execute(sql: "DROP TRIGGER watch_cover_update")

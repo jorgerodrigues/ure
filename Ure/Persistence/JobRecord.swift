@@ -73,6 +73,7 @@ nonisolated struct JobRecord: Codable, Equatable, Identifiable, Sendable, Fetcha
     var startedAt: Date? = nil
     var completedAt: Date? = nil
     var cancelledAt: Date? = nil
+    var unfinishedTasksReason: String? = nil
 
     static func databaseUUIDEncodingStrategy(for column: String) -> DatabaseUUIDEncodingStrategy {
         .uppercaseString
@@ -114,7 +115,7 @@ nonisolated enum JobQueries {
             db,
             columns: [
                 "stage", "waitingReason", "outcome", "recommendations", "cancellationReason",
-                "startedAt", "completedAt", "cancelledAt", "updatedAt",
+                "startedAt", "completedAt", "cancelledAt", "updatedAt", "unfinishedTasksReason",
             ])
     }
 }

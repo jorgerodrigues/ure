@@ -199,7 +199,8 @@ struct BenchReferenceTests {
             jobs: JobState(service: JobService(coordinator: coordinator)), notes: notes,
             references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
             photos: PhotoState(service: PhotoService(coordinator: coordinator)),
-            documents: DocumentState(service: DocumentService(coordinator: coordinator)))
+            documents: DocumentState(service: DocumentService(coordinator: coordinator)),
+            tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)))
         bench.pin(items[0].id)
         bench.togglePane()
         #expect(notes.draft?.title == "Unfinished bench note")

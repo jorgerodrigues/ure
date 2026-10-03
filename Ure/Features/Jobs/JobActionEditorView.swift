@@ -2,6 +2,7 @@ import SwiftUI
 
 struct JobActionEditorView: View {
     @Environment(JobState.self) private var jobs
+    @Environment(WorkshopEditing.self) private var editing
 
     var body: some View {
         Form {
@@ -68,6 +69,9 @@ struct JobActionEditorView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    if !draft.transition.stage.isOpen, let jobID = jobs.selectedID {
+                        JobTaskClosureSummaryView(jobID: jobID)
+                    }
                 }
             }
             if let error = jobs.saveError {
@@ -90,9 +94,9 @@ struct JobActionEditorView: View {
                 Button("Cancel", action: jobs.cancel)
                     .accessibilityIdentifier("cancelJobAction")
                     .disabled(jobs.isSaving)
-                Button("Save", action: jobs.saveCommand)
+                Button("Save", action: editing.saveJobCommand)
                     .accessibilityIdentifier("saveJobAction")
-                    .disabled(!jobs.canSave)
+                    .disabled(!editing.canSaveJob)
             }
         }
     }
@@ -118,6 +122,55 @@ struct JobActionEditorView: View {
             get: { jobs.actionDraft?[keyPath: keyPath] ?? value },
             set: { jobs.actionDraft?[keyPath: keyPath] = $0 })
     }
+}
+
+private struct JobTaskClosureSummaryView: View {
+    @Environment(JobTaskState.self) private var tasks
+    @Environment(JobState.self) private var jobs
+    let jobID: UUID
+
+    var body: some View {
+        Section("Task summary") {
+            if tasks.isLoading {
+                ProgressView("Loading tasks…")
+            } else if let error = tasks.loadError {
+                Label(error, systemImage: "exclamationmark.triangle")
+                Button("Retry", action: retry)
+            } else if records.isEmpty {
+                Text("No tasks planned.").foregroundStyle(.secondary)
+            } else {
+                ForEach(JobTaskStatus.allCases) { status in
+                    LabeledContent(
+                        status.rawValue, value: String(records.filter { $0.status == status }.count)
+                    )
+                }
+                if !unfinished.isEmpty {
+                    Text("These tasks will keep their current status:").foregroundStyle(.secondary)
+                    ForEach(unfinished) { task in
+                        LabeledContent(task.title, value: task.status.rawValue)
+                    }
+                }
+            }
+            if !unfinished.isEmpty || jobs.fieldErrors[.unfinishedTasksReason] != nil {
+                TextField("Unfinished tasks explanation", text: explanation, axis: .vertical)
+                    .accessibilityIdentifier("jobUnfinishedTasksReason")
+                JobActionFieldError(message: jobs.fieldErrors[.unfinishedTasksReason])
+            }
+        }
+    }
+
+    private var records: [JobTaskRecord] { tasks.records(for: jobID) }
+    private var unfinished: [JobTaskRecord] { records.filter { $0.status.isUnfinished } }
+    private var explanation: Binding<String> {
+        Binding(get: currentExplanation, set: setExplanation)
+    }
+    private func currentExplanation() -> String {
+        jobs.actionDraft?.transition.unfinishedTasksReason ?? ""
+    }
+    private func setExplanation(_ value: String) {
+        jobs.actionDraft?.transition.unfinishedTasksReason = value
+    }
+    private func retry() { Task { await tasks.observe() } }
 }
 
 private struct JobActionFieldError: View {
