@@ -80,6 +80,14 @@ Document rows show **PDF · Offline**. Select one to read its managed original w
 
 Use **Edit Document** to change its title, optional HTTP/HTTPS source URL, source description, and notes. Save, Cancel, Command-S, and the shared draft guard apply. **Open Source** opens the saved URL only after that action. It does not download the document. Closed-job documents remain readable and exportable. Reopen the job before importing or editing documents. The service also rejects stale saves after closure.
 
+## Bench references
+
+Open a saved job and use **Pin Reference** to choose one saved photo, PDF, or external link from that job, its watch, or its current caliber. The pin stays in place while you open notes, photos, references, or intake editors. Switching jobs clears unrelated pins. A watch reference stays for another job on that watch. A caliber reference stays for a job whose watch uses the same caliber.
+
+Use **Toggle Reference Pane** or **Shift-Command-R** to collapse or show the pane. It appears beside the editor when there is room. At narrower widths, widen the window or use **Open Reference Window** with **Option-Command-R**. The reference window has reading, zoom, explicit browser opening, and original export controls. New, Save, and section-changing commands are disabled while that window is active. Closing it leaves the main editor's draft in place.
+
+The app restores the last selected saved job and its valid pin. Pane visibility is a preference. Missing records, changed scope, or unavailable originals clear the pin without removing saved content. References remain readable for closed jobs. External content opens only after **Open in Browser**.
+
 ## Managed original import infrastructure
 
 W009 ([PR #36](https://github.com/jorgerodrigues/ure/pull/36)) adds the internal `FileImportService` API for JPEG, PNG, HEIC, and PDF originals. The approved limits are 100 MB (100,000,000 bytes) per original and 200 files per batch. It detects content rather than trusting extensions, keeps unchanged original bytes, and stores file size, SHA-256, dimensions, and orientation. Each import uses a generated storage key. Source filenames stay metadata only. Cancellation and per-file failures preserve committed assets. Startup recovery removes unreferenced interrupted imports through the coordinator's mutation gate. Photo import controls are available in W010. PDF import controls are available in W011.

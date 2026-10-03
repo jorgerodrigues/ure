@@ -15,7 +15,8 @@ struct DocumentDetailView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Label("\(owner.scope) PDF · Available offline", systemImage: "doc.richtext")
                         .foregroundStyle(.secondary)
-                    DocumentViewerView(assetID: document.asset.id).id(document.asset.id)
+                    DocumentViewerView(source: documents.reader, assetID: document.asset.id).id(
+                        document.asset.id)
                     ScrollView {
                         VStack(alignment: .leading, spacing: 8) {
                             LabeledContent(

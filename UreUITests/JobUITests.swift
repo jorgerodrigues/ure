@@ -28,13 +28,49 @@ nonisolated final class JobUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["000042.7-A"].exists)
         app.terminate()
         app.launch()
-        openWatches(app)
-        app.staticTexts["Renamed watch"].firstMatch.click()
-        XCTAssertTrue(app.buttons["startWatchJob"].waitForExistence(timeout: 5))
-        app.buttons["startWatchJob"].click()
         XCTAssertTrue(app.buttons["editJob"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Inspect movement"].exists)
         XCTAssertTrue(app.staticTexts["000042.7-A"].exists)
+    }
+
+    @MainActor
+    func testReferenceWindowDoesNotSaveOrReplaceTheMainDraft() {
+        let app = isolatedApp()
+        app.launch()
+        defer { app.terminate() }
+        createWatch(app)
+        app.buttons["startWatchJob"].click()
+        enter("Bench repair", in: "jobTitle", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["addReference"].waitForExistence(timeout: 5))
+        app.buttons["addReference"].click()
+        enter("Bench sheet", in: "referenceTitle", app: app)
+        enter("https://example.org/bench", in: "referenceURL", app: app)
+        app.buttons["saveReference"].click()
+        XCTAssertTrue(app.buttons["backFromReference"].waitForExistence(timeout: 5))
+        app.buttons["backFromReference"].click()
+        let pin = app.descendants(matching: .any)["pinReference"].firstMatch
+        XCTAssertTrue(pin.waitForExistence(timeout: 5))
+        pin.click()
+        app.menuItems["Job · Link · Bench sheet"].click()
+        app.buttons["addNote"].click()
+        enter("Unfinished note", in: "noteTitle", app: app)
+        let main = app.windows.firstMatch
+        main.typeKey("r", modifierFlags: [.command, .option])
+        let reference = app.windows["Reference"]
+        XCTAssertTrue(reference.waitForExistence(timeout: 5))
+        XCTAssertTrue(reference.staticTexts["Bench sheet"].exists)
+        XCTAssertFalse(reference.buttons["saveNote"].exists)
+        reference.typeKey("s", modifierFlags: .command)
+        reference.typeKey("n", modifierFlags: .command)
+        reference.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(app.textFields["noteTitle"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.textFields["noteTitle"].value as? String, "Unfinished note")
+        XCTAssertTrue(app.buttons["saveNote"].exists)
+        app.buttons["backFromNote"].click()
+        XCTAssertTrue(app.sheets.buttons["Stay"].waitForExistence(timeout: 3))
+        app.sheets.buttons["Stay"].click()
+        XCTAssertEqual(app.textFields["noteTitle"].value as? String, "Unfinished note")
     }
 
     @MainActor

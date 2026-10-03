@@ -17,7 +17,7 @@ struct DocumentReaderStateTests {
         let record = try await service.importFiles([source], for: owner)[0].outcome.get()
         let reader = DocumentReaderState()
         reader.pdfView.frame = CGRect(x: 0, y: 0, width: 600, height: 500)
-        await reader.load(DocumentState(service: service), assetID: record.asset.id)
+        await reader.load(ReferenceReader(coordinator: coordinator), assetID: record.asset.id)
         #expect(reader.error == nil && !reader.isLoading)
         #expect(reader.pageCount == 3 && reader.pageNumber == 1)
         #expect(!reader.canPrevious && reader.canNext)
@@ -41,7 +41,7 @@ struct DocumentReaderStateTests {
         #expect(reader.pdfView.autoScales)
         try FileManager.default.removeItem(
             at: try await coordinator.originalURL(for: record.asset.id))
-        await reader.load(DocumentState(service: service), assetID: record.asset.id)
+        await reader.load(ReferenceReader(coordinator: coordinator), assetID: record.asset.id)
         #expect(reader.error != nil && reader.pdfView.document == nil)
         #expect(reader.pageCount == 0 && !reader.canNext && !reader.canPrevious)
         try await coordinator.close()

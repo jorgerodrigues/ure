@@ -4,6 +4,9 @@ import SwiftUI
 struct WorkshopCommands: Commands {
     let navigation: WorkshopNavigation
     let editing: WorkshopEditing
+    let bench: BenchReferenceState
+    @FocusedValue(\.allowsWorkshopEditing) private var allowsEditing
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
@@ -28,12 +31,20 @@ struct WorkshopCommands: Commands {
                     selectSection(section)
                 }
                 .keyboardShortcut(KeyEquivalent(section.shortcut), modifiers: [.command, .option])
-                .disabled(editing.isSaving)
+                .disabled(allowsEditing != true || editing.isSaving)
             }
+            Divider()
+            Button("Toggle Reference Pane", action: bench.togglePane)
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(allowsEditing != true || editing.jobs.selectedID == nil)
+            Button("Open Reference Window", action: openReference)
+                .keyboardShortcut("r", modifiers: [.command, .option])
+                .disabled(allowsEditing != true || bench.reference == nil)
         }
     }
 
     private func selectSection(_ section: WorkshopSection) {
+        guard allowsEditing == true else { return }
         guard section != navigation.selection else { return }
         editing.requestNavigation { navigation.selection = section }
     }
@@ -44,6 +55,7 @@ struct WorkshopCommands: Commands {
     }
 
     private var canCreate: Bool {
+        guard allowsEditing == true else { return false }
         if editing.isSaving { return false }
         if navigation.selectedSection == .calibers {
             return !editing.calibers.isLoading && editing.calibers.loadError == nil
@@ -52,6 +64,7 @@ struct WorkshopCommands: Commands {
     }
 
     private var canSave: Bool {
+        guard allowsEditing == true else { return false }
         if editing.isSaving { return false }
         if editing.documents.draft != nil { return editing.documents.canSave(jobs: editing.jobs) }
         if editing.photos.draft != nil { return editing.photos.canSave(jobs: editing.jobs) }
@@ -67,6 +80,7 @@ struct WorkshopCommands: Commands {
     }
 
     private func save() {
+        guard allowsEditing == true else { return }
         if editing.documents.draft != nil {
             editing.documents.saveCommand()
             return
@@ -96,6 +110,7 @@ struct WorkshopCommands: Commands {
     }
 
     private func createRecord() {
+        guard allowsEditing == true else { return }
         let createsCaliber = navigation.selectedSection == .calibers
         editing.requestNavigation {
             if createsCaliber {
@@ -111,4 +126,6 @@ struct WorkshopCommands: Commands {
     private func closeWindow() {
         NSApp.keyWindow?.performClose(nil)
     }
+
+    private func openReference() { openWindow(id: "reference") }
 }

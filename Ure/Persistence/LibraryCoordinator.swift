@@ -229,6 +229,11 @@ actor LibraryCoordinator {
         return ValueObservation.tracking(DocumentQueries.fetchAll).values(in: database)
     }
 
+    func benchValues() throws -> AsyncValueObservation<BenchSnapshot> {
+        guard let database else { throw LibraryError.notOpen }
+        return ValueObservation.tracking(BenchSnapshot.fetch).values(in: database)
+    }
+
     private func createLibrary() throws -> LibraryInfo {
         let manager = FileManager.default
         let generationID = dependencies.makeID()

@@ -1,10 +1,10 @@
-import PDFKit
 import Foundation
 import GRDB
 import Observation
 
 @Observable
 final class DocumentState {
+    var reader: ReferenceReader { ReferenceReader(coordinator: service.coordinator) }
     private let service: DocumentService
     private var originalDraft: DocumentDraft?
     private var pendingNavigation: (() -> Void)?
@@ -106,10 +106,6 @@ final class DocumentState {
     }
 
     func cancelImport() { importTask?.cancel() }
-
-    func document(for assetID: UUID) async throws -> sending PDFDocument {
-        try await service.document(for: assetID)
-    }
 
     func openSource() {
         guard !isSaving, !isImporting, draft == nil, let selectedDocument else { return }

@@ -5,6 +5,7 @@ import Observation
 
 @Observable
 final class PhotoState {
+    var reader: ReferenceReader { ReferenceReader(coordinator: service.coordinator) }
     private let service: PhotoService
     private var originalDraft: PhotoDraft?
     private var pendingNavigation: (() -> Void)?
