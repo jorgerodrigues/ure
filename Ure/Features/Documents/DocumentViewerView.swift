@@ -2,7 +2,9 @@ import PDFKit
 import SwiftUI
 
 struct DocumentViewerView: View {
-    @Environment(DocumentState.self) private var documents
+    let source: ReferenceReader
+    var usesKeyboardShortcuts = true
+    var onLoadFailure: () -> Void = {}
     @State private var reader = DocumentReaderState()
     let assetID: UUID
 
@@ -19,19 +21,37 @@ struct DocumentViewerView: View {
                     Button("Retry", action: retry)
                 }
             } else {
-                HStack {
-                    Button("Previous Page", systemImage: "chevron.left", action: reader.previous)
-                        .keyboardShortcut(.leftArrow, modifiers: []).disabled(!reader.canPrevious)
-                    Text("Page \(reader.pageNumber) of \(reader.pageCount)")
-                        .monospacedDigit().accessibilityIdentifier("documentPage")
-                    Button("Next Page", systemImage: "chevron.right", action: reader.next)
-                        .keyboardShortcut(.rightArrow, modifiers: []).disabled(!reader.canNext)
-                    Spacer()
-                    Button("Fit", action: reader.fit)
-                    Button("Zoom Out", systemImage: "minus.magnifyingglass", action: reader.zoomOut)
-                    Text(reader.scale.formatted(.percent.precision(.fractionLength(0))))
-                        .monospacedDigit()
-                    Button("Zoom In", systemImage: "plus.magnifyingglass", action: reader.zoomIn)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Button(
+                            "Previous Page", systemImage: "chevron.left", action: reader.previous
+                        )
+                        .keyboardShortcut(
+                            usesKeyboardShortcuts
+                                ? KeyboardShortcut(.leftArrow, modifiers: []) : nil
+                        )
+                        .disabled(!reader.canPrevious)
+                        Text("Page \(reader.pageNumber) of \(reader.pageCount)")
+                            .monospacedDigit().accessibilityIdentifier("documentPage")
+                        Button("Next Page", systemImage: "chevron.right", action: reader.next)
+                            .keyboardShortcut(
+                                usesKeyboardShortcuts
+                                    ? KeyboardShortcut(.rightArrow, modifiers: []) : nil
+                            )
+                            .disabled(!reader.canNext)
+                        Spacer()
+                    }
+                    HStack {
+                        Button("Fit", action: reader.fit)
+                        Button(
+                            "Zoom Out", systemImage: "minus.magnifyingglass", action: reader.zoomOut
+                        )
+                        Text(reader.scale.formatted(.percent.precision(.fractionLength(0))))
+                            .monospacedDigit()
+                        Button(
+                            "Zoom In", systemImage: "plus.magnifyingglass", action: reader.zoomIn)
+                        Spacer()
+                    }
                 }.controlSize(.small).labelStyle(.iconOnly)
             }
             PDFReaderSurface(view: reader.pdfView)
@@ -39,7 +59,7 @@ struct DocumentViewerView: View {
                 .accessibilityLabel("PDF document")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task(loadDocument)
+        .task(id: assetID, loadDocument)
         .onReceive(
             NotificationCenter.default.publisher(for: .PDFViewPageChanged, object: reader.pdfView),
             perform: refresh
@@ -49,7 +69,10 @@ struct DocumentViewerView: View {
             perform: refresh)
     }
 
-    private func loadDocument() async { await reader.load(documents, assetID: assetID) }
+    private func loadDocument() async {
+        await reader.load(source, assetID: assetID)
+        if !Task.isCancelled, reader.error != nil { onLoadFailure() }
+    }
     private func retry() { Task { await loadDocument() } }
     private func refresh(_ notification: Notification) { reader.refresh() }
 }

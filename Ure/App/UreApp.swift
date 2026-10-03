@@ -13,6 +13,7 @@ struct UreApp: App {
     @State private var photos: PhotoState
     @State private var documents: DocumentState
     @State private var editing: WorkshopEditing
+    @State private var bench: BenchReferenceState
 
     init() {
         let configuration = AppConfiguration.current
@@ -44,6 +45,10 @@ struct UreApp: App {
         _photos = State(initialValue: photos)
         _documents = State(initialValue: documents)
         _editing = State(initialValue: editing)
+        _bench = State(
+            initialValue: BenchReferenceState(
+                service: BenchReferenceService(coordinator: coordinator),
+                preferences: BenchPreferences(libraryRoot: configuration.libraryRoot)))
         applicationDelegate.editing = editing
     }
 
@@ -60,14 +65,24 @@ struct UreApp: App {
                 .environment(photos)
                 .environment(documents)
                 .environment(editing)
+                .environment(bench)
+                .focusedSceneValue(\.allowsWorkshopEditing, true)
                 .frame(minWidth: 1000, minHeight: 650)
         }
         .defaultSize(width: 1200, height: 800)
         .windowResizability(.contentMinSize)
         .commands {
             SidebarCommands()
-            WorkshopCommands(navigation: navigation, editing: editing)
+            WorkshopCommands(navigation: navigation, editing: editing, bench: bench)
         }
+
+        Window("Reference", id: "reference") {
+            ReferenceWindowView(bench: bench)
+                .frame(minWidth: 420, minHeight: 650)
+        }
+        .defaultSize(width: 620, height: 720)
+        .windowResizability(.contentMinSize)
+        .restorationBehavior(.disabled)
 
         Settings {
             SettingsView()

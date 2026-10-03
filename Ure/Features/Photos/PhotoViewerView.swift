@@ -1,7 +1,9 @@
 import SwiftUI
 
 struct PhotoViewerView: View {
-    @Environment(PhotoState.self) private var photos
+    let reader: ReferenceReader
+    var usesKeyboardShortcuts = true
+    var onLoadFailure: () -> Void = {}
     @State private var image: CGImage?
     @State private var loadError: String?
     @State private var retryID = UUID()
@@ -11,16 +13,18 @@ struct PhotoViewerView: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack {
-                Button("Fit", action: fit).keyboardShortcut("0", modifiers: .command)
+                Button("Fit", action: fit)
+                    .keyboardShortcut(usesKeyboardShortcuts ? KeyboardShortcut("0") : nil)
                 Button("Zoom Out", systemImage: "minus.magnifyingglass", action: zoomOut)
-                    .keyboardShortcut("-", modifiers: .command)
+                    .keyboardShortcut(usesKeyboardShortcuts ? KeyboardShortcut("-") : nil)
                 Button("Zoom In", systemImage: "plus.magnifyingglass", action: zoomIn)
-                    .keyboardShortcut("+", modifiers: .command)
+                    .keyboardShortcut(usesKeyboardShortcuts ? KeyboardShortcut("+") : nil)
                 Spacer()
-                Text("Drag to pan. Pinch or use the zoom controls.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
+            .labelStyle(.iconOnly)
             .disabled(image == nil)
+            Text("Drag to pan. Pinch or use the zoom controls.")
+                .font(.caption).foregroundStyle(.secondary)
             if let image {
                 PhotoViewport(image: image, assetID: assetID, request: zoom)
                     .accessibilityLabel("Photo viewer")
@@ -46,11 +50,14 @@ struct PhotoViewerView: View {
         loadError = nil
         zoom = PhotoZoomRequest()
         do {
-            let loaded = try await photos.image(for: assetID, thumbnail: false)
+            let loaded = try await reader.image(for: assetID)
             guard !Task.isCancelled else { return }
             image = loaded
         } catch {
-            if !Task.isCancelled { loadError = error.localizedDescription }
+            if !Task.isCancelled {
+                loadError = error.localizedDescription
+                onLoadFailure()
+            }
         }
     }
     private func retry() { retryID = UUID() }

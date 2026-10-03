@@ -19,11 +19,11 @@ final class DocumentReaderState {
         pdfView.autoScales = true
     }
 
-    func load(_ documents: DocumentState, assetID: UUID) async {
+    func load(_ source: ReferenceReader, assetID: UUID) async {
         isLoading = true
         error = nil
         do {
-            let document = try await documents.document(for: assetID)
+            let document = try await source.document(for: assetID)
             try Task.checkCancellation()
             pdfView.document = document
             pdfView.autoScales = true

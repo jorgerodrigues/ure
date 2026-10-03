@@ -26,7 +26,7 @@ struct PhotoDetailView: View {
                         )
                         .foregroundStyle(.secondary)
                     }
-                    PhotoViewerView(assetID: photo.asset.id)
+                    PhotoViewerView(reader: photos.reader, assetID: photo.asset.id)
                         .id(photo.asset.id)
                     Text(photo.asset.originalFilename).font(.caption).textSelection(.enabled)
                     if let caption = photo.item.caption, !caption.isEmpty {
