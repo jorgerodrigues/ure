@@ -1,6 +1,6 @@
 # W017 procurement verification
 
-Implemented on 3 October 2026 for [W017 (#15)](https://github.com/jorgerodrigues/ure/issues/15). W016 (#14) was verified closed and [PR #44](https://github.com/jorgerodrigues/ure/pull/44) merged before implementation. The clean branch started from default-branch commit caf11fa63c403410a901334345d3d776349e868c.
+Implemented on 3 October 2026 for [W017 (#15)](https://github.com/jorgerodrigues/ure/issues/15), in [PR #45](https://github.com/jorgerodrigues/ure/pull/45). W016 (#14) was verified closed and [PR #44](https://github.com/jorgerodrigues/ure/pull/44) merged before implementation. The clean branch started from default-branch commit caf11fa63c403410a901334345d3d776349e868c.
 
 ## Scope and behavior
 
@@ -50,4 +50,4 @@ Round three completed with no permission denials or blocked source reads. It ide
 
 Round four completed with no permission denials or blocked source reads. It reported no correctness defects and no P0-P2 findings. One P3 design suggestion remains for the user: store order existence on the part row rather than derive it from procurement history. The suggested change would remove the fallback event scan and reduce the lifecycle rule's coupling to event decoding. This remains an optional follow-up under the review skill's P3 rule. Four earlier P3 correctness findings were fixed. No findings were declined. Independent review cleared blocking findings after four rounds. Lint, unsigned Debug, all unit/native UI source compilation, and diff whitespace checks passed on the final source. No tests were executed.
 
-CI runs formatting/lint and an unsigned Debug build. Both must pass on the final PR head before merge. Runtime and native acceptance remain deferred to W032.
+CI runs formatting/lint and an unsigned Debug build. Both must pass on the final PR head before merge. Final results are available in [PR #45 checks](https://github.com/jorgerodrigues/ure/pull/45/checks). No GitHub comments or review threads existed when the PR opened. Runtime and native acceptance remain deferred to W032.
