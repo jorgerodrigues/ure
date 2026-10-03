@@ -210,6 +210,13 @@ actor LibraryCoordinator {
         return ValueObservation.tracking(NoteQueries.fetchAll).values(in: database)
     }
 
+    func timelineValues(for jobID: UUID) throws -> AsyncValueObservation<[JobTimelineEntry]> {
+        guard let database else { throw LibraryError.notOpen }
+        return ValueObservation.tracking { db in
+            try JobTimelineQueries.fetch(jobID, in: db)
+        }.values(in: database)
+    }
+
     func taskValues() throws -> AsyncValueObservation<JobTaskSnapshot> {
         guard let database else { throw LibraryError.notOpen }
         return ValueObservation.tracking(TaskPartQueries.snapshot).values(in: database)

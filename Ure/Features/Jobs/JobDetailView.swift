@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct JobDetailView: View {
+    @State private var showsTimeline = false
     @Environment(JobState.self) private var jobs
     @Environment(WorkshopEditing.self) private var editing
     @Environment(WatchState.self) private var watches
@@ -17,6 +18,8 @@ struct JobDetailView: View {
                 JobActionEditorView()
             } else if jobs.draft != nil {
                 JobEditorView()
+            } else if let job = jobs.selectedJob, showsTimeline {
+                JobTimelineView(jobID: job.id, onClose: closeTimeline)
             } else if let job = jobs.selectedJob, parts.isPresenting(for: job.id) {
                 PartDetailView(jobID: job.id)
             } else if let job = jobs.selectedJob, tasks.isPresenting(for: job.id) {
@@ -86,6 +89,11 @@ struct JobDetailView: View {
                         }
                     }
                     JobTaskSectionView(jobID: job.id)
+                    Section("Activity") {
+                        Button("Show Activity", action: showTimeline)
+                            .disabled(editing.isSaving)
+                            .accessibilityIdentifier("showJobActivity")
+                    }
                     PartSectionView(jobID: job.id)
                     NoteSectionView(owner: .job(job.id))
                     PhotoSectionView(owner: .job(job.id))
@@ -115,6 +123,7 @@ struct JobDetailView: View {
                     description: Text("Return to the watch to choose another job."))
             }
         }
+        .onChange(of: jobs.selectedID, resetTimeline)
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Button("Back to Watch", systemImage: "chevron.left", action: backToWatch)
@@ -125,6 +134,9 @@ struct JobDetailView: View {
     }
 
     private func backToWatch() { editing.requestNavigation(jobs.close) }
+    private func showTimeline() { editing.requestNavigation { showsTimeline = true } }
+    private func closeTimeline() { showsTimeline = false }
+    private func resetTimeline() { showsTimeline = false }
 
     private func changeStage() { beginAction(.transition) }
     private func changeCondition() { beginAction(.condition) }

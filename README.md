@@ -44,7 +44,13 @@ A watch can have several repair jobs, with at most one open job. **Open Job** re
 
 Use **Change Stage** for Planned, In progress, Waiting, Ready, Completed, or Cancelled. Waiting requires a reason. Completed requires an outcome and accepts optional recommendations. Cancelled requires a reason. Ready means ready for final review. Closing locks operational edits. **Reopen Job** selects an open stage and checks that no other job is open for this watch.
 
-Use **Change Condition** to record Unknown, Running, Running poorly, Stopped, or Disassembled with an optional note. Condition and job stage remain independent. Both forms use Save, Cancel, Command-S, and draft protection. Successful changes retain prior and next values in history. History display follows in W019.
+Use **Change Condition** to record Unknown, Running, Running poorly, Stopped, or Disassembled with an optional note. Condition and job stage remain independent. Both forms use Save, Cancel, Command-S, and draft protection. Successful changes retain prior and next values in history. Use **Show Activity** to read the saved changes.
+
+## Job activity
+
+Use **Show Activity** in a job to read saved changes and job notes together, newest first. Notes use their occurred dates. Editing a note updates its one entry. Equal dates keep a stable order.
+
+Expand **Previous and new values** to read saved reasons, outcomes, milestones, and supplier details. **Open Job**, **Open Watch**, **Open Task**, **Open Part**, and **Open Note** show surviving sources. Removed tasks or parts keep their historical summaries. Closed sources remain readable. This is a repair history, not a complete audit log.
 
 ## Job tasks
 
@@ -76,7 +82,7 @@ Use **Edit Part** to choose Needed, Ordered, Arrived, Installed, or Cancelled. S
 
 Ordering saves a copy of the selected supplier option and an optional order reference. No supplier selection is required. Later supplier edits, selection changes, and link removal leave that copy intact. Correcting Arrived, Installed, or Cancelled back to Ordered retains an existing order snapshot. Moving back to Needed clears the current order details. Previous values remain in history.
 
-Backward corrections, cancellation, and restoring a cancelled part require a reason. Save clears milestone dates that no longer apply. Cancellation keeps the supplier snapshot and order reference for reading. Cancel in the editor discards the draft. A status changed by another saved action requires cancelling and reopening the stale editor. Procurement never changes task status, job stage, or watch condition. History display follows in W019.
+Backward corrections, cancellation, and restoring a cancelled part require a reason. Save clears milestone dates that no longer apply. Cancellation keeps the supplier snapshot and order reference for reading. Cancel in the editor discards the draft. A status changed by another saved action requires cancelling and reopening the stale editor. Procurement never changes task status, job stage, or watch condition. Use **Show Activity** to read the saved changes.
 
 ## Scoped notes
 
@@ -191,6 +197,7 @@ The Release configuration enables optimization and whole-module compilation. The
 - [W014 task ordering and progress verification](docs/planning/task-order-verification.md)
 - [W015 part requirements verification](docs/planning/part-verification.md)
 - [W016 supplier comparison verification](docs/planning/supplier-verification.md)
+- [W019 job activity timeline verification](docs/planning/timeline-verification.md)
 - [Design: brand, app icon, and macOS 27 screen rules](docs/design/README.md)
 
 The user approved the current-platform direction and W002's SQLite/GRDB storage design on 1 October 2026. Shared caliber records and the repair history rule were approved on 2 October 2026. Watch, caliber, intake, stage, and condition forms use explicit Save and Cancel editing. W003, W004, and W005 are merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29), [PR #31](https://github.com/jorgerodrigues/ure/pull/31), and [PR #32](https://github.com/jorgerodrigues/ure/pull/32). W006 is merged in [PR #33](https://github.com/jorgerodrigues/ure/pull/33). W007 is merged in [PR #34](https://github.com/jorgerodrigues/ure/pull/34). W008 is implemented in [PR #35](https://github.com/jorgerodrigues/ure/pull/35). Native UI and device checks are deferred to release acceptance by agreement. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.
