@@ -12,6 +12,15 @@ nonisolated struct LibraryDependencies: Sendable {
     var restoreCheckpoint: @Sendable (RestoreCheckpoint) throws -> Void = { _ in }
     var restoreAvailableCapacity: @Sendable (URL) throws -> Int64 = RestoreFiles.availableCapacity
     var activationCheckpoint: @Sendable (RestoreActivationCheckpoint) throws -> Void = { _ in }
+    var upgradeCheckpoint: @Sendable (LibraryUpgradeCheckpoint) throws -> Void = { _ in }
+}
+
+nonisolated enum LibraryUpgradeCheckpoint: Sendable {
+    case afterRecovery
+    case beforeMigration
+    case afterMigration
+    case beforeSwitch
+    case afterSwitch
 }
 
 nonisolated struct LibraryManifest: Codable, Equatable, Sendable {

@@ -10,6 +10,14 @@ A native Mac app for watch repair and restoration. The current implementation in
 
 Xcode resolves the sole runtime package, [GRDB 7.11.1](https://github.com/groue/GRDB.swift/releases/tag/v7.11.1), through Swift Package Manager. The exact version and resolved revision are committed. Xcode includes the formatter and test frameworks.
 
+## Process recovery verification
+
+Run `make recovery XCODE_EXTRA_FLAGS=SDK_STAT_CACHE_ENABLE=NO` to build the Debug `UreRecoveryHarness` command-line target and run W029's isolated interruption matrix. It requires Python 3 and uses only its standard library. The target compiles the app's shared sources with a separate entry point. It does not start SwiftUI, the app, or UI automation.
+
+Each scenario gets a new library under `.build/recovery-runs/<run-id>/`. The driver injects that location and `URE_TESTING=1`. A worker records the reached checkpoint, then kills its own process with `SIGKILL`. The driver requires that signal and checkpoint before recovery. New worker processes reopen through `LibraryCoordinator`. They compare record counts, stable IDs, saved values, original SHA-256, and exact technical PDF bytes. The retained v10 and v15 SQL fixtures are never regenerated during a run.
+
+The matrix covers imports, new and replacement exports, upgrades, restore staging, pre-restore recovery copies, activation, rollback, and damaged opens. Logs and a passing `summary.json` stay under the run directory for inspection. These are disposable test libraries. Remove the run directory after inspecting a run. This command is separate from the app tests and native acceptance deferred to W032. See the [W029 verification report](docs/planning/process-recovery-verification.md) for the matrix and its limits.
+
 ## Build and run
 
 Open `Ure.xcodeproj`, select the shared **Ure** scheme, and run. Or use:

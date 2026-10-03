@@ -9,10 +9,11 @@ XCODE_EXTRA_FLAGS ?=
 LOCAL_XCODE_FLAGS := $(if $(wildcard Config/Local.xcconfig),-xcconfig "$(CURDIR)/Config/Local.xcconfig")
 XCODE_FLAGS := -project Ure.xcodeproj -scheme Ure -destination 'platform=macOS,arch=arm64' -derivedDataPath "$(DERIVED_DATA)" $(LOCAL_XCODE_FLAGS) $(XCODE_EXTRA_FLAGS)
 
-.PHONY: help build release run test test-ui test-all format lint check
+.PHONY: help build release run test test-ui test-all recovery format lint check
 
 help:
 	@printf '%s\n' 'make build     Unsigned Debug build' 'make release   Unsigned optimized Release build' 'make run       Build with local signing and open Ure' 'make test      Swift Testing unit tests' 'make test-ui   Native keyboard and window tests' 'make test-all  All tests' 'make format    Format Swift sources' 'make lint      Check formatting and unsafe Swift constructs' 'make check     Lint, build, and unit tests'
+	@printf '%s\n' 'make recovery  Run isolated process interruption matrix without launching Ure'
 
 build:
 	xcodebuild $(XCODE_FLAGS) -configuration Debug CODE_SIGNING_ALLOWED=NO build
@@ -36,11 +37,15 @@ test-all:
 	@mkdir -p "$(TEST_ASSETS)"
 	xcodebuild $(XCODE_FLAGS) -configuration Debug -resultBundlePath "$(TEST_RESULT)" test
 
+recovery:
+	xcodebuild -project Ure.xcodeproj -scheme UreRecoveryHarness -destination 'platform=macOS,arch=arm64' -derivedDataPath "$(DERIVED_DATA)" $(LOCAL_XCODE_FLAGS) $(XCODE_EXTRA_FLAGS) -configuration Debug CODE_SIGNING_ALLOWED=NO build
+	python3 RecoveryHarness/run.py "$(DERIVED_DATA)/Build/Products/Debug/UreRecoveryHarness"
+
 format:
-	xcrun swift-format format --in-place --recursive Ure UreTests UreUITests
+	xcrun swift-format format --in-place --recursive Ure UreTests UreUITests RecoveryHarness
 
 lint:
-	xcrun swift-format lint --strict --recursive Ure UreTests UreUITests
+	xcrun swift-format lint --strict --recursive Ure UreTests UreUITests RecoveryHarness
 
 check:
 	$(MAKE) lint
