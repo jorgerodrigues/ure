@@ -64,6 +64,10 @@ Use **Add Part** in a job detail. Enter a description and a positive whole-numbe
 
 Use **Add link** during creation or editing. A complete HTTP or HTTPS URL is enough. A part can have no links or several links. Each saved link has an explicit **Open** action. Saving, loading, and selecting parts do not fetch external content or open the browser. Removing a saved link requires confirmation and takes effect after Save.
 
+Each saved link can also hold a supplier name, listing title, supplier stock code, price and currency, and notes. Adding those details edits the same link. Supplier stock codes stay separate from the manufacturer's reference and retain leading zeros and punctuation. Use **Selected supplier option** in the part editor to choose one option or clear the choice. Keep the other options for comparison. Removing the selected link clears the choice when you save. Cancel keeps the saved links and choice.
+
+Price is optional. Use a non-negative decimal with a point, such as `12.3400`, and a valid currency code, such as `DKK` or `EUR`. The entered digits are stored exactly. A price requires a currency. Lowercase currency input is accepted and saved in uppercase. No totals or conversion are calculated.
+
 Part editing uses **Save**, **Cancel**, **Command-S**, and the shared draft guard. A failed save keeps all draft fields and links. Pending saves block duplicate writes. Closed-job parts remain readable. Reopen the job before adding or editing a part. The service rejects stale saves after closure. Closing a job shows its parts summary and requires a separate explanation for Needed or Ordered parts. Closing preserves their statuses and saves the explanation in history.
 
 ## Scoped notes
@@ -178,6 +182,7 @@ The Release configuration enables optimization and whole-module compilation. The
 - [W013 job task verification](docs/planning/task-verification.md)
 - [W014 task ordering and progress verification](docs/planning/task-order-verification.md)
 - [W015 part requirements verification](docs/planning/part-verification.md)
+- [W016 supplier comparison verification](docs/planning/supplier-verification.md)
 - [Design: brand, app icon, and macOS 27 screen rules](docs/design/README.md)
 
 The user approved the current-platform direction and W002's SQLite/GRDB storage design on 1 October 2026. Shared caliber records and the repair history rule were approved on 2 October 2026. Watch, caliber, intake, stage, and condition forms use explicit Save and Cancel editing. W003, W004, and W005 are merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29), [PR #31](https://github.com/jorgerodrigues/ure/pull/31), and [PR #32](https://github.com/jorgerodrigues/ure/pull/32). W006 is merged in [PR #33](https://github.com/jorgerodrigues/ure/pull/33). W007 is merged in [PR #34](https://github.com/jorgerodrigues/ure/pull/34). W008 is implemented in [PR #35](https://github.com/jorgerodrigues/ure/pull/35). Native UI and device checks are deferred to release acceptance by agreement. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.

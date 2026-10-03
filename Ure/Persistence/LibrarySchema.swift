@@ -394,6 +394,36 @@ nonisolated enum LibrarySchema {
             try db.create(
                 index: "partLink_partID_position", on: "partLink", columns: ["partID", "position"])
         }
+        migrator.registerMigration("v14-supplier-options", foreignKeyChecks: .immediate) { db in
+            try db.alter(table: "partLink") { table in
+                table.add(column: "title", .text)
+                table.add(column: "supplierName", .text)
+                table.add(column: "supplierStockCode", .text)
+                table.add(column: "currency", .text)
+                    .check(
+                        sql:
+                            "currency IS NULL OR (length(currency) = 3 AND currency NOT GLOB '*[^A-Z]*')"
+                    )
+                table.add(column: "price", .text)
+                    .check(
+                        sql: """
+                            price IS NULL OR (
+                                typeof(price) = 'text' AND length(price) > 0 AND
+                                price NOT GLOB '*[^0-9.]*' AND price GLOB '[0-9]*' AND
+                                substr(price, -1) GLOB '[0-9]' AND
+                                length(price) - length(replace(price, '.', '')) <= 1 AND
+                                currency IS NOT NULL
+                            )
+                            """)
+                table.add(column: "notes", .text)
+                table.add(column: "isSelected", .boolean).notNull().defaults(to: false)
+                    .check(sql: "isSelected IN (0, 1)")
+            }
+            try db.execute(
+                sql: """
+                    CREATE UNIQUE INDEX partLink_selected ON partLink(partID) WHERE isSelected = 1
+                    """)
+        }
         return migrator
     }
 }

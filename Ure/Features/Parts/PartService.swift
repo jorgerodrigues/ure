@@ -46,18 +46,31 @@ nonisolated struct PartService: Sendable {
                 let saved = try PartLink.fetchOne(db, key: link.id.uuidString)
                 if let saved, saved.partID != record.id { throw PartError.linkMismatch }
                 let url = link.url.trimmingCharacters(in: .whitespacesAndNewlines)
-                links.append(
-                    PartLink(
-                        id: link.id, partID: record.id, position: position, url: url,
-                        createdAt: saved?.createdAt ?? now,
-                        updatedAt: saved?.url == url && saved?.position == position
-                            ? saved?.updatedAt ?? now : now))
+                var candidate = PartLink(
+                    id: link.id, partID: record.id, position: position, url: url,
+                    title: JobDraft.optional(link.title),
+                    supplierName: JobDraft.optional(link.supplierName),
+                    supplierStockCode: JobDraft.optional(link.supplierStockCode),
+                    price: JobDraft.optional(link.price),
+                    currency: JobDraft.optional(link.currency)?.uppercased(),
+                    notes: JobDraft.optional(link.notes),
+                    isSelected: draft.selectedLinkID == link.id,
+                    createdAt: saved?.createdAt ?? now, updatedAt: saved?.updatedAt ?? now)
+                if let saved, saved != candidate {
+                    candidate.updatedAt = now
+                }
+                links.append(candidate)
             }
             let result = PartRequirement(record: record, links: links)
             if let existing, PartDraft(part: existing) == PartDraft(part: result) {
                 return existing
             }
             if existing != nil { try record.update(db) } else { try record.insert(db) }
+            if existing?.selectedLink?.id != draft.selectedLinkID {
+                try db.execute(
+                    sql: "UPDATE partLink SET isSelected = 0 WHERE partID = ? AND isSelected = 1",
+                    arguments: [record.id.uuidString])
+            }
             for link in existing?.links ?? [] where !seen.contains(link.id) {
                 try link.delete(db)
             }

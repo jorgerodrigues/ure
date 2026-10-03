@@ -248,6 +248,8 @@ nonisolated enum PartMigrationFixture {
         try db.drop(table: "partRequirement")
         try db.execute(sql: "ALTER TABLE job DROP COLUMN unfinishedPartsReason")
         try db.execute(
-            sql: "DELETE FROM grdb_migrations WHERE identifier = 'v13-part-requirements'")
+            sql:
+                "DELETE FROM grdb_migrations WHERE identifier IN ('v13-part-requirements', 'v14-supplier-options')"
+        )
     }
 }

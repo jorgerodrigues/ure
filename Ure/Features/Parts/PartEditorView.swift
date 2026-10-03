@@ -34,6 +34,7 @@ struct PartEditorView: View {
             }
             Section("Saved links") {
                 ForEach(parts.draft?.links ?? []) { link in PartLinkEditorRow(link: link) }
+                PartFieldError(message: parts.fieldErrors[.selectedLink])
                 Button("Add link", systemImage: "plus", action: parts.addLink)
                     .accessibilityIdentifier("addPartLink")
                 Text("A URL is enough. Links open only from the saved part's Open action.")
@@ -65,7 +66,9 @@ struct PartEditorView: View {
             Button("Remove", role: .destructive, action: parts.confirmRemoveLink)
             Button("Cancel", role: .cancel, action: cancelRemoval)
         } message: {
-            Text("The link will be removed when you save the part.")
+            Text(
+                "The link and its supplier details will be removed when you save. If selected, the supplier choice will also be cleared."
+            )
         }
         .onAppear(perform: focusDescription)
     }
@@ -97,14 +100,45 @@ private struct PartLinkEditorRow: View {
 
     var body: some View {
         VStack(alignment: .leading) {
+            Toggle("Selected supplier option", isOn: selected)
+                .toggleStyle(.checkbox)
+                .accessibilityIdentifier("selectPartLink-\(link.id.uuidString)")
+            TextField("Supplier name (optional)", text: field(\.supplierName))
+                .accessibilityIdentifier("partLinkSupplier-\(link.id.uuidString)")
+            TextField("Listing title (optional)", text: field(\.title))
+                .accessibilityIdentifier("partLinkTitle-\(link.id.uuidString)")
+            TextField("Supplier stock code (optional)", text: field(\.supplierStockCode))
+                .accessibilityIdentifier("partLinkStockCode-\(link.id.uuidString)")
             HStack {
                 TextField("HTTP or HTTPS URL", text: url)
                     .accessibilityIdentifier("partLinkURL-\(link.id.uuidString)")
                 Button("Remove link", systemImage: "minus.circle", action: remove)
                     .labelStyle(.iconOnly)
+                    .accessibilityLabel("Remove link \(link.url)")
+                    .accessibilityIdentifier("removePartLink-\(link.id.uuidString)")
             }
             PartFieldError(message: parts.fieldErrors[.link(link.id)])
+            TextField("Price (optional)", text: field(\.price))
+                .accessibilityIdentifier("partLinkPrice-\(link.id.uuidString)")
+            PartFieldError(message: parts.fieldErrors[.price(link.id)])
+            TextField("Currency code (optional)", text: field(\.currency))
+                .accessibilityIdentifier("partLinkCurrency-\(link.id.uuidString)")
+            PartFieldError(message: parts.fieldErrors[.currency(link.id)])
+            Text("Use a decimal point, for example 12.3400. A price needs a currency, such as DKK.")
+                .font(.caption).foregroundStyle(.secondary)
+            TextField("Notes (optional)", text: field(\.notes), axis: .vertical)
+                .accessibilityIdentifier("partLinkNotes-\(link.id.uuidString)")
         }
+    }
+    private var selected: Binding<Bool> { Binding(get: isSelected, set: select) }
+    private func isSelected() -> Bool { parts.draft?.selectedLinkID == link.id }
+    private func select(_ value: Bool) {
+        if value { parts.selectLink(link.id) } else { parts.selectLink(nil) }
+    }
+    private func field(_ keyPath: WritableKeyPath<PartLinkDraft, String>) -> Binding<String> {
+        Binding(
+            get: { link[keyPath: keyPath] },
+            set: { parts.setLinkField($0, id: link.id, keyPath: keyPath) })
     }
     private var url: Binding<String> { Binding(get: { link.url }, set: setURL) }
     private func setURL(_ value: String) { parts.setLinkURL(value, id: link.id) }

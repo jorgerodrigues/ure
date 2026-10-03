@@ -35,6 +35,8 @@ struct PartDetailView: View {
                     Section("Saved links") {
                         if part.links.isEmpty {
                             Text("No links saved.").foregroundStyle(.secondary)
+                        } else if part.selectedLink == nil {
+                            Text("No supplier option selected.").foregroundStyle(.secondary)
                         }
                         ForEach(part.links) { link in PartLinkRow(link: link) }
                         if let error = parts.openError {
@@ -72,11 +74,28 @@ private struct PartLinkRow: View {
     @Environment(PartState.self) private var parts
     let link: PartLink
     var body: some View {
-        HStack {
-            Text(link.url).frame(maxWidth: .infinity, alignment: .leading)
-            Button("Open", action: open)
-                .accessibilityLabel("Open \(link.url) in browser")
-                .accessibilityIdentifier("openPartLink-\(link.id.uuidString)")
+        VStack(alignment: .leading) {
+            if link.isSelected {
+                Label("Selected supplier option", systemImage: "checkmark.circle")
+                    .accessibilityIdentifier("selectedPartLink-\(link.id.uuidString)")
+            }
+            if let supplier = link.supplierName { LabeledContent("Supplier", value: supplier) }
+            if let title = link.title { LabeledContent("Listing", value: title) }
+            if let code = link.supplierStockCode {
+                LabeledContent("Supplier stock code", value: code)
+            }
+            if let price = link.price, let currency = link.currency {
+                LabeledContent("Price", value: "\(price) \(currency)")
+            } else if let currency = link.currency {
+                LabeledContent("Currency", value: currency)
+            }
+            HStack {
+                Text(link.url).frame(maxWidth: .infinity, alignment: .leading)
+                Button("Open", action: open)
+                    .accessibilityLabel("Open \(link.url) in browser")
+                    .accessibilityIdentifier("openPartLink-\(link.id.uuidString)")
+            }
+            if let notes = link.notes { LabeledContent("Notes", value: notes) }
         }
     }
     private func open() { parts.openLink(link) }
