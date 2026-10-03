@@ -29,8 +29,10 @@ final class NoteState {
     var canSave: Bool { draft != nil && !isSaving }
     var isNavigationPending: Bool { pendingNavigation != nil }
 
-    func records(for owner: NoteOwner) -> [NoteRecord] {
-        notes.filter { $0.belongs(to: owner) }.sorted { lhs, rhs in
+    func records(for owner: NoteOwner, matching query: String = "") -> [NoteRecord] {
+        notes.filter {
+            $0.belongs(to: owner) && SearchKey.matches([$0.title, $0.body], query: query)
+        }.sorted { lhs, rhs in
             if lhs.occurredAt != rhs.occurredAt { return lhs.occurredAt > rhs.occurredAt }
             return lhs.id.uuidString < rhs.id.uuidString
         }

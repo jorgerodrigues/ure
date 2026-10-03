@@ -5,6 +5,7 @@ nonisolated struct OverviewPart: Equatable, Identifiable, Sendable {
     let part: PartRecord
     let job: JobRecord
     let watch: WatchRecord
+    let searchKey: String
 
     var id: UUID { part.id }
 }
@@ -14,11 +15,17 @@ nonisolated enum PartsOverviewQueries {
         "SELECT id FROM job WHERE stage IN ('Planned', 'In progress', 'Waiting', 'Ready')"
 
     static func fetch(_ db: Database) throws -> [OverviewPart] {
-        let parts = try PartRecord.fetchAll(
+        let rows = try Row.fetchAll(
             db,
             sql: """
-                SELECT * FROM partRequirement WHERE jobID IN (\(openJobs))
-                ORDER BY updatedAt DESC, id
+                SELECT p.*, p.searchKey || char(10) || coalesce(links.keys, '') AS combinedSearchKey
+                FROM partRequirement p
+                LEFT JOIN (
+                    SELECT partID, group_concat(searchKey, char(10)) AS keys
+                    FROM partLink GROUP BY partID
+                ) links ON links.partID = p.id
+                WHERE jobID IN (\(openJobs))
+                ORDER BY p.updatedAt DESC, p.id
                 """)
         let jobs = try JobRecord.fetchAll(db, sql: "SELECT * FROM job WHERE id IN (\(openJobs))")
         let watches = try WatchRecord.fetchAll(
@@ -28,11 +35,13 @@ nonisolated enum PartsOverviewQueries {
         )
         let jobsByID = Dictionary(uniqueKeysWithValues: jobs.map { ($0.id, $0) })
         let watchesByID = Dictionary(uniqueKeysWithValues: watches.map { ($0.id, $0) })
-        return try parts.map { part in
+        return try rows.map { row in
+            let part = try PartRecord(row: row)
             guard let job = jobsByID[part.jobID], let watch = watchesByID[job.watchID] else {
                 throw PartError.missingRecord
             }
-            return OverviewPart(part: part, job: job, watch: watch)
+            return OverviewPart(
+                part: part, job: job, watch: watch, searchKey: row["combinedSearchKey"])
         }
     }
 }

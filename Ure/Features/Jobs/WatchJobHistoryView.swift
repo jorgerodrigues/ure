@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct WatchJobHistoryView: View {
+    @State private var searchText = ""
     @Environment(JobState.self) private var jobs
     @Environment(WorkshopEditing.self) private var editing
     let watch: WatchRecord
@@ -16,16 +17,22 @@ struct WatchJobHistoryView: View {
                 Button(actionTitle, action: startJob)
                     .accessibilityIdentifier("startWatchJob")
                     .disabled(editing.isSaving)
-                if jobs.history(for: watch.id).isEmpty {
-                    Text("No repair jobs yet.")
+                TextField("Filter job titles", text: $searchText)
+                    .accessibilityIdentifier("jobsLocalSearch")
+                if filteredJobs.isEmpty {
+                    Text(searchText.isEmpty ? "No repair jobs yet." : "No matching jobs.")
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(jobs.history(for: watch.id)) { job in
+                    ForEach(filteredJobs) { job in
                         WatchJobLink(job: job)
                     }
                 }
             }
         }
+    }
+
+    private var filteredJobs: [JobRecord] {
+        jobs.history(for: watch.id).filter { SearchKey.matches([$0.title], query: searchText) }
     }
 
     private var actionTitle: String {

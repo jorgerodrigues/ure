@@ -282,6 +282,7 @@ nonisolated enum TaskPartFixture {
 
 nonisolated enum TaskPartMigrationFixture {
     static func removeLinks(in db: Database) throws {
+        try SearchMigrationFixture.removeSearch(in: db)
         try db.drop(table: "taskPart")
         try db.execute(sql: "DELETE FROM grdb_migrations WHERE identifier = 'v16-task-parts'")
         try db.execute(

@@ -486,6 +486,23 @@ nonisolated enum LibrarySchema {
             }
             try db.create(index: "taskPart_partID", on: "taskPart", columns: ["partID"])
         }
+        migrator.registerMigration("v17-search", foreignKeyChecks: .immediate) { db in
+            for table in SearchKey.Table.allCases {
+                try db.alter(table: table.rawValue) { definition in
+                    definition.add(column: "searchKey", .text).notNull().defaults(to: "")
+                }
+                try db.create(
+                    index: "\(table.rawValue)_searchKey", on: table.rawValue,
+                    columns: ["searchKey"])
+                try SearchKey.backfill(table, in: db)
+            }
+            for table in ["watch", "caliber", "job"] {
+                try db.alter(table: table) { definition in
+                    definition.add(column: "archivedAt", .double)
+                }
+                try db.create(index: "\(table)_archivedAt", on: table, columns: ["archivedAt"])
+            }
+        }
         return migrator
     }
 }

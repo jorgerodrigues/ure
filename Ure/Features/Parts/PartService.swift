@@ -89,7 +89,11 @@ nonisolated struct PartService: Sendable {
             for link in existing?.links ?? [] where !seen.contains(link.id) {
                 try link.delete(db)
             }
-            for link in links { try link.save(db) }
+            for link in links {
+                try link.save(db)
+                try SearchKey.refresh(link.id, table: .partLink, in: db)
+            }
+            try SearchKey.refresh(record.id, table: .partRequirement, in: db)
             if let existing {
                 if existing.record.status != record.status
                     || existing.record.orderReference != record.orderReference

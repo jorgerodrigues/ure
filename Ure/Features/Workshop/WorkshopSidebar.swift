@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct WorkshopSidebar: View {
+    @Environment(SearchState.self) private var search
     @Environment(WorkshopNavigation.self) private var navigation
     @Environment(WorkshopEditing.self) private var editing
 
@@ -21,7 +22,9 @@ struct WorkshopSidebar: View {
     private func currentSection() -> WorkshopSection? { navigation.selection }
 
     private func selectSection(_ section: WorkshopSection?) {
-        guard section != navigation.selection else { return }
-        editing.requestNavigation { navigation.selection = section }
+        guard search.isPresented || section != navigation.selection else { return }
+        editing.requestNavigation {
+            search.close(); navigation.selection = section
+        }
     }
 }

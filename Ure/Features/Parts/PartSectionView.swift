@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct PartSectionView: View {
+    @State private var searchText = ""
     @Environment(PartState.self) private var parts
     @Environment(JobState.self) private var jobs
     @Environment(WorkshopEditing.self) private var editing
@@ -17,10 +18,15 @@ struct PartSectionView: View {
                 Button("Add Part", systemImage: "plus", action: create)
                     .disabled(editing.isSaving || !parts.canWrite(jobID, jobs: jobs))
                     .accessibilityIdentifier("addPart")
-                if parts.records(for: jobID).isEmpty {
-                    Text("No parts required.").foregroundStyle(.secondary)
+                TextField("Filter parts", text: $searchText)
+                    .accessibilityIdentifier("partsLocalSearch")
+                if parts.records(for: jobID, matching: searchText).isEmpty {
+                    Text(searchText.isEmpty ? "No parts required." : "No matching parts.")
+                        .foregroundStyle(.secondary)
                 } else {
-                    ForEach(parts.records(for: jobID)) { part in PartRow(part: part) }
+                    ForEach(parts.records(for: jobID, matching: searchText)) { part in
+                        PartRow(part: part)
+                    }
                 }
             }
         }

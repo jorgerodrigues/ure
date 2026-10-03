@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct DocumentSectionView: View {
+    @State private var searchText = ""
     @Environment(DocumentState.self) private var documents
     @Environment(JobState.self) private var jobs
     @Environment(WorkshopEditing.self) private var editing
@@ -38,7 +39,13 @@ struct DocumentSectionView: View {
                         DocumentImportResultView(result: result)
                     }
                 }
-                ForEach(documents.records(for: owner)) { document in
+                TextField("Filter PDFs by title or caption", text: $searchText)
+                    .accessibilityIdentifier("documentsLocalSearch")
+                if documents.records(for: owner, matching: searchText).isEmpty {
+                    Text(searchText.isEmpty ? "No PDFs yet." : "No matching PDFs.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(documents.records(for: owner, matching: searchText)) { document in
                     DocumentRow(document: document, owner: owner)
                 }
             }

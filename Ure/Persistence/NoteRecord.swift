@@ -71,6 +71,12 @@ nonisolated enum NoteQueries {
             db, sql: "SELECT * FROM note WHERE id = ?", arguments: [id.uuidString])
     }
 
-    static func insert(_ record: NoteRecord, in db: Database) throws { try record.insert(db) }
-    static func update(_ record: NoteRecord, in db: Database) throws { try record.update(db) }
+    static func insert(_ record: NoteRecord, in db: Database) throws {
+        try record.insert(db)
+        try SearchKey.refresh(record.id, table: .note, in: db)
+    }
+    static func update(_ record: NoteRecord, in db: Database) throws {
+        try record.update(db)
+        try SearchKey.refresh(record.id, table: .note, in: db)
+    }
 }

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct NoteSectionView: View {
+    @State private var searchText = ""
     @Environment(NoteState.self) private var notes
     @Environment(JobState.self) private var jobs
     @Environment(WorkshopEditing.self) private var editing
@@ -17,11 +18,16 @@ struct NoteSectionView: View {
                 Button("Add Note", systemImage: "plus", action: create)
                     .disabled(editing.isSaving || !notes.canWrite(owner, jobs: jobs))
                     .accessibilityIdentifier("addNote")
-                if notes.records(for: owner).isEmpty {
-                    Text("No \(owner.scope.lowercased()) notes yet.")
-                        .foregroundStyle(.secondary)
+                TextField("Filter notes", text: $searchText)
+                    .accessibilityIdentifier("notesLocalSearch")
+                if notes.records(for: owner, matching: searchText).isEmpty {
+                    Text(
+                        searchText.isEmpty
+                            ? "No \(owner.scope.lowercased()) notes yet." : "No matching notes."
+                    )
+                    .foregroundStyle(.secondary)
                 } else {
-                    ForEach(notes.records(for: owner)) { note in
+                    ForEach(notes.records(for: owner, matching: searchText)) { note in
                         NoteRow(note: note, owner: owner)
                     }
                 }

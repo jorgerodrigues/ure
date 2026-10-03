@@ -79,6 +79,12 @@ nonisolated enum LibraryItemQueries {
             db, sql: "SELECT * FROM libraryItem WHERE id = ?", arguments: [id.uuidString])
     }
 
-    static func insert(_ record: LibraryItem, in db: Database) throws { try record.insert(db) }
-    static func update(_ record: LibraryItem, in db: Database) throws { try record.update(db) }
+    static func insert(_ record: LibraryItem, in db: Database) throws {
+        try record.insert(db)
+        try SearchKey.refresh(record.id, table: .libraryItem, in: db)
+    }
+    static func update(_ record: LibraryItem, in db: Database) throws {
+        try record.update(db)
+        try SearchKey.refresh(record.id, table: .libraryItem, in: db)
+    }
 }

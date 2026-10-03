@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ReferenceSectionView: View {
+    @State private var searchText = ""
     @Environment(ReferenceState.self) private var references
     @Environment(JobState.self) private var jobs
     @Environment(WorkshopEditing.self) private var editing
@@ -17,11 +18,17 @@ struct ReferenceSectionView: View {
                 Button("Add Link", systemImage: "plus", action: create)
                     .disabled(editing.isSaving || !references.canWrite(owner, jobs: jobs))
                     .accessibilityIdentifier("addReference")
-                if references.records(for: owner).isEmpty {
-                    Text("No \(owner.scope.lowercased()) external links yet.")
-                        .foregroundStyle(.secondary)
+                TextField("Filter links", text: $searchText)
+                    .accessibilityIdentifier("referencesLocalSearch")
+                if references.records(for: owner, matching: searchText).isEmpty {
+                    Text(
+                        searchText.isEmpty
+                            ? "No \(owner.scope.lowercased()) external links yet."
+                            : "No matching links."
+                    )
+                    .foregroundStyle(.secondary)
                 } else {
-                    ForEach(references.records(for: owner)) { item in
+                    ForEach(references.records(for: owner, matching: searchText)) { item in
                         ReferenceRow(item: item, owner: owner)
                     }
                 }

@@ -30,6 +30,14 @@ Rows within each group put the latest saved job, task, or part change first. Wat
 
 Select a row to open that exact watch and job in Workshop. The existing editors, Command-S, draft protection, activity navigation, and pinned reference tools work there. Filters retain the selected detail and show a message when its row is excluded. Closing removes the job from the open list and keeps its readable detail and watch history. Reopening returns it to the applicable group. Loading failures show an error and Retry.
 
+## Search
+
+Use **Search Library** in the toolbar or **Shift-Command-F** for global search. Results group watches, calibers, jobs, notes, parts, links, photos, and PDFs. Each result names its watch, job, or shared caliber. Selecting it opens the exact saved record through the existing draft guard. Closed jobs remain searchable. **Include Archived** also searches archived watches, jobs, calibers, and their owned records. Archive controls follow in W023.
+
+Search matches saved watch identity, caliber designation, job titles, note titles and bodies, part descriptions, manufacturer references, supplier stock codes, and library item titles and captions. It preserves leading zeros and punctuation. Unicode case matching uses the same rule in every local filter. SQL characters such as `%`, `_`, and quotes are literal search text. PDF contents and text within images are not indexed.
+
+The normal Watches, Calibers, Workshop, and Parts lists have local search. Job history, notes, parts, links, photos, and PDFs also have local text filters. Photo text combines with the stage filter. Part text includes supplier options and the saved order-time stock code. Filtering keeps an already open detail readable.
+
 ## Parts overview
 
 Parts shows requirements from open jobs in every procurement status. Each row names its watch, job, stage, manufacturer reference, quantity, and status. The most recently saved parts appear first. Filter by Needed, Ordered, Arrived, Installed, or Cancelled. Text search matches the part description, manufacturer reference, watch identity, or job title. Text and status filters combine.

@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 struct WorkshopView: View {
+    @Environment(SearchState.self) private var search
     @Environment(WorkshopNavigation.self) private var navigation
     @Environment(WatchState.self) private var watches
     @Environment(CaliberState.self) private var calibers
@@ -27,7 +28,9 @@ struct WorkshopView: View {
                 .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
         } content: {
             Group {
-                if navigation.selectedSection == .workshop {
+                if search.isPresented {
+                    SearchView()
+                } else if navigation.selectedSection == .workshop {
                     WorkshopOverviewView()
                 } else if navigation.selectedSection == .watches {
                     WatchListView()
@@ -86,6 +89,10 @@ struct WorkshopView: View {
             perform: revalidateReference
         )
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Search Library", systemImage: "magnifyingglass", action: search.present)
+                    .accessibilityIdentifier("searchLibrary")
+            }.visibilityPriority(.high)
             if hasActiveJob {
                 ToolbarItemGroup(placement: .primaryAction) {
                     BenchPinMenu()
