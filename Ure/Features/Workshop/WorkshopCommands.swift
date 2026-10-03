@@ -74,6 +74,7 @@ struct WorkshopCommands: Commands {
     private var canSave: Bool {
         guard allowsEditing == true else { return false }
         if editing.isSaving { return false }
+        if editing.parts.draft != nil { return editing.parts.canSave(jobs: editing.jobs) }
         if editing.tasks.draft != nil { return editing.tasks.canSave(jobs: editing.jobs) }
         if editing.documents.draft != nil { return editing.documents.canSave(jobs: editing.jobs) }
         if editing.photos.draft != nil { return editing.photos.canSave(jobs: editing.jobs) }
@@ -90,6 +91,10 @@ struct WorkshopCommands: Commands {
 
     private func save() {
         guard allowsEditing == true, canSave else { return }
+        if editing.parts.draft != nil {
+            editing.parts.saveCommand()
+            return
+        }
         if editing.tasks.draft != nil {
             editing.tasks.saveCommand()
             return

@@ -185,6 +185,7 @@ nonisolated struct JobTaskOrderingTests {
         let records = try await coordinator.read(JobTaskQueries.fetchAll)
         let events = try await coordinator.read(ActivityQueries.fetchAll)
         try await coordinator.mutate { db, _, _ in
+            try PartMigrationFixture.removeParts(in: db)
             try db.drop(index: "jobTask_jobID_position")
             try db.execute(sql: "ALTER TABLE jobTask DROP COLUMN position")
             try db.execute(sql: "DELETE FROM grdb_migrations WHERE identifier = 'v12-task-order'")

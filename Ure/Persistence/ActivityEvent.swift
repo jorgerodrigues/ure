@@ -17,6 +17,7 @@ nonisolated struct JobStageValue: Codable, Equatable, Sendable {
     let completedAt: Date?
     let cancelledAt: Date?
     let unfinishedTasksReason: String?
+    let unfinishedPartsReason: String?
 
     init(job: JobRecord) {
         stage = job.stage
@@ -28,6 +29,7 @@ nonisolated struct JobStageValue: Codable, Equatable, Sendable {
         completedAt = job.completedAt
         cancelledAt = job.cancelledAt
         unfinishedTasksReason = job.unfinishedTasksReason
+        unfinishedPartsReason = job.unfinishedPartsReason
     }
 }
 

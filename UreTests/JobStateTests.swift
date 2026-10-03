@@ -84,7 +84,8 @@ struct JobStateTests {
             references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
             photos: PhotoState(service: PhotoService(coordinator: coordinator)),
             documents: DocumentState(service: DocumentService(coordinator: coordinator)),
-            tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)))
+            tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
+            parts: PartState(service: PartService(coordinator: coordinator)))
         state.start(for: watch.id)
         state.draft?.title = "Keep this intake"
         var navigated = false

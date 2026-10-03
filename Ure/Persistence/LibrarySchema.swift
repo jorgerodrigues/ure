@@ -355,6 +355,45 @@ nonisolated enum LibrarySchema {
             try db.create(
                 index: "jobTask_jobID_position", on: "jobTask", columns: ["jobID", "position"])
         }
+        migrator.registerMigration("v13-part-requirements", foreignKeyChecks: .immediate) { db in
+            try db.alter(table: "job") { table in
+                table.add(column: "unfinishedPartsReason", .text)
+            }
+            try db.create(table: "partRequirement") { table in
+                table.column("id", .text).primaryKey()
+                table.column("jobID", .text).notNull().references("job", onDelete: .restrict)
+                table.column("description", .text).notNull()
+                    .check(sql: "length(trim(description)) > 0")
+                table.column("quantity", .integer).notNull()
+                    .check(sql: "typeof(quantity) = 'integer' AND quantity > 0")
+                table.column("manufacturerReference", .text)
+                table.column("compatibility", .text).notNull()
+                    .check(sql: "compatibility IN ('Unchecked', 'Confirmed', 'Unsuitable')")
+                table.column("compatibilityNote", .text)
+                table.check(
+                    sql: """
+                        compatibility != 'Confirmed' OR
+                        (compatibilityNote IS NOT NULL AND length(trim(compatibilityNote)) > 0)
+                        """)
+                table.column("status", .text).notNull()
+                    .check(
+                        sql: "status IN ('Needed', 'Ordered', 'Arrived', 'Installed', 'Cancelled')")
+                table.column("createdAt", .double).notNull()
+                table.column("updatedAt", .double).notNull()
+            }
+            try db.create(index: "partRequirement_jobID", on: "partRequirement", columns: ["jobID"])
+            try db.create(table: "partLink") { table in
+                table.column("id", .text).primaryKey()
+                table.column("partID", .text).notNull().references(
+                    "partRequirement", onDelete: .restrict)
+                table.column("position", .integer).notNull().check { $0 >= 0 }
+                table.column("url", .text).notNull().check(sql: "length(trim(url)) > 0")
+                table.column("createdAt", .double).notNull()
+                table.column("updatedAt", .double).notNull()
+            }
+            try db.create(
+                index: "partLink_partID_position", on: "partLink", columns: ["partID", "position"])
+        }
         return migrator
     }
 }

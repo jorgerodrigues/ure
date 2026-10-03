@@ -40,7 +40,7 @@ Use **Start Job** in a watch's repair history. Only a job title is required. Rep
 
 Use **Edit Intake** to correct an open job's intake, including its identity snapshot. Those corrections apply to that job only. Job editing uses Save, Cancel, Command-S, and the existing draft protection. A failed write preserves the draft. Cancelling a new intake creates no history entry.
 
-A watch can have several repair jobs, with at most one open job. **Open Job** returns to that existing job. The database also enforces the rule when save requests compete. The watch's history opens earlier jobs for reading. **Back to Watch** returns to its identity and history. Job notes and tasks are available in the job detail. Parts follow in their own issues.
+A watch can have several repair jobs, with at most one open job. **Open Job** returns to that existing job. The database also enforces the rule when save requests compete. The watch's history opens earlier jobs for reading. **Back to Watch** returns to its identity and history. Job notes, tasks, and parts are available in the job detail.
 
 Use **Change Stage** for Planned, In progress, Waiting, Ready, Completed, or Cancelled. Waiting requires a reason. Completed requires an outcome and accepts optional recommendations. Cancelled requires a reason. Ready means ready for final review. Closing locks operational edits. **Reopen Job** selects an open stage and checks that no other job is open for this watch.
 
@@ -57,6 +57,14 @@ Task completion and reopening save history in the same transaction as the task c
 Tasks keep their saved bench order. New tasks go at the end. Drag a row before another row, or drop below the list to move it to the end. The row menu and task detail offer **Move up** and **Move down**. In a saved task detail, **Option-Command-Up Arrow** and **Option-Command-Down Arrow** run the same actions from the Task menu. Optional group labels stay visible without changing the saved order. Failed moves keep the previous order. Closed jobs disable ordering, and the service rejects stale moves after closure.
 
 The job header shows Done divided by all non-Skipped tasks, with both counts and a whole percentage. The percentage rounds down, so unfinished work cannot display 100 percent. Skipped tasks have a separate count. Empty and all-skipped lists show **No tasks planned**. Adding or reopening a task updates progress after Save succeeds. Closing a job keeps the saved task statuses and can leave progress below 100 percent. Part links follow in W018.
+
+## Required parts
+
+Use **Add Part** in a job detail. Enter a description and a positive whole-number quantity, default 1. Track each separate unit or lot with its own requirement. Manufacturer reference is optional text and keeps leading zeros and punctuation. Compatibility is Unchecked, Confirmed, or Unsuitable. Confirmed requires an evidence note. New parts start Needed. Procurement actions follow in W017.
+
+Use **Add link** during creation or editing. A complete HTTP or HTTPS URL is enough. A part can have no links or several links. Each saved link has an explicit **Open** action. Saving, loading, and selecting parts do not fetch external content or open the browser. Removing a saved link requires confirmation and takes effect after Save.
+
+Part editing uses **Save**, **Cancel**, **Command-S**, and the shared draft guard. A failed save keeps all draft fields and links. Pending saves block duplicate writes. Closed-job parts remain readable. Reopen the job before adding or editing a part. The service rejects stale saves after closure. Closing a job shows its parts summary and requires a separate explanation for Needed or Ordered parts. Closing preserves their statuses and saves the explanation in history.
 
 ## Scoped notes
 
@@ -169,6 +177,7 @@ The Release configuration enables optimization and whole-module compilation. The
 - [W011 technical PDF verification](docs/planning/document-verification.md)
 - [W013 job task verification](docs/planning/task-verification.md)
 - [W014 task ordering and progress verification](docs/planning/task-order-verification.md)
+- [W015 part requirements verification](docs/planning/part-verification.md)
 - [Design: brand, app icon, and macOS 27 screen rules](docs/design/README.md)
 
 The user approved the current-platform direction and W002's SQLite/GRDB storage design on 1 October 2026. Shared caliber records and the repair history rule were approved on 2 October 2026. Watch, caliber, intake, stage, and condition forms use explicit Save and Cancel editing. W003, W004, and W005 are merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29), [PR #31](https://github.com/jorgerodrigues/ure/pull/31), and [PR #32](https://github.com/jorgerodrigues/ure/pull/32). W006 is merged in [PR #33](https://github.com/jorgerodrigues/ure/pull/33). W007 is merged in [PR #34](https://github.com/jorgerodrigues/ure/pull/34). W008 is implemented in [PR #35](https://github.com/jorgerodrigues/ure/pull/35). Native UI and device checks are deferred to release acceptance by agreement. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.

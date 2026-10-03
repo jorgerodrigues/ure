@@ -10,6 +10,7 @@ struct UreApp: App {
     @State private var jobs: JobState
     @State private var notes: NoteState
     @State private var tasks: JobTaskState
+    @State private var parts: PartState
     @State private var references: ReferenceState
     @State private var photos: PhotoState
     @State private var documents: DocumentState
@@ -31,19 +32,21 @@ struct UreApp: App {
         let calibers = CaliberState(service: CaliberService(coordinator: coordinator))
         let jobs = JobState(service: JobService(coordinator: coordinator))
         let tasks = JobTaskState(service: JobTaskService(coordinator: coordinator))
+        let parts = PartState(service: PartService(coordinator: coordinator))
         let notes = NoteState(service: NoteService(coordinator: coordinator))
         let references = ReferenceState(service: ReferenceService(coordinator: coordinator))
         let photos = PhotoState(service: PhotoService(coordinator: coordinator))
         let documents = DocumentState(service: DocumentService(coordinator: coordinator))
         let editing = WorkshopEditing(
             watches: watches, calibers: calibers, jobs: jobs, notes: notes, references: references,
-            photos: photos, documents: documents, tasks: tasks)
+            photos: photos, documents: documents, tasks: tasks, parts: parts)
         _library = State(initialValue: LibraryState(coordinator: coordinator))
         _watches = State(initialValue: watches)
         _calibers = State(initialValue: calibers)
         _jobs = State(initialValue: jobs)
         _notes = State(initialValue: notes)
         _tasks = State(initialValue: tasks)
+        _parts = State(initialValue: parts)
         _references = State(initialValue: references)
         _photos = State(initialValue: photos)
         _documents = State(initialValue: documents)
@@ -65,6 +68,7 @@ struct UreApp: App {
                 .environment(jobs)
                 .environment(notes)
                 .environment(tasks)
+                .environment(parts)
                 .environment(references)
                 .environment(photos)
                 .environment(documents)

@@ -167,7 +167,8 @@ struct DocumentStateTests {
             references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
             photos: PhotoState(service: PhotoService(coordinator: coordinator)),
             documents: documents,
-            tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)))
+            tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
+            parts: PartState(service: PartService(coordinator: coordinator)))
     }
 
     private func waitUntil(_ condition: () -> Bool) async throws {

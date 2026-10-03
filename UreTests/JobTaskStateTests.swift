@@ -208,6 +208,10 @@ struct JobTaskStateTests {
         let taskObservation = Task { await tasks.observe() }
         defer { taskObservation.cancel() }
         try await waitUntil { !tasks.isLoading && tasks.loadError == nil }
+        #expect(!editing.canSaveJob)
+        let partObservation = Task { await editing.parts.observe() }
+        defer { partObservation.cancel() }
+        try await waitUntil { !editing.parts.isLoading && editing.parts.loadError == nil }
         #expect(editing.canSaveJob)
         editing.requestNavigation { navigated = true }
         await editing.saveAndContinue()
@@ -217,6 +221,8 @@ struct JobTaskStateTests {
         taskObservation.cancel()
         await jobObservation.value
         await taskObservation.value
+        partObservation.cancel()
+        await partObservation.value
         try await coordinator.close()
     }
 
@@ -395,7 +401,7 @@ struct JobTaskStateTests {
             references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
             photos: PhotoState(service: PhotoService(coordinator: coordinator)),
             documents: DocumentState(service: DocumentService(coordinator: coordinator)),
-            tasks: tasks)
+            tasks: tasks, parts: PartState(service: PartService(coordinator: coordinator)))
     }
 
     private func waitUntil(_ condition: () -> Bool) async throws {
