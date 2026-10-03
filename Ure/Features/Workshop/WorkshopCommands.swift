@@ -5,6 +5,7 @@ struct WorkshopCommands: Commands {
     let navigation: WorkshopNavigation
     let editing: WorkshopEditing
     let bench: BenchReferenceState
+    let search: SearchState
     @FocusedValue(\.allowsWorkshopEditing) private var allowsEditing
     @Environment(\.openWindow) private var openWindow
 
@@ -22,6 +23,11 @@ struct WorkshopCommands: Commands {
             Button("Save", action: save)
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(!canSave)
+        }
+        CommandGroup(after: .textEditing) {
+            Button("Search Library", action: search.present)
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+                .disabled(allowsEditing != true)
         }
         CommandMenu("Task") {
             Button("Move up", action: moveTaskUp)
@@ -53,8 +59,10 @@ struct WorkshopCommands: Commands {
 
     private func selectSection(_ section: WorkshopSection) {
         guard allowsEditing == true else { return }
-        guard section != navigation.selection else { return }
-        editing.requestNavigation { navigation.selection = section }
+        guard search.isPresented || section != navigation.selection else { return }
+        editing.requestNavigation {
+            search.close(); navigation.selection = section
+        }
     }
 
     private var newRecordTitle: String {

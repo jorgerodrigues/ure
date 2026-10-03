@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct PhotoSectionView: View {
+    @State private var searchText = ""
     @Environment(PhotoState.self) private var photos
     @Environment(JobState.self) private var jobs
     @Environment(WorkshopEditing.self) private var editing
@@ -42,10 +43,15 @@ struct PhotoSectionView: View {
                     ForEach(photos.importResults) { result in PhotoImportResultView(result: result)
                     }
                 }
-                if photos.records(for: owner).isEmpty {
-                    Text("No photos in this stage.").foregroundStyle(.secondary)
+                TextField("Filter photos by title or caption", text: $searchText)
+                    .accessibilityIdentifier("photosLocalSearch")
+                if photos.records(for: owner, matching: searchText).isEmpty {
+                    Text(
+                        searchText.isEmpty
+                            ? "No photos in this stage." : "No matching photos in this stage."
+                    ).foregroundStyle(.secondary)
                 } else {
-                    ForEach(photos.records(for: owner)) { photo in
+                    ForEach(photos.records(for: owner, matching: searchText)) { photo in
                         PhotoRow(photo: photo, owner: owner)
                     }
                 }

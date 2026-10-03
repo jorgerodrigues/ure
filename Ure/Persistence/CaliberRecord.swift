@@ -61,9 +61,11 @@ nonisolated enum CaliberQueries {
 
     static func insert(_ record: CaliberRecord, in db: Database) throws {
         try record.insert(db)
+        try SearchKey.refresh(record.id, table: .caliber, in: db)
     }
 
     static func update(_ record: CaliberRecord, in db: Database) throws {
         try record.update(db)
+        try SearchKey.refresh(record.id, table: .caliber, in: db)
     }
 }

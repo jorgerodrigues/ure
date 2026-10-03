@@ -38,8 +38,11 @@ final class DocumentState {
     }
     var isNavigationPending: Bool { pendingNavigation != nil }
 
-    func records(for owner: LibraryItemOwner) -> [DocumentRecord] {
-        documents.filter { $0.item.belongs(to: owner) }.sorted { lhs, rhs in
+    func records(for owner: LibraryItemOwner, matching query: String = "") -> [DocumentRecord] {
+        documents.filter {
+            $0.item.belongs(to: owner)
+                && SearchKey.matches([$0.item.title, $0.item.caption], query: query)
+        }.sorted { lhs, rhs in
             if lhs.item.createdAt != rhs.item.createdAt {
                 return lhs.item.createdAt > rhs.item.createdAt
             }

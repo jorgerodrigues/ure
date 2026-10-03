@@ -32,8 +32,11 @@ final class WatchState {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if query.isEmpty { return watches }
         return watches.filter { watch in
-            [watch.name, watch.brand, watch.model, watch.caseReference, watch.serial]
-                .compactMap { $0 }.contains { $0.localizedCaseInsensitiveContains(query) }
+            SearchKey.matches(
+                [
+                    watch.name, watch.brand, watch.model, watch.caseReference, watch.serial,
+                    watch.approximateYear,
+                ], query: query)
         }
     }
 

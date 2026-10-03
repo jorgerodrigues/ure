@@ -30,8 +30,11 @@ final class ReferenceState {
     var canSave: Bool { draft != nil && !isSaving }
     var isNavigationPending: Bool { pendingNavigation != nil }
 
-    func records(for owner: LibraryItemOwner) -> [LibraryItem] {
-        references.filter { $0.kind == .link && $0.belongs(to: owner) }.sorted { lhs, rhs in
+    func records(for owner: LibraryItemOwner, matching query: String = "") -> [LibraryItem] {
+        references.filter {
+            $0.kind == .link && $0.belongs(to: owner)
+                && SearchKey.matches([$0.title, $0.caption], query: query)
+        }.sorted { lhs, rhs in
             if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
             return lhs.id.uuidString < rhs.id.uuidString
         }

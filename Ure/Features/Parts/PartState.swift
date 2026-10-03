@@ -29,8 +29,15 @@ final class PartState {
     var hasUnsavedChanges: Bool { draft != originalDraft }
     var isNavigationPending: Bool { pendingNavigation != nil }
 
-    func records(for jobID: UUID) -> [PartRequirement] {
-        parts.filter { $0.record.jobID == jobID }
+    func records(for jobID: UUID, matching query: String = "") -> [PartRequirement] {
+        parts.filter {
+            $0.record.jobID == jobID
+                && SearchKey.matches(
+                    [
+                        $0.record.description, $0.record.manufacturerReference,
+                        $0.record.supplierSnapshot?.supplierStockCode,
+                    ] + $0.links.map(\.supplierStockCode), query: query)
+        }
     }
 
     func isPresenting(for jobID: UUID) -> Bool {

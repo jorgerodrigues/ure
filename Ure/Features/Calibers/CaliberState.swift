@@ -32,8 +32,8 @@ final class CaliberState {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if query.isEmpty { return calibers }
         return calibers.filter { caliber in
-            [caliber.designation, caliber.manufacturer, caliber.variant]
-                .compactMap { $0 }.contains { $0.localizedCaseInsensitiveContains(query) }
+            SearchKey.matches(
+                [caliber.designation, caliber.manufacturer, caliber.variant], query: query)
         }
     }
 

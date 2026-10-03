@@ -58,9 +58,11 @@ nonisolated enum WatchQueries {
 
     static func insert(_ record: WatchRecord, in db: Database) throws {
         try record.insert(db)
+        try SearchKey.refresh(record.id, table: .watch, in: db)
     }
 
     static func update(_ record: WatchRecord, in db: Database) throws {
         try record.update(db)
+        try SearchKey.refresh(record.id, table: .watch, in: db)
     }
 }

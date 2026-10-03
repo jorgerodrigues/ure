@@ -8,6 +8,7 @@ struct UreApp: App {
     @State private var watches: WatchState
     @State private var calibers: CaliberState
     @State private var jobs: JobState
+    @State private var search: SearchState
     @State private var workshop: WorkshopOverviewState
     @State private var partsOverview: PartsOverviewState
     @State private var notes: NoteState
@@ -46,6 +47,7 @@ struct UreApp: App {
         _watches = State(initialValue: watches)
         _calibers = State(initialValue: calibers)
         _jobs = State(initialValue: jobs)
+        _search = State(initialValue: SearchState(coordinator: coordinator))
         _workshop = State(initialValue: WorkshopOverviewState(coordinator: coordinator))
         _partsOverview = State(initialValue: PartsOverviewState(coordinator: coordinator))
         _notes = State(initialValue: notes)
@@ -70,6 +72,7 @@ struct UreApp: App {
                 .environment(watches)
                 .environment(calibers)
                 .environment(jobs)
+                .environment(search)
                 .environment(workshop)
                 .environment(partsOverview)
                 .environment(notes)
@@ -87,7 +90,7 @@ struct UreApp: App {
         .windowResizability(.contentMinSize)
         .commands {
             SidebarCommands()
-            WorkshopCommands(navigation: navigation, editing: editing, bench: bench)
+            WorkshopCommands(navigation: navigation, editing: editing, bench: bench, search: search)
         }
 
         Window("Reference", id: "reference") {

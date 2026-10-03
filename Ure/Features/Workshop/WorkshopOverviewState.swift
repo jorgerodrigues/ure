@@ -22,10 +22,11 @@ final class WorkshopOverviewState {
         return rows.filter { row in
             if let stageFilter, row.job.stage != stageFilter { return false }
             if query.isEmpty { return true }
-            return [
-                row.watch.name, row.watch.brand, row.watch.model, row.watch.caseReference,
-                row.watch.serial, row.job.title, row.job.waitingReason,
-            ].compactMap { $0 }.contains { $0.localizedCaseInsensitiveContains(query) }
+            return SearchKey.matches(
+                [
+                    row.watch.name, row.watch.brand, row.watch.model, row.watch.caseReference,
+                    row.watch.serial, row.job.title, row.job.waitingReason,
+                ], query: query)
         }
     }
 

@@ -20,11 +20,12 @@ final class PartsOverviewState {
         return rows.filter { row in
             if let statusFilter, row.part.status != statusFilter { return false }
             if query.isEmpty { return true }
-            return [
-                row.part.description, row.part.manufacturerReference, row.watch.name,
-                row.watch.brand, row.watch.model, row.watch.caseReference, row.watch.serial,
-                row.job.title,
-            ].compactMap { $0 }.contains { $0.localizedCaseInsensitiveContains(query) }
+            return SearchKey.matches(
+                [
+                    row.searchKey, row.watch.name,
+                    row.watch.brand, row.watch.model, row.watch.caseReference, row.watch.serial,
+                    row.job.title,
+                ], query: query)
         }
     }
 

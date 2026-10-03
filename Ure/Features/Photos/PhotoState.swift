@@ -39,9 +39,12 @@ final class PhotoState {
     }
     var isNavigationPending: Bool { pendingNavigation != nil }
 
-    func records(for owner: LibraryItemOwner, filtered: Bool = true) -> [PhotoRecord] {
+    func records(for owner: LibraryItemOwner, filtered: Bool = true, matching query: String = "")
+        -> [PhotoRecord]
+    {
         photos.filter {
             $0.item.belongs(to: owner)
+                && SearchKey.matches([$0.item.title, $0.item.caption], query: query)
                 && (!filtered || stageFilter == nil || $0.item.photoStage == stageFilter)
         }.sorted { lhs, rhs in
             if lhs.item.createdAt != rhs.item.createdAt {

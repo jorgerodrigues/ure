@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct JobDetailView: View {
+    @Environment(SearchState.self) private var search
     @State private var showsTimeline = false
     @Environment(JobState.self) private var jobs
     @Environment(WorkshopEditing.self) private var editing
@@ -125,6 +126,7 @@ struct JobDetailView: View {
         }
         .onChange(of: jobs.selectedID, resetTimeline)
         .onChange(of: parts.selectedID, resetTimeline)
+        .onChange(of: search.navigationRevision, resetTimeline)
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Button("Back to Watch", systemImage: "chevron.left", action: backToWatch)
