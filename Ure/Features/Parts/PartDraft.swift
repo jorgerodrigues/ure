@@ -8,6 +8,9 @@ nonisolated enum PartField: Hashable {
     case price(UUID)
     case currency(UUID)
     case selectedLink
+    case status
+    case statusReason
+    case onHand
 }
 
 nonisolated struct PartValidationError: LocalizedError {
@@ -58,6 +61,11 @@ nonisolated struct PartDraft: Equatable, Sendable {
     var compatibilityNote = ""
     var links: [PartLinkDraft] = []
     var selectedLinkID: UUID?
+    private(set) var originalStatus: PartStatus?
+    var status: PartStatus = .needed
+    var statusReason = ""
+    var orderReference = ""
+    var confirmsOnHand = false
 
     init() {}
 
@@ -69,12 +77,35 @@ nonisolated struct PartDraft: Equatable, Sendable {
         compatibilityNote = part.record.compatibilityNote ?? ""
         links = part.links.map(PartLinkDraft.init)
         selectedLinkID = part.selectedLink?.id
+        originalStatus = part.record.status
+        status = part.record.status
+        orderReference = part.record.orderReference ?? ""
     }
 
-    func record(id: UUID, jobID: UUID, status: PartStatus, createdAt: Date, updatedAt: Date) throws
+    var needsReason: Bool {
+        guard let originalStatus else { return false }
+        return status.requiresReason(from: originalStatus)
+    }
+
+    var needsOnHandConfirmation: Bool {
+        status == .installed && originalStatus != .arrived && originalStatus != .installed
+    }
+
+    func record(id: UUID, jobID: UUID, existing: PartRecord?, createdAt: Date, updatedAt: Date)
+        throws
         -> PartRecord
     {
         var fields: [PartField: String] = [:]
+        if existing == nil && status != .needed && status != .arrived {
+            fields[.status] =
+                "Start at Needed or Arrived. Save the part before ordering or installing."
+        }
+        if needsReason && JobDraft.optional(statusReason) == nil {
+            fields[.statusReason] = "Enter a reason for this correction or cancellation."
+        }
+        if needsOnHandConfirmation && !confirmsOnHand {
+            fields[.onHand] = "Confirm that the complete unit or lot is on hand."
+        }
         let description = description.trimmingCharacters(in: .whitespacesAndNewlines)
         if description.isEmpty { fields[.description] = "Enter a part description." }
         let quantityText = quantity.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -113,6 +144,10 @@ nonisolated struct PartDraft: Equatable, Sendable {
             id: id, jobID: jobID, description: description, quantity: quantity,
             manufacturerReference: JobDraft.optional(manufacturerReference),
             compatibility: compatibility, compatibilityNote: JobDraft.optional(compatibilityNote),
-            status: status, createdAt: createdAt, updatedAt: updatedAt)
+            status: existing?.status ?? .needed, orderedAt: existing?.orderedAt,
+            arrivedAt: existing?.arrivedAt, installedAt: existing?.installedAt,
+            cancelledAt: existing?.cancelledAt, supplierSnapshot: existing?.supplierSnapshot,
+            orderReference: existing?.orderReference, statusReason: existing?.statusReason,
+            createdAt: createdAt, updatedAt: updatedAt)
     }
 }

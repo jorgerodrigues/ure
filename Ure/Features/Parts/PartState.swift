@@ -136,6 +136,18 @@ final class PartState {
         draft?.links.append(PartLinkDraft())
     }
 
+    func setStatus(_ value: PartStatus) {
+        guard !isSaving, draft != nil else { return }
+        if selectedID == nil && value != .needed && value != .arrived { return }
+        draft?.status = value
+        draft?.confirmsOnHand = false
+    }
+
+    func confirmOnHand(_ value: Bool) {
+        guard !isSaving, draft != nil else { return }
+        draft?.confirmsOnHand = value
+    }
+
     func setLinkURL(_ url: String, id: UUID) {
         setLinkField(url, id: id, keyPath: \.url)
     }

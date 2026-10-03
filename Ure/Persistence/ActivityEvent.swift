@@ -5,6 +5,7 @@ nonisolated enum ActivityKind: String, Codable, Sendable {
     case jobStageChanged = "Job stage changed"
     case watchConditionChanged = "Watch condition changed"
     case taskStatusChanged = "Task status changed"
+    case partStatusChanged = "Part status changed"
 }
 
 nonisolated struct JobStageValue: Codable, Equatable, Sendable {
@@ -47,6 +48,35 @@ nonisolated enum ActivityValue: Codable, Equatable, Sendable {
     case job(JobStageValue)
     case condition(WatchConditionValue)
     case task(JobTaskValue)
+    case part(PartProcurementValue)
+}
+
+nonisolated struct PartProcurementValue: Codable, Equatable, Sendable {
+    let partID: UUID
+    let description: String
+    let quantity: Int
+    let status: PartStatus?
+    let orderedAt: Date?
+    let arrivedAt: Date?
+    let installedAt: Date?
+    let cancelledAt: Date?
+    let supplierSnapshot: PartSupplierSnapshot?
+    let orderReference: String?
+    let reason: String?
+
+    init(part: PartRecord, isNew: Bool = false) {
+        partID = part.id
+        description = part.description
+        quantity = part.quantity
+        status = isNew ? nil : part.status
+        orderedAt = isNew ? nil : part.orderedAt
+        arrivedAt = isNew ? nil : part.arrivedAt
+        installedAt = isNew ? nil : part.installedAt
+        cancelledAt = isNew ? nil : part.cancelledAt
+        supplierSnapshot = isNew ? nil : part.supplierSnapshot
+        orderReference = isNew ? nil : part.orderReference
+        reason = isNew ? nil : part.statusReason
+    }
 }
 
 nonisolated struct JobTaskValue: Codable, Equatable, Sendable {

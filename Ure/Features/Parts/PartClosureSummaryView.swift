@@ -16,7 +16,19 @@ struct PartClosureSummaryView: View {
                 Text("No parts required.").foregroundStyle(.secondary)
             } else {
                 ForEach(parts.records(for: jobID)) { part in
-                    LabeledContent(part.record.description, value: part.record.status.rawValue)
+                    VStack(alignment: .leading) {
+                        LabeledContent(part.record.description, value: part.record.status.rawValue)
+                        if part.record.status.isUnresolved {
+                            if let supplier = part.record.supplierSnapshot?.supplierName {
+                                Text("Ordered from \(supplier)").font(.caption).foregroundStyle(
+                                    .secondary)
+                            }
+                            if let reference = part.record.orderReference {
+                                Text("Order reference: \(reference)").font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                 }
                 Text("These parts will keep their current status.").foregroundStyle(.secondary)
             }

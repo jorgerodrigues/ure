@@ -267,6 +267,7 @@ nonisolated struct PartSupplierServiceTests {
             draft, for: job.id, editing: nil)
         try await coordinator.mutate { db, originals, _ in
             try Data("Original bytes".utf8).write(to: originals.appending(path: "evidence.bin"))
+            try PartProcurementMigrationFixture.removeProcurement(in: db)
             try db.execute(sql: "DROP INDEX partLink_selected")
             for column in [
                 "title", "supplierName", "supplierStockCode", "notes", "isSelected", "price",

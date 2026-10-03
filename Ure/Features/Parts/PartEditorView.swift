@@ -19,9 +19,8 @@ struct PartEditorView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 TextField("Manufacturer reference (optional)", text: field(\.manufacturerReference))
                     .accessibilityIdentifier("partManufacturerReference")
-                LabeledContent(
-                    "Status", value: parts.selectedPart?.record.status.rawValue ?? "Needed")
             }
+            PartProcurementEditorSection()
             Section("Compatibility") {
                 Picker("Assessment", selection: compatibility) {
                     ForEach(PartCompatibility.allCases) { value in Text(value.rawValue).tag(value) }
@@ -87,6 +86,60 @@ struct PartEditorView: View {
         Binding(get: { parts.linkToRemove != nil }, set: { if !$0 { parts.linkToRemove = nil } })
     }
     private func cancelRemoval() { parts.linkToRemove = nil }
+    private func field(_ keyPath: WritableKeyPath<PartDraft, String>) -> Binding<String> {
+        Binding(
+            get: { parts.draft?[keyPath: keyPath] ?? "" },
+            set: { parts.draft?[keyPath: keyPath] = $0 })
+    }
+}
+
+private struct PartProcurementEditorSection: View {
+    @Environment(PartState.self) private var parts
+
+    var body: some View {
+        Section("Procurement") {
+            Picker("Status", selection: status) {
+                ForEach(statuses) { value in Text(value.rawValue).tag(value) }
+            }.accessibilityIdentifier("partStatus")
+            PartFieldError(message: parts.fieldErrors[.status])
+            if parts.draft?.status == .ordered {
+                TextField("Order reference (optional)", text: field(\.orderReference))
+                    .accessibilityIdentifier("partOrderReference")
+                Text("Ordering saves a copy of the selected supplier option with this whole lot.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if parts.draft?.needsReason == true {
+                TextField(
+                    "Correction or cancellation reason", text: field(\.statusReason),
+                    axis: .vertical
+                )
+                .accessibilityIdentifier("partStatusReason")
+                PartFieldError(message: parts.fieldErrors[.statusReason])
+            }
+            if parts.draft?.needsOnHandConfirmation == true {
+                Toggle("The complete unit or lot is on hand", isOn: onHand)
+                    .toggleStyle(.checkbox).accessibilityIdentifier("partOnHand")
+                Text("Save will record arrival and installation together.")
+                    .font(.caption).foregroundStyle(.secondary)
+                PartFieldError(message: parts.fieldErrors[.onHand])
+            }
+            Text(
+                "Arrived means on hand. Installed means fitted. Save records the current date and time."
+            )
+            .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private var statuses: [PartStatus] {
+        if parts.selectedID == nil { return [.needed, .arrived] }
+        return PartStatus.allCases
+    }
+    private var status: Binding<PartStatus> { Binding(get: currentStatus, set: setStatus) }
+    private func currentStatus() -> PartStatus { parts.draft?.status ?? .needed }
+    private func setStatus(_ value: PartStatus) { parts.setStatus(value) }
+    private var onHand: Binding<Bool> { Binding(get: currentOnHand, set: setOnHand) }
+    private func currentOnHand() -> Bool { parts.draft?.confirmsOnHand ?? false }
+    private func setOnHand(_ value: Bool) { parts.confirmOnHand(value) }
     private func field(_ keyPath: WritableKeyPath<PartDraft, String>) -> Binding<String> {
         Binding(
             get: { parts.draft?[keyPath: keyPath] ?? "" },

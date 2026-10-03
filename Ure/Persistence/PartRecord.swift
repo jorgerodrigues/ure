@@ -10,6 +10,16 @@ nonisolated enum PartStatus: String, Codable, CaseIterable, Identifiable, Sendab
 
     var id: Self { self }
     var isUnresolved: Bool { self == .needed || self == .ordered }
+
+    func requiresReason(from prior: PartStatus) -> Bool {
+        guard self != prior else { return false }
+        if self == .cancelled || prior == .cancelled { return true }
+        let milestones: [PartStatus] = [.needed, .ordered, .arrived, .installed]
+        guard let next = milestones.firstIndex(of: self),
+            let previous = milestones.firstIndex(of: prior)
+        else { return false }
+        return next < previous
+    }
 }
 
 nonisolated enum PartCompatibility: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -32,9 +42,22 @@ nonisolated struct PartRecord: Codable, Equatable, Identifiable, Sendable, Fetch
     let manufacturerReference: String?
     let compatibility: PartCompatibility
     let compatibilityNote: String?
-    let status: PartStatus
+    var status: PartStatus
+    var orderedAt: Date?
+    var arrivedAt: Date?
+    var installedAt: Date?
+    var cancelledAt: Date?
+    var supplierSnapshot: PartSupplierSnapshot?
+    var orderReference: String?
+    var statusReason: String?
     let createdAt: Date
     let updatedAt: Date
+
+    static func databaseJSONEncoder(for column: String) -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        return encoder
+    }
 
     static func databaseUUIDEncodingStrategy(for column: String) -> DatabaseUUIDEncodingStrategy {
         .uppercaseString
@@ -44,6 +67,26 @@ nonisolated struct PartRecord: Codable, Equatable, Identifiable, Sendable, Fetch
     }
     static func databaseDateDecodingStrategy(for column: String) -> DatabaseDateDecodingStrategy {
         .timeIntervalSince1970
+    }
+}
+
+nonisolated struct PartSupplierSnapshot: Codable, Equatable, Sendable {
+    let url: String
+    let title: String?
+    let supplierName: String?
+    let supplierStockCode: String?
+    let price: String?
+    let currency: String?
+    let notes: String?
+
+    init(link: PartLink) {
+        url = link.url
+        title = link.title
+        supplierName = link.supplierName
+        supplierStockCode = link.supplierStockCode
+        price = link.price
+        currency = link.currency
+        notes = link.notes
     }
 }
 
@@ -111,5 +154,18 @@ nonisolated enum PartQueries {
                 SELECT * FROM partRequirement WHERE jobID = ? AND status IN ('Needed', 'Ordered')
                 ORDER BY createdAt, id
                 """, arguments: [jobID.uuidString])
+    }
+
+    static func hasRecordedOrder(_ partID: UUID, for jobID: UUID, in db: Database) throws -> Bool {
+        let events = try ActivityEvent.fetchAll(
+            db,
+            sql: "SELECT * FROM activityEvent WHERE jobID = ? AND kind = ? ORDER BY ordering DESC",
+            arguments: [jobID.uuidString, ActivityKind.partStatusChanged.rawValue])
+        for event in events {
+            guard case .part(let next) = event.nextValue, next.partID == partID else { continue }
+            if next.status == .needed { return false }
+            if next.status == .ordered || next.orderedAt != nil { return true }
+        }
+        return false
     }
 }

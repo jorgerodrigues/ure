@@ -424,6 +424,36 @@ nonisolated enum LibrarySchema {
                     CREATE UNIQUE INDEX partLink_selected ON partLink(partID) WHERE isSelected = 1
                     """)
         }
+        migrator.registerMigration("v15-part-procurement", foreignKeyChecks: .immediate) { db in
+            try db.alter(table: "partRequirement") { table in
+                for column in ["orderedAt", "arrivedAt", "installedAt", "cancelledAt"] {
+                    table.add(column: column, .double)
+                }
+                table.add(column: "supplierSnapshot", .text)
+                    .check(sql: "supplierSnapshot IS NULL OR json_valid(supplierSnapshot)")
+                table.add(column: "orderReference", .text)
+                table.add(column: "statusReason", .text)
+            }
+            try db.create(table: "activityEvent_new") { table in
+                table.column("id", .text).primaryKey()
+                table.column("jobID", .text).notNull().references("job", onDelete: .restrict)
+                table.column("kind", .text).notNull().check(
+                    sql:
+                        "kind IN ('Job stage changed', 'Watch condition changed', 'Task status changed', 'Part status changed')"
+                )
+                table.column("occurredAt", .double).notNull()
+                table.column("ordering", .integer).notNull().unique().check { $0 > 0 }
+                for column in ["priorValue", "nextValue"] {
+                    table.column(column, .text).notNull().check(sql: "json_valid(\(column))")
+                }
+            }
+            try db.execute(sql: "INSERT INTO activityEvent_new SELECT * FROM activityEvent")
+            try db.drop(table: "activityEvent")
+            try db.rename(table: "activityEvent_new", to: "activityEvent")
+            try db.create(
+                index: "activityEvent_jobID_ordering", on: "activityEvent",
+                columns: ["jobID", "ordering"])
+        }
         return migrator
     }
 }

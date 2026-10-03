@@ -169,6 +169,82 @@ nonisolated final class PartUITests: XCTestCase {
     }
 
     @MainActor
+    func testProcurementConfirmationCorrectionsSnapshotAndOnHandCreation() {
+        let app = XCUIApplication()
+        app.launchEnvironment["URE_TESTING"] = "1"
+        app.launchEnvironment["URE_TEST_LIBRARY_ID"] = UUID().uuidString
+        app.launchArguments = ["-AppleLocale", "en_US", "-ApplePersistenceIgnoreState", "YES"]
+        app.launch()
+        defer { app.terminate() }
+        app.windows.firstMatch.typeKey("2", modifierFlags: [.command, .option])
+        XCTAssertTrue(app.buttons["addWatch"].waitForExistence(timeout: 5))
+        app.buttons["addWatch"].click()
+        enter("Procurement watch", identifier: "watchName", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["startWatchJob"].waitForExistence(timeout: 5))
+        app.buttons["startWatchJob"].click()
+        enter("Fit spring", identifier: "jobTitle", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["addPart"].waitForExistence(timeout: 5))
+        app.buttons["addPart"].click()
+        enter("Spring lot", identifier: "partDescription", app: app)
+        app.buttons["addPartLink"].click()
+        let url = app.textFields.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "partLinkURL-")
+        ).firstMatch
+        replace("https://example.org/spring", field: url)
+        let linkID = String(url.identifier.dropFirst("partLinkURL-".count))
+        enter("Original supplier", identifier: "partLinkSupplier-\(linkID)", app: app)
+        app.checkBoxes["selectPartLink-\(linkID)"].click()
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
+        app.buttons["editPart"].click()
+        selectStatus("Ordered", app: app)
+        enter("00042-A/03", identifier: "partOrderReference", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Supplier at order time"].exists)
+        app.buttons["editPart"].click()
+        enter("Changed supplier", identifier: "partLinkSupplier-\(linkID)", app: app)
+        selectStatus("Installed", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.staticTexts["partSaveError"].waitForExistence(timeout: 3))
+        app.checkBoxes["partOnHand"].click()
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Original supplier"].exists)
+        XCTAssertTrue(app.staticTexts["Changed supplier"].exists)
+        app.buttons["editPart"].click()
+        selectStatus("Arrived", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.staticTexts["partSaveError"].waitForExistence(timeout: 3))
+        enter("Corrected fitting record", identifier: "partStatusReason", app: app)
+        app.buttons["cancelPart"].click()
+        XCTAssertTrue(app.staticTexts["Installed"].exists)
+        app.buttons["editPart"].click()
+        selectStatus("Cancelled", app: app)
+        enter("Wrong spring", identifier: "partStatusReason", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
+        app.buttons["backFromPart"].click()
+        app.buttons["addPart"].click()
+        enter("Replacement on hand", identifier: "partDescription", app: app)
+        selectStatus("Arrived", app: app)
+        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Replacement on hand"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Arrived"].exists)
+    }
+
+    @MainActor
+    private func selectStatus(_ status: String, app: XCUIApplication) {
+        app.popUpButtons["partStatus"].click()
+        app.menuItems[status].firstMatch.click()
+    }
+
+    @MainActor
     private func enter(_ text: String, identifier: String, app: XCUIApplication) {
         replace(text, field: app.textFields[identifier])
     }

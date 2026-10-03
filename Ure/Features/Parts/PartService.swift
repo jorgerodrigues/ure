@@ -6,6 +6,7 @@ nonisolated enum PartError: LocalizedError, Equatable {
     case missingRecord
     case jobMismatch
     case linkMismatch
+    case staleStatus
 
     var errorDescription: String? {
         switch self {
@@ -13,6 +14,8 @@ nonisolated enum PartError: LocalizedError, Equatable {
         case .jobMismatch: "This part belongs to another job. Your draft has been kept."
         case .linkMismatch:
             "A link belongs to another part or occurs twice. Your draft has been kept."
+        case .staleStatus:
+            "This part's status changed. Cancel and reopen the editor before saving. Your draft has been kept."
         }
     }
 }
@@ -34,10 +37,13 @@ nonisolated struct PartService: Sendable {
                 guard part.record.jobID == jobID else { throw PartError.jobMismatch }
                 existing = part
             }
+            if let existing, draft.originalStatus != existing.record.status {
+                throw PartError.staleStatus
+            }
             let now = Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
-            let record = try draft.record(
+            var record = try draft.record(
                 id: existing?.id ?? dependencies.makeID(), jobID: jobID,
-                status: existing?.record.status ?? .needed,
+                existing: existing?.record,
                 createdAt: existing?.record.createdAt ?? now, updatedAt: now)
             var seen: Set<UUID> = []
             var links: [PartLink] = []
@@ -61,6 +67,15 @@ nonisolated struct PartService: Sendable {
                 }
                 links.append(candidate)
             }
+            var hasRecordedOrder =
+                existing?.record.orderedAt != nil
+                || existing?.record.supplierSnapshot != nil
+            if let existing, draft.status == .ordered, !hasRecordedOrder {
+                hasRecordedOrder = try PartQueries.hasRecordedOrder(existing.id, for: jobID, in: db)
+            }
+            Self.applyProcurement(
+                draft, to: &record, existing: existing?.record, links: links,
+                hasRecordedOrder: hasRecordedOrder, now: now)
             let result = PartRequirement(record: record, links: links)
             if let existing, PartDraft(part: existing) == PartDraft(part: result) {
                 return existing
@@ -75,7 +90,65 @@ nonisolated struct PartService: Sendable {
                 try link.delete(db)
             }
             for link in links { try link.save(db) }
+            if let existing {
+                if existing.record.status != record.status
+                    || existing.record.orderReference != record.orderReference
+                {
+                    try ActivityQueries.insert(
+                        jobID: jobID, kind: .partStatusChanged,
+                        prior: .part(PartProcurementValue(part: existing.record)),
+                        next: .part(PartProcurementValue(part: record)),
+                        in: db, dependencies: dependencies)
+                }
+            } else if record.status == .arrived {
+                try ActivityQueries.insert(
+                    jobID: jobID, kind: .partStatusChanged,
+                    prior: .part(PartProcurementValue(part: record, isNew: true)),
+                    next: .part(PartProcurementValue(part: record)),
+                    in: db, dependencies: dependencies)
+            }
             return result
+        }
+    }
+
+    private static func applyProcurement(
+        _ draft: PartDraft, to record: inout PartRecord, existing: PartRecord?,
+        links: [PartLink], hasRecordedOrder: Bool, now: Date
+    ) {
+        if draft.status == .ordered {
+            record.orderReference = JobDraft.optional(draft.orderReference)
+        }
+        guard existing?.status != draft.status else { return }
+        record.status = draft.status
+        record.statusReason = nil
+        if draft.needsReason { record.statusReason = JobDraft.optional(draft.statusReason) }
+        record.cancelledAt = nil
+        switch draft.status {
+        case .needed:
+            record.orderedAt = nil
+            record.arrivedAt = nil
+            record.installedAt = nil
+            record.supplierSnapshot = nil
+            record.orderReference = nil
+        case .ordered:
+            record.orderedAt = record.orderedAt ?? now
+            record.arrivedAt = nil
+            record.installedAt = nil
+            if !hasRecordedOrder {
+                record.supplierSnapshot = links.first(where: \.isSelected).map(
+                    PartSupplierSnapshot.init)
+            }
+        case .arrived:
+            record.arrivedAt = record.arrivedAt ?? now
+            record.installedAt = nil
+        case .installed:
+            record.arrivedAt = record.arrivedAt ?? now
+            record.installedAt = now
+        case .cancelled:
+            record.orderedAt = nil
+            record.arrivedAt = nil
+            record.installedAt = nil
+            record.cancelledAt = now
         }
     }
 
