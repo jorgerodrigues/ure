@@ -6,6 +6,7 @@ struct WorkshopView: View {
     @Environment(WatchState.self) private var watches
     @Environment(CaliberState.self) private var calibers
     @Environment(JobState.self) private var jobs
+    @Environment(WorkshopOverviewState.self) private var workshop
     @Environment(NoteState.self) private var notes
     @Environment(JobTaskState.self) private var tasks
     @Environment(PartState.self) private var parts
@@ -25,7 +26,9 @@ struct WorkshopView: View {
                 .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
         } content: {
             Group {
-                if navigation.selectedSection == .watches {
+                if navigation.selectedSection == .workshop {
+                    WorkshopOverviewView()
+                } else if navigation.selectedSection == .watches {
                     WatchListView()
                 } else if navigation.selectedSection == .calibers {
                     CaliberListView()
@@ -64,6 +67,7 @@ struct WorkshopView: View {
         .task(watches.observe)
         .task(calibers.observe)
         .task(jobs.observe)
+        .task(id: workshop.observationRevision, workshop.observe)
         .task(notes.observe)
         .task(tasks.observe)
         .task(parts.observe)
@@ -107,7 +111,29 @@ struct WorkshopView: View {
     }
 
     @ViewBuilder private var detail: some View {
-        if navigation.selectedSection == .watches {
+        if navigation.selectedSection == .workshop {
+            Group {
+                if watches.selectedID == nil, watches.draft == nil {
+                    ContentUnavailableView(
+                        "Select a job", systemImage: "wrench.and.screwdriver",
+                        description: Text("Choose an open job to view its details."))
+                } else {
+                    WatchDetailView()
+                }
+            }
+            .safeAreaInset(edge: .top) {
+                if let message = workshop.selectionMessage(for: jobs.selectedJob) {
+                    HStack {
+                        Text(message).font(.callout)
+                        if jobs.selectedJob?.stage.isOpen == true {
+                            Button("Clear Filters", action: workshop.clearFilters)
+                        }
+                    }
+                    .padding()
+                    .accessibilityIdentifier("workshopSelectionMessage")
+                }
+            }
+        } else if navigation.selectedSection == .watches {
             WatchDetailView()
         } else if navigation.selectedSection == .calibers {
             CaliberDetailView()
@@ -119,7 +145,8 @@ struct WorkshopView: View {
     }
 
     private var hasActiveJob: Bool {
-        navigation.selectedSection == .watches && watches.draft == nil
+        (navigation.selectedSection == .watches || navigation.selectedSection == .workshop)
+            && watches.draft == nil
             && jobs.selectedID != nil && jobs.watchID == watches.selectedID
     }
     private var isLoadingSelection: Bool { bench.isLoading || watches.isLoading || jobs.isLoading }
