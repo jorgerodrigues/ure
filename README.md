@@ -168,7 +168,11 @@ Startup validates the active pointer, manifest, database integrity, foreign keys
 
 Before upgrading, the coordinator creates a recovery snapshot under `recovery/`. It uses SQLite's backup API, copies originals, and records file sizes and SHA-256 hashes. It applies migrations to a new generation copied from that snapshot. The active pointer changes atomically only after validation passes. Failed migrations keep the original generation active. Old generations and recovery snapshots are retained.
 
-Recovery copies are local protection against app failures. User-exported backups and restore controls belong to later issues. Do not keep valuable records only in this app before the Recovery and Release milestones pass.
+Use **Export Library Backup** in Settings to save a `.watchbackup` package. The summary shows the date, saved item count, original file count, and estimated size. **Refresh Summary** updates it. Choose a destination in the native save panel. Export shows progress and supports cancellation before publication. Saves and imports wait during export. Saved records remain readable.
+
+The package contains an independent SQLite snapshot, `manifest.json` for the library identity, unchanged originals, and a versioned `backup.json` with the export time, app version, migration history, table counts, byte counts, and SHA-256 hashes. SQLite backup includes committed WAL data. Caches, abandoned files, local preferences, and recovery generations are omitted. The app checks the whole staged package before publishing it. A failed or cancelled export keeps an existing destination intact. Successful replacement uses an atomic directory swap. Filesystems that reject atomic publication report an error and keep the previous backup.
+
+Settings retains the last successful user export time. That time does not confirm that the backup still exists. Recovery copies are local protection against app failures. Store an exported copy on another disk to protect against loss of the Mac. Restore controls follow in W027 and W028. Do not keep valuable records only in this app before the Recovery and Release milestones pass.
 
 ## Verification
 

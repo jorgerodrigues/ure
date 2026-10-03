@@ -8,6 +8,7 @@ nonisolated struct LibraryDependencies: Sendable {
         try FileManager.default.removeItem(at: $0)
     }
     var prepareLibrary: @Sendable (URL) throws -> Void = { _ in }
+    var backupCheckpoint: @Sendable (BackupCheckpoint) throws -> Void = { _ in }
 }
 
 nonisolated struct LibraryManifest: Codable, Equatable, Sendable {
