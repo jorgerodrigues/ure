@@ -81,7 +81,7 @@ struct WorkshopCommands: Commands {
         if editing.references.draft != nil { return editing.references.canSave }
         if editing.notes.draft != nil { return editing.notes.canSave }
         switch navigation.selectedSection {
-        case .watches:
+        case .workshop, .watches:
             if editing.jobs.isEditing { return editing.canSaveJob }
             return editing.watches.canSave
         case .calibers: return editing.calibers.canSave
@@ -116,7 +116,7 @@ struct WorkshopCommands: Commands {
             return
         }
         switch navigation.selectedSection {
-        case .watches:
+        case .workshop, .watches:
             if editing.jobs.isEditing {
                 editing.saveJobCommand()
             } else {
@@ -148,7 +148,8 @@ struct WorkshopCommands: Commands {
     private func openReference() { openWindow(id: "reference") }
 
     private func canMoveTask(_ destination: JobTaskMove) -> Bool {
-        guard allowsEditing == true, navigation.selectedSection == .watches,
+        guard allowsEditing == true,
+            navigation.selectedSection == .watches || navigation.selectedSection == .workshop,
             !editing.isSaving, !editing.hasUnsavedChanges,
             let task = editing.tasks.selectedTask, editing.jobs.selectedID == task.jobID,
             !editing.jobs.isEditing
