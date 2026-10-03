@@ -20,7 +20,7 @@ make run
 
 Local runs use ad-hoc signing. No Apple developer account is required. App Sandbox is enabled. Hardened Runtime is configured for distribution; Xcode disables it for local ad-hoc builds. The current bundle identifier is `local.ure.app`; settle an owner-controlled identifier before distribution and before storing valuable data.
 
-The main window contains Workshop, Watches, Calibers, Parts, and Archive. Use **Option-Command-1** through **Option-Command-5** to select a section. **Command-comma** opens Settings. Startup creates or reopens the local library. Workshop shows open jobs. Watches and Calibers have saved-record lists and editors. Parts and Archive remain empty until their overview features are implemented.
+The main window contains Workshop, Watches, Calibers, Parts, and Archive. Use **Option-Command-1** through **Option-Command-5** to select a section. **Command-comma** opens Settings. Startup creates or reopens the local library. Workshop shows open jobs. Watches and Calibers have saved-record lists and editors. Parts shows requirements from open jobs. Archive remains empty until its feature is implemented.
 
 ## Workshop overview
 
@@ -29,6 +29,12 @@ Workshop groups open jobs under Planned, In progress, Waiting, and Ready. Each r
 Rows within each group put the latest saved job, task, or part change first. Watch identity and cover edits refresh the labels and thumbnail. Text search matches watch identity, job title, and waiting reason. The stage filter works together with text search. **Clear Filters** restores all open jobs.
 
 Select a row to open that exact watch and job in Workshop. The existing editors, Command-S, draft protection, activity navigation, and pinned reference tools work there. Filters retain the selected detail and show a message when its row is excluded. Closing removes the job from the open list and keeps its readable detail and watch history. Reopening returns it to the applicable group. Loading failures show an error and Retry.
+
+## Parts overview
+
+Parts shows requirements from open jobs in every procurement status. Each row names its watch, job, stage, manufacturer reference, quantity, and status. The most recently saved parts appear first. Filter by Needed, Ordered, Arrived, Installed, or Cancelled. Text search matches the part description, manufacturer reference, watch identity, or job title. Text and status filters combine.
+
+Select a row to open that exact part in its job. Supplier links open only through their explicit **Open** buttons. **Edit Part**, **Save**, **Cancel**, and **Command-S** use the existing procurement service and draft protection. Committed changes refresh both the overview and job list. Filters retain the selected detail and show a message when excluded. Closing removes the job's parts from the overview and keeps them readable in watch history. **Clear Filters** resets text and status. Loading failures show an error and Retry. Bench references and job activity remain available in Parts.
 
 ## Watch records
 
@@ -207,6 +213,7 @@ The Release configuration enables optimization and whole-module compilation. The
 - [W016 supplier comparison verification](docs/planning/supplier-verification.md)
 - [W019 job activity timeline verification](docs/planning/timeline-verification.md)
 - [W020 workshop overview verification](docs/planning/workshop-verification.md)
+- [W021 parts overview verification](docs/planning/parts-overview-verification.md)
 - [Design: brand, app icon, and macOS 27 screen rules](docs/design/README.md)
 
 The user approved the current-platform direction and W002's SQLite/GRDB storage design on 1 October 2026. Shared caliber records and the repair history rule were approved on 2 October 2026. Watch, caliber, intake, stage, and condition forms use explicit Save and Cancel editing. W003, W004, and W005 are merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29), [PR #31](https://github.com/jorgerodrigues/ure/pull/31), and [PR #32](https://github.com/jorgerodrigues/ure/pull/32). W006 is merged in [PR #33](https://github.com/jorgerodrigues/ure/pull/33). W007 is merged in [PR #34](https://github.com/jorgerodrigues/ure/pull/34). W008 is implemented in [PR #35](https://github.com/jorgerodrigues/ure/pull/35). Native UI and device checks are deferred to release acceptance by agreement. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.

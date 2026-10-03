@@ -210,6 +210,11 @@ actor LibraryCoordinator {
         return ValueObservation.tracking(WorkshopQueries.fetch).values(in: database)
     }
 
+    func partsOverviewValues() throws -> AsyncValueObservation<[OverviewPart]> {
+        guard let database else { throw LibraryError.notOpen }
+        return ValueObservation.tracking(PartsOverviewQueries.fetch).values(in: database)
+    }
+
     func noteValues() throws -> AsyncValueObservation<[NoteRecord]> {
         guard let database else { throw LibraryError.notOpen }
         return ValueObservation.tracking(NoteQueries.fetchAll).values(in: database)
