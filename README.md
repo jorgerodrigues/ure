@@ -48,7 +48,9 @@ Use **Change Condition** to record Unknown, Running, Running poorly, Stopped, or
 
 ## Job tasks
 
-Use **Add Task** in a job detail. Enter a title and optional detail and group label. Choose To do, Doing, Waiting, Done, or Skipped. Waiting requires a reason. Skipped always requires a reason. Several tasks can be Doing at once.
+Use **Add Task** in a job detail. Enter a title and optional detail and group label. Choose To do, Doing, Waiting, Done, or Skipped. Waiting requires a reason or a linked Needed or Ordered part. Skipped always requires a reason. Several tasks can be Doing at once.
+
+Choose **Required parts** in the task editor to link several parts from the same job. Save commits the selection. Cancel keeps the previous links. Needed and Ordered show **Waiting for parts**. Arrived and Installed satisfy availability. Any cancelled link shows **Needs review**. Once every linked part is available, the label becomes **Parts available**. The task stays Waiting until you change it. Removing the last unresolved link requires a waiting reason or another task status. Procurement saves refresh labels from saved data.
 
 Use **Edit Task**, **Save**, **Cancel**, or **Command-S**. Status changes use the editor. Failed saves keep the draft. Pending saves block duplicate commands. Task drafts use the shared Save, Discard, or Stay guard for record and section changes, window closure, and quitting. Closed-job tasks remain readable. Reopen the job before adding or changing a task. The service also rejects stale saves after closure.
 

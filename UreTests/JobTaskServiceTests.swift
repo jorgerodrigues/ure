@@ -96,7 +96,7 @@ nonisolated struct JobTaskServiceTests {
         let saved = try await service.save(JobTaskFixture.draft(.toDo), for: job.id, editing: nil)
         for sql in [
             "UPDATE jobTask SET title = ''", "UPDATE jobTask SET status = 'Unknown'",
-            "UPDATE jobTask SET status = 'Waiting'", "UPDATE jobTask SET status = 'Skipped'",
+            "UPDATE jobTask SET status = 'Skipped'",
             "UPDATE jobTask SET jobID = 'MISSING'",
         ] {
             await #expect(throws: DatabaseError.self) {

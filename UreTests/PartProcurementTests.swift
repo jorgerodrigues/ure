@@ -474,6 +474,7 @@ nonisolated struct PartProcurementTests {
 
 nonisolated enum PartProcurementMigrationFixture {
     static func removeProcurement(in db: Database) throws {
+        try TaskPartMigrationFixture.removeLinks(in: db)
         for column in [
             "orderedAt", "arrivedAt", "installedAt", "cancelledAt", "supplierSnapshot",
             "orderReference", "statusReason",

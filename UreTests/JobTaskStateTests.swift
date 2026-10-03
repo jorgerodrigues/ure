@@ -376,6 +376,71 @@ struct JobTaskStateTests {
         try await coordinator.close()
     }
 
+    @Test(.timeLimit(.minutes(1)))
+    func linkedPartsRefreshFromCommittedSavesWithoutReplacingDrafts() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        let other = try await JobTaskFixture.job(coordinator)
+        let parts = PartService(coordinator: coordinator)
+        let first = try await parts.save(PartFixture.draft(), for: job.id, editing: nil)
+        let second = try await parts.save(PartFixture.draft(), for: job.id, editing: nil)
+        let foreign = try await parts.save(PartFixture.draft(), for: other.id, editing: nil)
+        let (state, jobs, observations) = try await makeState(coordinator)
+        defer { observations.forEach { $0.cancel() } }
+        #expect(Set(state.availableParts(for: job.id).map(\.id)) == [first.id, second.id])
+        state.create(for: job.id, jobs: jobs)
+        state.draft?.title = "Fit setting mechanism"
+        state.draft?.status = .waiting
+        state.selectPart(first.id, selected: true)
+        state.selectPart(second.id, selected: true)
+        state.selectPart(foreign.id, selected: true)
+        #expect(state.draft?.partIDs == [first.id, second.id])
+        #expect(await state.save())
+        let waiting = try #require(state.selectedTask)
+        try await waitUntil { state.availability(for: waiting.id) == .waitingForParts }
+        state.edit(jobs: jobs)
+        state.draft?.detail = "Keep this unsaved detail"
+        let beforeDraft = state.draft
+        let arrived = try await TaskPartFixture.change(first, to: .arrived, using: parts)
+        try await waitUntil { state.linkedParts(for: waiting.id).contains(arrived.record) }
+        #expect(state.availability(for: waiting.id) == .waitingForParts)
+        #expect(state.draft == beforeDraft)
+        try await JobTaskFixture.failEvents(coordinator)
+        await #expect(throws: DatabaseError.self) {
+            try await TaskPartFixture.change(second, to: .arrived, using: parts)
+        }
+        #expect(state.availability(for: waiting.id) == .waitingForParts)
+        try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failTaskEvent")
+        }
+        let otherArrived = try await TaskPartFixture.change(second, to: .arrived, using: parts)
+        try await waitUntil { state.availability(for: waiting.id) == .partsAvailable }
+        #expect(state.selectedTask == waiting && state.draft == beforeDraft)
+        _ = try await TaskPartFixture.change(otherArrived, to: .cancelled, using: parts)
+        try await waitUntil { state.availability(for: waiting.id) == .needsReview }
+        #expect(state.selectedTask == waiting && state.draft == beforeDraft)
+        state.selectPart(first.id, selected: false)
+        state.selectPart(second.id, selected: false)
+        #expect(!(await state.save()))
+        #expect(state.fieldErrors[.waitingReason] != nil && state.draft?.partIDs.isEmpty == true)
+        #expect(state.linkedParts(for: waiting.id).count == 2)
+        state.cancel()
+        state.edit(jobs: jobs)
+        #expect(state.draft?.partIDs == [first.id, second.id])
+        #expect(state.draft?.detail == nil || state.draft?.detail == "")
+        state.draft?.status = .doing
+        state.selectPart(first.id, selected: false)
+        state.selectPart(second.id, selected: false)
+        #expect(await state.save())
+        #expect(state.linkedParts(for: waiting.id).isEmpty)
+        #expect(state.selectedTask?.status == .doing)
+        #expect(jobs.jobs.contains(job))
+        for observation in observations { observation.cancel(); await observation.value }
+        try await coordinator.close()
+    }
+
     private func makeState(_ coordinator: LibraryCoordinator) async throws -> (
         JobTaskState, JobState, [Task<Void, Never>]
     ) {

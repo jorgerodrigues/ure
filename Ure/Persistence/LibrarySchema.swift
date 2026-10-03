@@ -454,6 +454,38 @@ nonisolated enum LibrarySchema {
                 index: "activityEvent_jobID_ordering", on: "activityEvent",
                 columns: ["jobID", "ordering"])
         }
+        migrator.registerMigration("v16-task-parts", foreignKeyChecks: .immediate) { db in
+            try db.create(table: "jobTask_new") { table in
+                table.column("id", .text).primaryKey()
+                table.column("jobID", .text).notNull().references("job", onDelete: .restrict)
+                table.column("title", .text).notNull().check(sql: "length(trim(title)) > 0")
+                for column in ["detail", "groupLabel", "waitingReason", "skippedReason"] {
+                    table.column(column, .text)
+                }
+                table.column("status", .text).notNull().check(
+                    sql: "status IN ('To do', 'Doing', 'Waiting', 'Done', 'Skipped')")
+                table.check(
+                    sql:
+                        "status != 'Skipped' OR (skippedReason IS NOT NULL AND length(trim(skippedReason)) > 0)"
+                )
+                table.column("createdAt", .double).notNull()
+                table.column("updatedAt", .double).notNull()
+                table.column("position", .integer).notNull().defaults(to: 0).check { $0 >= 0 }
+            }
+            try db.execute(sql: "INSERT INTO jobTask_new SELECT * FROM jobTask")
+            try db.drop(table: "jobTask")
+            try db.rename(table: "jobTask_new", to: "jobTask")
+            try db.create(index: "jobTask_jobID", on: "jobTask", columns: ["jobID"])
+            try db.create(
+                index: "jobTask_jobID_position", on: "jobTask", columns: ["jobID", "position"])
+            try db.create(table: "taskPart") { table in
+                table.column("taskID", .text).notNull().references("jobTask", onDelete: .restrict)
+                table.column("partID", .text).notNull().references(
+                    "partRequirement", onDelete: .restrict)
+                table.primaryKey(["taskID", "partID"])
+            }
+            try db.create(index: "taskPart_partID", on: "taskPart", columns: ["partID"])
+        }
         return migrator
     }
 }

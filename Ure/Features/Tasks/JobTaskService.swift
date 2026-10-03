@@ -11,11 +11,16 @@ nonisolated enum JobTaskMove: Sendable {
 nonisolated enum JobTaskError: LocalizedError, Equatable {
     case missingRecord
     case jobMismatch
+    case missingPart
+    case partJobMismatch
 
     var errorDescription: String? {
         switch self {
         case .missingRecord: "This task is no longer available. Your draft has been kept."
         case .jobMismatch: "This task belongs to another job. Your draft has been kept."
+        case .missingPart: "A linked part is no longer available. Your draft has been kept."
+        case .partJobMismatch:
+            "Linked parts must belong to this task's job. Your draft has been kept."
         }
     }
 }
@@ -37,18 +42,47 @@ nonisolated struct JobTaskService: Sendable {
                 guard task.jobID == jobID else { throw JobTaskError.jobMismatch }
                 existing = task
             }
+            let savedLinks =
+                try existing.map { try TaskPartQueries.linked(to: $0.id, in: db) } ?? []
+            let savedPartIDs = Set(savedLinks.map(\.partID))
+            var linkedParts: [PartRecord] = []
+            for partID in draft.partIDs.sorted(by: { $0.uuidString < $1.uuidString }) {
+                guard
+                    let part = try PartRecord.fetchOne(
+                        db, sql: "SELECT * FROM partRequirement WHERE id = ?",
+                        arguments: [partID.uuidString])
+                else { throw JobTaskError.missingPart }
+                guard part.jobID == jobID else { throw JobTaskError.partJobMismatch }
+                linkedParts.append(part)
+            }
+            let retainsWaitingLinks =
+                existing?.status == .waiting && existing?.waitingReason == nil
+                && !savedPartIDs.isEmpty
+                && savedPartIDs.isSubset(of: draft.partIDs)
             let record = try draft.record(
                 id: existing?.id ?? dependencies.makeID(), jobID: jobID,
                 position: try existing?.position
                     ?? JobTaskQueries.ordered(for: jobID, in: db).count,
-                createdAt: existing?.createdAt ?? now, updatedAt: now)
-            if let existing, JobTaskDraft(task: existing) == JobTaskDraft(task: record) {
+                createdAt: existing?.createdAt ?? now, updatedAt: now,
+                allowsLinkedWaiting: linkedParts.contains { $0.status.isUnresolved }
+                    || retainsWaitingLinks)
+            if let existing, JobTaskDraft(task: existing) == JobTaskDraft(task: record),
+                savedPartIDs == draft.partIDs
+            {
                 return existing
             }
             if existing != nil {
                 try record.update(db)
             } else {
                 try record.insert(db)
+            }
+            for partID in savedPartIDs.subtracting(draft.partIDs) {
+                try db.execute(
+                    sql: "DELETE FROM taskPart WHERE taskID = ? AND partID = ?",
+                    arguments: [record.id.uuidString, partID.uuidString])
+            }
+            for partID in draft.partIDs.subtracting(savedPartIDs) {
+                try TaskPart(taskID: record.id, partID: partID).insert(db)
             }
             if let existing {
                 let prior = JobTaskValue(task: existing)
