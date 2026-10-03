@@ -340,6 +340,21 @@ nonisolated enum LibrarySchema {
                 index: "activityEvent_jobID_ordering", on: "activityEvent",
                 columns: ["jobID", "ordering"])
         }
+        migrator.registerMigration("v12-task-order") { db in
+            try db.alter(table: "jobTask") { table in
+                table.add(column: "position", .integer).notNull().defaults(to: 0).check { $0 >= 0 }
+            }
+            try db.execute(
+                sql: """
+                    WITH ordered AS (
+                        SELECT id, ROW_NUMBER() OVER (PARTITION BY jobID ORDER BY createdAt, id) - 1 AS position
+                        FROM jobTask
+                    )
+                    UPDATE jobTask SET position = (SELECT position FROM ordered WHERE ordered.id = jobTask.id)
+                    """)
+            try db.create(
+                index: "jobTask_jobID_position", on: "jobTask", columns: ["jobID", "position"])
+        }
         return migrator
     }
 }

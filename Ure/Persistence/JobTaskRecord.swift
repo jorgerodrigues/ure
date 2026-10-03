@@ -19,6 +19,7 @@ nonisolated struct JobTaskRecord: Codable, Equatable, Identifiable, Sendable, Fe
 
     let id: UUID
     let jobID: UUID
+    let position: Int
     let title: String
     let detail: String?
     let groupLabel: String?
@@ -43,7 +44,13 @@ nonisolated struct JobTaskRecord: Codable, Equatable, Identifiable, Sendable, Fe
 
 nonisolated enum JobTaskQueries {
     static func fetchAll(_ db: Database) throws -> [JobTaskRecord] {
-        try JobTaskRecord.fetchAll(db, sql: "SELECT * FROM jobTask ORDER BY createdAt, id")
+        try JobTaskRecord.fetchAll(db, sql: "SELECT * FROM jobTask ORDER BY jobID, position, id")
+    }
+
+    static func ordered(for jobID: UUID, in db: Database) throws -> [JobTaskRecord] {
+        try JobTaskRecord.fetchAll(
+            db, sql: "SELECT * FROM jobTask WHERE jobID = ? ORDER BY position, id",
+            arguments: [jobID.uuidString])
     }
 
     static func fetch(_ id: UUID, in db: Database) throws -> JobTaskRecord? {
@@ -56,7 +63,7 @@ nonisolated enum JobTaskQueries {
             db,
             sql: """
                 SELECT * FROM jobTask WHERE jobID = ? AND status IN ('To do', 'Doing', 'Waiting')
-                ORDER BY createdAt, id
+                ORDER BY position, id
                 """, arguments: [jobID.uuidString])
     }
 }

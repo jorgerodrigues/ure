@@ -23,6 +23,14 @@ struct WorkshopCommands: Commands {
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(!canSave)
         }
+        CommandMenu("Task") {
+            Button("Move up", action: moveTaskUp)
+                .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+                .disabled(!canMoveTask(.up))
+            Button("Move down", action: moveTaskDown)
+                .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+                .disabled(!canMoveTask(.down))
+        }
         CommandGroup(after: .sidebar) {
             Divider()
 
@@ -133,4 +141,21 @@ struct WorkshopCommands: Commands {
     }
 
     private func openReference() { openWindow(id: "reference") }
+
+    private func canMoveTask(_ destination: JobTaskMove) -> Bool {
+        guard allowsEditing == true, navigation.selectedSection == .watches,
+            !editing.isSaving, !editing.hasUnsavedChanges,
+            let task = editing.tasks.selectedTask, editing.jobs.selectedID == task.jobID,
+            !editing.jobs.isEditing
+        else { return false }
+        return editing.tasks.canMove(task.id, for: task.jobID, to: destination, jobs: editing.jobs)
+    }
+
+    private func moveTaskUp() { moveTask(.up) }
+    private func moveTaskDown() { moveTask(.down) }
+
+    private func moveTask(_ destination: JobTaskMove) {
+        guard canMoveTask(destination), let task = editing.tasks.selectedTask else { return }
+        editing.tasks.moveCommand(task.id, for: task.jobID, to: destination, jobs: editing.jobs)
+    }
 }

@@ -15,6 +15,7 @@ final class JobTaskState {
     private(set) var isSaving = false
     private(set) var loadError: String?
     private(set) var saveError: String?
+    private(set) var reorderError: String?
     private(set) var fieldErrors: [JobTaskField: String] = [:]
     var draft: JobTaskDraft?
     var showsUnsavedChanges = false
@@ -29,9 +30,56 @@ final class JobTaskState {
 
     func records(for jobID: UUID) -> [JobTaskRecord] {
         tasks.filter { $0.jobID == jobID }.sorted { lhs, rhs in
-            if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
+            if lhs.position != rhs.position { return lhs.position < rhs.position }
             return lhs.id.uuidString < rhs.id.uuidString
         }
+    }
+
+    func progress(for jobID: UUID) -> JobTaskProgress {
+        JobTaskProgress(tasks: records(for: jobID))
+    }
+
+    func canReorder(_ jobID: UUID, jobs: JobState) -> Bool {
+        !isSaving && draft == nil && !isNavigationPending && canWrite(jobID, jobs: jobs)
+    }
+
+    func canMove(_ id: UUID, for jobID: UUID, to destination: JobTaskMove, jobs: JobState) -> Bool {
+        guard canReorder(jobID, jobs: jobs) else { return false }
+        let records = records(for: jobID)
+        guard let source = records.firstIndex(where: { $0.id == id }) else { return false }
+        switch destination {
+        case .up: return source > 0
+        case .down, .end: return source < records.count - 1
+        case .before(let targetID):
+            guard let target = records.firstIndex(where: { $0.id == targetID }) else {
+                return false
+            }
+            return source != target && source + 1 != target
+        }
+    }
+
+    @discardableResult
+    func move(_ id: UUID, for jobID: UUID, to destination: JobTaskMove, jobs: JobState) async
+        -> Bool
+    {
+        guard canMove(id, for: jobID, to: destination, jobs: jobs) else { return false }
+        isSaving = true
+        reorderError = nil
+        defer { isSaving = false }
+        do {
+            let saved = try await service.move(id, for: jobID, to: destination)
+            tasks.removeAll { $0.jobID == jobID }
+            tasks.append(contentsOf: saved)
+            return true
+        } catch {
+            reorderError =
+                "Could not move the task. The previous order has been kept. \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    func moveCommand(_ id: UUID, for jobID: UUID, to destination: JobTaskMove, jobs: JobState) {
+        Task { await move(id, for: jobID, to: destination, jobs: jobs) }
     }
 
     func isPresenting(for jobID: UUID) -> Bool {
@@ -175,6 +223,7 @@ final class JobTaskState {
 
     private func clearErrors() {
         saveError = nil
+        reorderError = nil
         fieldErrors = [:]
     }
 
