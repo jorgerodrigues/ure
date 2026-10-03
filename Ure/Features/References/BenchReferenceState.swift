@@ -34,6 +34,14 @@ final class BenchReferenceState {
 
     func stop() { observation?.cancel(); observation = nil }
 
+    func clearForRestore() {
+        jobID = nil
+        pinnedID = nil
+        snapshot = BenchSnapshot()
+        didRestore = true
+        persist()
+    }
+
     func observe() async {
         isLoading = true
         loadError = nil

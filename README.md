@@ -172,7 +172,11 @@ Use **Export Library Backup** in Settings to save a `.watchbackup` package. The 
 
 The package contains an independent SQLite snapshot, `manifest.json` for the library identity, unchanged originals, and a versioned `backup.json` with the export time, app version, migration history, table counts, byte counts, and SHA-256 hashes. SQLite backup includes committed WAL data. Caches, abandoned files, local preferences, and recovery generations are omitted. The app checks the whole staged package before publishing it. A failed or cancelled export keeps an existing destination intact. Successful replacement uses an atomic directory swap. Filesystems that reject atomic publication report an error and keep the previous backup.
 
-Settings retains the last successful user export time. That time does not confirm that the backup still exists. Recovery copies are local protection against app failures. Store an exported copy on another disk to protect against loss of the Mac. W027 adds internal restore validation and independent staging. Visible Restore controls and activation follow in W028. Do not keep valuable records only in this app before the Recovery and Release milestones pass.
+Use **Restore Library Backup** in Settings to choose a `.watchbackup` package. Ure checks and prepares an independent copy. Review its date, app version, record counts, original count, and size. Restore replaces the current library. It does not merge records. Changes made after the backup date will be lost. Save or cancel drafts and wait for pending saves and imports before restoring. You can cancel while checking the package or after review. **Replace Library** requires a separate confirmation.
+
+Before replacement, Ure makes and checks a complete recovery copy of the current library. A failed recovery copy prevents the switch. Library operations drain and database connections close before the pointer changes. The old generation stays saved. A failed first open returns to it. If rollback fails, Ure shows recovery and preserves the files. It never creates an empty replacement. Main screens reset and reload. Open reference windows reset. Commands from old screens cannot write after activation. **Show Recovery Copy in Finder** locates the recovery copy after an attempt that saved one.
+
+Settings retains the last successful user export time. That time does not confirm that the backup still exists. Recovery copies are local protection against app failures. Store an exported copy on another disk to protect against loss of the Mac. Do not keep valuable records only in this app before the Recovery and Release milestones pass.
 
 ## Verification
 
@@ -236,6 +240,7 @@ The Release configuration enables optimization and whole-module compilation. The
 - [W021 parts overview verification](docs/planning/parts-overview-verification.md)
 - [W023 archive and removal verification](docs/planning/archive-verification.md)
 - [W027 restore staging verification](docs/planning/restore-staging-verification.md)
+- [W028 restore activation verification](docs/planning/restore-activation-verification.md)
 - [Design: brand, app icon, and macOS 27 screen rules](docs/design/README.md)
 
 The user approved the current-platform direction and W002's SQLite/GRDB storage design on 1 October 2026. Shared caliber records and the repair history rule were approved on 2 October 2026. Watch, caliber, intake, stage, and condition forms use explicit Save and Cancel editing. W003, W004, and W005 are merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29), [PR #31](https://github.com/jorgerodrigues/ure/pull/31), and [PR #32](https://github.com/jorgerodrigues/ure/pull/32). W006 is merged in [PR #33](https://github.com/jorgerodrigues/ure/pull/33). W007 is merged in [PR #34](https://github.com/jorgerodrigues/ure/pull/34). W008 is implemented in [PR #35](https://github.com/jorgerodrigues/ure/pull/35). Native UI and device checks are deferred to release acceptance by agreement. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.

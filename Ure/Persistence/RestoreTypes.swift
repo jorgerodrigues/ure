@@ -14,6 +14,31 @@ nonisolated struct StagedRestore: Equatable, Sendable {
     let summary: RestoreSummary
 }
 
+nonisolated enum RestoreActivationCheckpoint: Sendable, CaseIterable {
+    case beforeRecovery
+    case afterRecovery
+    case beforeSwitch
+    case afterSwitch
+    case beforeFirstOpen
+    case afterFirstOpen
+    case beforeRollback
+}
+
+nonisolated struct RestoreActivation: Sendable {
+    enum Outcome: Sendable {
+        case restored
+        case keptCurrent
+        case recoveryRequired
+    }
+
+    let outcome: Outcome
+    let coordinator: LibraryCoordinator
+    let library: LibraryInfo?
+    let recovery: LibrarySnapshot?
+    let candidate: StagedRestore?
+    let message: String
+}
+
 nonisolated enum RestoreCheckpoint: Sendable {
     case copiedChunk
     case beforeMigration

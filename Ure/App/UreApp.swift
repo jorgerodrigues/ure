@@ -3,23 +3,7 @@ import SwiftUI
 @main
 struct UreApp: App {
     @NSApplicationDelegateAdaptor(WorkshopApplicationDelegate.self) private var applicationDelegate
-    @State private var navigation: WorkshopNavigation
-    @State private var library: LibraryState
-    @State private var backup: BackupState
-    @State private var watches: WatchState
-    @State private var calibers: CaliberState
-    @State private var jobs: JobState
-    @State private var search: SearchState
-    @State private var workshop: WorkshopOverviewState
-    @State private var partsOverview: PartsOverviewState
-    @State private var notes: NoteState
-    @State private var tasks: JobTaskState
-    @State private var parts: PartState
-    @State private var references: ReferenceState
-    @State private var photos: PhotoState
-    @State private var documents: DocumentState
-    @State private var editing: WorkshopEditing
-    @State private var bench: BenchReferenceState
+    @State private var restore: RestoreState
 
     init() {
         let configuration = AppConfiguration.current
@@ -29,75 +13,56 @@ struct UreApp: App {
         #else
             let dependencies = LibraryDependencies()
         #endif
-        _navigation = State(initialValue: WorkshopNavigation(configuration: configuration))
         let coordinator = LibraryCoordinator(
             root: configuration.libraryRoot, dependencies: dependencies)
-        let watches = WatchState(service: WatchService(coordinator: coordinator))
-        let calibers = CaliberState(service: CaliberService(coordinator: coordinator))
-        let jobs = JobState(service: JobService(coordinator: coordinator))
-        let tasks = JobTaskState(service: JobTaskService(coordinator: coordinator))
-        let parts = PartState(service: PartService(coordinator: coordinator))
-        let notes = NoteState(service: NoteService(coordinator: coordinator))
-        let references = ReferenceState(service: ReferenceService(coordinator: coordinator))
-        let photos = PhotoState(service: PhotoService(coordinator: coordinator))
-        let documents = DocumentState(service: DocumentService(coordinator: coordinator))
-        let editing = WorkshopEditing(
-            watches: watches, calibers: calibers, jobs: jobs, notes: notes, references: references,
-            photos: photos, documents: documents, tasks: tasks, parts: parts)
-        _library = State(initialValue: LibraryState(coordinator: coordinator))
-        _backup = State(initialValue: BackupState(coordinator: coordinator))
-        _watches = State(initialValue: watches)
-        _calibers = State(initialValue: calibers)
-        _jobs = State(initialValue: jobs)
-        _search = State(initialValue: SearchState(coordinator: coordinator))
-        _workshop = State(initialValue: WorkshopOverviewState(coordinator: coordinator))
-        _partsOverview = State(initialValue: PartsOverviewState(coordinator: coordinator))
-        _notes = State(initialValue: notes)
-        _tasks = State(initialValue: tasks)
-        _parts = State(initialValue: parts)
-        _references = State(initialValue: references)
-        _photos = State(initialValue: photos)
-        _documents = State(initialValue: documents)
-        _editing = State(initialValue: editing)
-        _bench = State(
-            initialValue: BenchReferenceState(
-                service: BenchReferenceService(coordinator: coordinator),
-                preferences: BenchPreferences(libraryRoot: configuration.libraryRoot)))
-        applicationDelegate.editing = editing
+        let restore = RestoreState(
+            library: LibraryState(coordinator: coordinator), configuration: configuration)
+        _restore = State(initialValue: restore)
+        applicationDelegate.restore = restore
     }
 
     var body: some Scene {
         Window("Ure", id: "workshop") {
             LibraryRootView()
-                .environment(navigation)
-                .environment(library)
-                .environment(watches)
-                .environment(calibers)
-                .environment(jobs)
-                .environment(search)
-                .environment(workshop)
-                .environment(partsOverview)
-                .environment(notes)
-                .environment(tasks)
-                .environment(parts)
-                .environment(references)
-                .environment(photos)
-                .environment(documents)
-                .environment(editing)
-                .environment(bench)
-                .focusedSceneValue(\.allowsWorkshopEditing, true)
+                .id(restore.session.id)
+                .environment(restore.session.navigation)
+                .environment(restore.library)
+                .environment(restore.session.watches)
+                .environment(restore.session.calibers)
+                .environment(restore.session.jobs)
+                .environment(restore.session.search)
+                .environment(restore.session.workshop)
+                .environment(restore.session.partsOverview)
+                .environment(restore.session.notes)
+                .environment(restore.session.tasks)
+                .environment(restore.session.parts)
+                .environment(restore.session.references)
+                .environment(restore.session.photos)
+                .environment(restore.session.documents)
+                .environment(restore.session.editing)
+                .environment(restore.session.bench)
+                .focusedSceneValue(\.allowsWorkshopEditing, !restore.isActivating)
                 .frame(minWidth: 1000, minHeight: 650)
         }
         .defaultSize(width: 1200, height: 800)
         .windowResizability(.contentMinSize)
         .commands {
             SidebarCommands()
-            WorkshopCommands(navigation: navigation, editing: editing, bench: bench, search: search)
+            WorkshopCommands(
+                navigation: restore.session.navigation, editing: restore.session.editing,
+                bench: restore.session.bench, search: restore.session.search)
         }
 
         Window("Reference", id: "reference") {
-            ReferenceWindowView(bench: bench)
-                .frame(minWidth: 420, minHeight: 650)
+            Group {
+                if restore.isActivating {
+                    ProgressView("Restoring library…")
+                } else {
+                    ReferenceWindowView(bench: restore.session.bench)
+                        .id(restore.session.id)
+                }
+            }
+            .frame(minWidth: 420, minHeight: 650)
         }
         .defaultSize(width: 620, height: 720)
         .windowResizability(.contentMinSize)
@@ -105,8 +70,9 @@ struct UreApp: App {
 
         Settings {
             SettingsView()
-                .environment(library)
-                .environment(backup)
+                .environment(restore.library)
+                .environment(restore.backup)
+                .environment(restore)
         }
     }
 }

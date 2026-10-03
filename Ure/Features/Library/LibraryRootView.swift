@@ -18,7 +18,7 @@ struct LibraryRootView: View {
     }
 
     private func openLibrary() async {
-        await library.open()
+        if library.phase == .loading { await library.open() }
     }
 }
 

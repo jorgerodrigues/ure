@@ -11,6 +11,8 @@ actor LibraryCoordinator {
     private var isPrepared = false
     private var isExporting = false
     private var exportWaiters: [CheckedContinuation<Void, Never>] = []
+    private var isRetired = false
+    private var stagedRestores: [UUID: StagedRestore] = [:]
 
     init(
         root: URL,
@@ -23,6 +25,7 @@ actor LibraryCoordinator {
     }
 
     func open() throws -> LibraryInfo {
+        guard !isRetired else { throw LibraryError.notOpen }
         if let info { return info }
         try Task.checkCancellation()
         if !isPrepared {
@@ -280,10 +283,99 @@ actor LibraryCoordinator {
         let service = LibraryRestoreService(migrator: migrator, dependencies: dependencies)
         let root = root
         let operation = Task.detached { try service.stage(from: package, in: root) }
-        return try await withTaskCancellationHandler {
+        let staged = try await withTaskCancellationHandler {
             try await operation.value
         } onCancel: {
             operation.cancel()
+        }
+        guard !isRetired else {
+            try? FileManager.default.removeItem(
+                at: LibraryFiles.generation(staged.library.generationID, in: root))
+            throw LibraryError.notOpen
+        }
+        stagedRestores[staged.library.generationID] = staged
+        return staged
+    }
+
+    func discardRestore(_ staged: StagedRestore) throws {
+        let id = staged.library.generationID
+        guard stagedRestores[id] == staged, info?.generationID != id else { return }
+        try FileManager.default.removeItem(at: LibraryFiles.generation(id, in: root))
+        stagedRestores[id] = nil
+    }
+
+    private func registerRestore(_ staged: StagedRestore) {
+        stagedRestores[staged.library.generationID] = staged
+    }
+
+    func activateRestore(_ staged: StagedRestore) async throws -> RestoreActivation {
+        try await waitForExport()
+        guard !isRetired, let database, let current = info,
+            stagedRestores[staged.library.generationID] == staged
+        else { throw LibraryError.notOpen }
+
+        // Retire this command boundary before any suspension. Old screens can never reopen it.
+        isRetired = true
+        self.database = nil
+        info = nil
+        stagedRestores.removeAll()
+        let service = LibraryActivationService(
+            root: root, dependencies: dependencies, migrator: migrator)
+        var recovery: LibrarySnapshot?
+        var switched = false
+        var replacement: LibraryCoordinator?
+        do {
+            try service.validate(staged.library, expectedCounts: staged.summary.counts)
+            try dependencies.activationCheckpoint(.beforeRecovery)
+            recovery = try service.createRecovery(from: database, current: current)
+            try dependencies.activationCheckpoint(.afterRecovery)
+            try database.close()
+            try Task.checkCancellation()
+            try dependencies.activationCheckpoint(.beforeSwitch)
+            try publish(staged.library.generationID)
+            switched = true
+            try dependencies.activationCheckpoint(.afterSwitch)
+            try dependencies.activationCheckpoint(.beforeFirstOpen)
+            let next = LibraryCoordinator(
+                root: root, dependencies: dependencies, migrator: migrator)
+            replacement = next
+            let opened = try await next.open()
+            try dependencies.activationCheckpoint(.afterFirstOpen)
+            return RestoreActivation(
+                outcome: .restored, coordinator: next, library: opened, recovery: recovery,
+                candidate: nil,
+                message:
+                    "Library restored. The library from before restore is kept in the recovery folder."
+            )
+        } catch {
+            let failure = error.localizedDescription
+            do {
+                try database.close()
+                try await replacement?.close()
+                if switched {
+                    try dependencies.activationCheckpoint(.beforeRollback)
+                    try publish(current.generationID)
+                }
+                let retained = LibraryCoordinator(
+                    root: root, dependencies: dependencies, migrator: migrator)
+                let opened = try await retained.open()
+                if !switched { await retained.registerRestore(staged) }
+                return RestoreActivation(
+                    outcome: .keptCurrent, coordinator: retained, library: opened,
+                    recovery: recovery, candidate: switched ? nil : staged,
+                    message: "Restore failed. The current library was kept. \(failure)")
+            } catch {
+                let retained = LibraryCoordinator(
+                    root: root, dependencies: dependencies, migrator: migrator)
+                if !switched { await retained.registerRestore(staged) }
+                return RestoreActivation(
+                    outcome: .recoveryRequired,
+                    coordinator: retained,
+                    library: nil, recovery: recovery, candidate: switched ? nil : staged,
+                    message:
+                        "Restore could not reopen a library. Both generations have been kept. Use Retry or find the library and recovery folders. \(failure) \(error.localizedDescription)"
+                )
+            }
         }
     }
 
