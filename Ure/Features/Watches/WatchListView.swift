@@ -44,6 +44,8 @@ struct WatchListView: View {
         .searchable(text: $watches.searchText, prompt: "Find a watch")
         .toolbar {
             Button("Add Watch", systemImage: "plus", action: createWatch)
+                .labelStyle(.iconOnly)
+                .help("Add Watch (⌘N)")
                 .accessibilityIdentifier("addWatch")
                 .disabled(editing.isSaving || watches.isLoading || watches.loadError != nil)
         }
@@ -80,13 +82,14 @@ private struct WatchRow: View {
     let watch: WatchRecord
 
     var body: some View {
-        HStack(spacing: 8) {
-            PhotoThumbnailView(photoID: watch.coverPhotoID).frame(width: 40, height: 40)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(watch.name)
+        HStack(spacing: UreLayout.rowSpacing) {
+            PhotoThumbnailView(photoID: watch.coverPhotoID)
+                .frame(width: UreLayout.rowThumbnailSize, height: UreLayout.rowThumbnailSize)
+            VStack(alignment: .leading, spacing: UreLayout.textSpacing) {
+                Text(watch.name).font(.body).fontWeight(.semibold)
                 if let brand = watch.brand {
                     Text(brand)
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
             }

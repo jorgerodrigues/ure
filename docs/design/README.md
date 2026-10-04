@@ -4,7 +4,7 @@ The Paper file [**Ure**](https://app.paper.design/file/01M3XMBQN7WXTGQBWF7QYKP79
 
 ## Brand
 
-The mood is **blued steel**: enamel white, dial black, one deep blue, and one ruby detail. The palette is proposed. The typography is decided.
+The mood is **blued steel**: enamel white, dial black, one deep blue, and one ruby detail. The user approved implementing the Paper palette and design foundations on 4 October 2026. The typography uses the system text styles.
 
 | Role | Name | Light | Dark | Use |
 | --- | --- | --- | --- | --- |
@@ -46,6 +46,10 @@ Renditions are `Default`, `Dark`, `TintedLight`, `TintedDark`, `ClearLight` and 
 ## Screens
 
 Screens follow macOS 27 Golden Gate as closely as possible. Standard SwiftUI controls give most of this without custom code. Don't override them.
+
+The shared code foundation is `Ure/Design/UreLayout.swift` for the Paper window, column and row dimensions, and `RecordHeading` for saved-record titles. System text styles and semantic foreground styles supply typography and colour. `WorkshopSection` owns navigation symbols. Sidebar labels use equal icon slots, the user's accent, and a semibold selected title. Toolbar actions use SF Symbols with their existing accessible labels and menu commands. Editors keep one prominent Save action.
+
+The current Icon Composer layers already match the Pomme v2 vectors in Paper. Keep those source layers and compile their appearances through Xcode. Paper's illustrative layer bounds and dashed guides are not part of the icon artwork.
 
 ### Window and sidebar
 

@@ -7,7 +7,7 @@ struct WorkshopSidebar: View {
 
     var body: some View {
         List(WorkshopSection.allCases, selection: selection) { section in
-            Label(section.title, systemImage: section.symbol)
+            WorkshopSidebarRow(section: section, isSelected: navigation.selection == section)
                 .tag(section)
         }
         .listStyle(.sidebar)

@@ -55,7 +55,9 @@ struct PhotoDetailView: View {
                     Button("Remove Photo", role: .destructive, action: requestRemoval)
                         .disabled(editing.isSaving || !editing.canWrite(owner))
                         .accessibilityIdentifier("removePhoto")
-                    Button("Edit Photo", action: edit)
+                    Button("Edit Photo", systemImage: "pencil", action: edit)
+                        .labelStyle(.iconOnly)
+                        .help("Edit Photo (⌥⌘E)")
                         .disabled(editing.isSaving || !editing.canWrite(owner))
                     Button("Export Original", action: exportOriginal).disabled(editing.isSaving)
                 }

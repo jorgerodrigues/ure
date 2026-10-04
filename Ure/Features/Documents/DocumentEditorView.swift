@@ -44,8 +44,9 @@ struct DocumentEditorView: View {
         .toolbar {
             ToolbarItemGroup(placement: .confirmationAction) {
                 Button("Cancel", action: documents.cancel).disabled(documents.isSaving)
-                Button("Save", action: documents.saveCommand).disabled(
-                    !documents.canSave(jobs: jobs) || !editing.canWrite(owner))
+                Button("Save", action: documents.saveCommand).buttonStyle(.borderedProminent)
+                    .disabled(
+                        !documents.canSave(jobs: jobs) || !editing.canWrite(owner))
             }
         }
         .onAppear(perform: focusTitle)

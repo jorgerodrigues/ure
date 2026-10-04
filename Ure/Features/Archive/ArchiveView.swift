@@ -18,9 +18,9 @@ struct ArchiveView: View {
                 }
             } else {
                 List(editing.archive.records(editing: editing), selection: selection) { entry in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(entry.title)
-                        Text(entry.context).font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: UreLayout.textSpacing) {
+                        Text(entry.title).font(.body).fontWeight(.semibold)
+                        Text(entry.context).font(.subheadline).foregroundStyle(.secondary)
                     }.tag(entry.id)
                 }
                 .accessibilityIdentifier("archiveList")

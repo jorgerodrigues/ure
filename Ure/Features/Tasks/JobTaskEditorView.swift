@@ -69,8 +69,10 @@ struct JobTaskEditorView: View {
                 if tasks.isSaving { ProgressView().controlSize(.small) }
                 Button("Cancel", action: tasks.cancel).disabled(tasks.isSaving)
                     .accessibilityIdentifier("cancelTask")
-                Button("Save", action: tasks.saveCommand).disabled(!tasks.canSave(jobs: jobs))
-                    .accessibilityIdentifier("saveTask")
+                Button("Save", action: tasks.saveCommand).buttonStyle(.borderedProminent).disabled(
+                    !tasks.canSave(jobs: jobs)
+                )
+                .accessibilityIdentifier("saveTask")
             }
         }
         .onAppear(perform: focusTitle)

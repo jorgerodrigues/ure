@@ -4,6 +4,7 @@ struct JobDetailView: View {
     @Environment(SearchState.self) private var search
     @State private var showsTimeline = false
     @Environment(JobState.self) private var jobs
+    @Environment(WorkshopNavigation.self) private var navigation
     @Environment(WorkshopEditing.self) private var editing
     @Environment(WatchState.self) private var watches
     @Environment(NoteState.self) private var notes
@@ -35,6 +36,7 @@ struct JobDetailView: View {
                 NoteDetailView(owner: .job(job.id))
             } else if let job = jobs.selectedJob {
                 Form {
+                    RecordHeading(title: job.title, subtitle: job.stage.rawValue)
                     Section("Job") {
                         LabeledContent("Title", value: job.title)
                         LabeledContent("Stage", value: job.stage.rawValue)
@@ -102,17 +104,26 @@ struct JobDetailView: View {
                 }
                 .formStyle(.grouped)
                 .textSelection(.enabled)
-                .navigationTitle(job.title)
+                .navigationTitle(navigation.selectedSection.title)
                 .focusedSceneValue(\.recordMenuActions, menuActions(for: job))
                 .focusedSceneValue(\.recordBackAction, backAction)
                 .toolbar {
                     if job.stage.isOpen {
-                        Button("Change Stage", action: changeStage)
+                        Button("Change Stage", systemImage: "flag", action: changeStage)
+                            .labelStyle(.iconOnly)
+                            .help("Change Stage")
                             .accessibilityIdentifier("changeJobStage")
-                        Button("Change Condition", action: changeCondition)
-                            .accessibilityIdentifier("changeWatchCondition")
+                        Button(
+                            "Change Condition", systemImage: "waveform.path.ecg",
+                            action: changeCondition
+                        )
+                        .labelStyle(.iconOnly)
+                        .help("Change Condition")
+                        .accessibilityIdentifier("changeWatchCondition")
                     } else {
-                        Button("Reopen Job", action: reopen)
+                        Button("Reopen Job", systemImage: "arrow.counterclockwise", action: reopen)
+                            .labelStyle(.iconOnly)
+                            .help("Reopen Job")
                             .disabled(
                                 editing.isSaving
                                     || !editing.canWrite(LibraryItemOwner.watch(job.watchID))
@@ -121,7 +132,9 @@ struct JobDetailView: View {
                             .accessibilityIdentifier("reopenJob")
                     }
                     if job.stage.isOpen && job.intakeSnapshot.version == 1 {
-                        Button("Edit Intake", action: jobs.edit)
+                        Button("Edit Intake", systemImage: "pencil", action: jobs.edit)
+                            .labelStyle(.iconOnly)
+                            .help("Edit Intake")
                             .accessibilityIdentifier("editJob")
                     }
                 }

@@ -33,7 +33,7 @@ struct PhotoEditorView: View {
         .toolbar {
             ToolbarItemGroup(placement: .confirmationAction) {
                 Button("Cancel", action: photos.cancel).disabled(photos.isSaving)
-                Button("Save", action: photos.saveCommand)
+                Button("Save", action: photos.saveCommand).buttonStyle(.borderedProminent)
                     .disabled(!photos.canSave(jobs: jobs) || !editing.canWrite(owner))
             }
         }

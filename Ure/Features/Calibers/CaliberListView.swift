@@ -45,6 +45,8 @@ struct CaliberListView: View {
         .searchable(text: $calibers.searchText, prompt: "Find a caliber")
         .toolbar {
             Button("Add Caliber", systemImage: "plus", action: create)
+                .labelStyle(.iconOnly)
+                .help("Add Caliber (⌘N)")
                 .accessibilityIdentifier("addCaliber")
                 .disabled(editing.isSaving || calibers.isLoading || calibers.loadError != nil)
         }
@@ -73,11 +75,11 @@ private struct CaliberRow: View {
     let caliber: CaliberRecord
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(caliber.label)
+        VStack(alignment: .leading, spacing: UreLayout.textSpacing) {
+            Text(caliber.label).font(.body).fontWeight(.semibold)
             if let manufacturer = caliber.manufacturer {
                 Text(manufacturer)
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
         }

@@ -70,7 +70,7 @@ struct JobEditorView: View {
                 Button("Cancel", action: jobs.cancel)
                     .accessibilityIdentifier("cancelJob")
                     .disabled(jobs.isSaving)
-                Button("Save", action: jobs.saveCommand)
+                Button("Save", action: jobs.saveCommand).buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("saveJob")
                     .disabled(!jobs.canSave)
             }

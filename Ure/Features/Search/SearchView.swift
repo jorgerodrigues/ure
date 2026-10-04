@@ -56,6 +56,8 @@ struct SearchView: View {
         .onAppear(perform: activateSearch)
         .toolbar {
             Button("Close Search", systemImage: "xmark", action: search.close)
+                .labelStyle(.iconOnly)
+                .help("Close Search")
                 .accessibilityIdentifier("closeGlobalSearch")
         }
     }
@@ -71,9 +73,9 @@ private struct SearchResultRow: View {
 
     var body: some View {
         Button(action: open) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(result.title)
-                Text(result.context).font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: UreLayout.textSpacing) {
+                Text(result.title).font(.body).fontWeight(.semibold)
+                Text(result.context).font(.subheadline).foregroundStyle(.secondary)
                 if result.isArchived {
                     Text("Archived").font(.caption).foregroundStyle(.secondary)
                 }

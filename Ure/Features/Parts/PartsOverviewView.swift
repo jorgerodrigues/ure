@@ -75,9 +75,10 @@ private struct OverviewPartRow: View {
     let row: OverviewPart
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            PhotoThumbnailView(photoID: row.watch.coverPhotoID).frame(width: 36, height: 36)
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .top, spacing: UreLayout.rowSpacing) {
+            PhotoThumbnailView(photoID: row.watch.coverPhotoID)
+                .frame(width: UreLayout.rowThumbnailSize, height: UreLayout.rowThumbnailSize)
+            VStack(alignment: .leading, spacing: UreLayout.textSpacing) {
                 Text(row.part.description).font(.body).fontWeight(.semibold)
                 if let reference = row.part.manufacturerReference {
                     Text("Reference: \(reference)")

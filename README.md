@@ -45,7 +45,15 @@ Open `Ure.xcodeproj`, select the shared **Ure** scheme, and run. Or use:
 make run
 ```
 
-Local runs use ad-hoc signing. No Apple developer account is required. App Sandbox is enabled. Hardened Runtime is configured for distribution; Xcode disables it for local ad-hoc builds. The current bundle identifier is `local.ure.app`; settle an owner-controlled identifier before distribution and before storing valuable data.
+To install an optimized build for daily use, quit any running copy of Ure and run:
+
+```sh
+make install XCODE_EXTRA_FLAGS=SDK_STAT_CACHE_ENABLE=NO
+```
+
+This builds a locally signed Release with Hardened Runtime, verifies its signature, installs it in `~/Applications/Ure.app`, and opens it. Use `INSTALL_DIR=/Applications` to choose the shared Applications folder. Installation replaces only the app bundle. The library remains in Application Support. Local signing needs no developer account. This build is for this Mac; it is not notarized for distribution.
+
+Local runs use ad-hoc signing. No Apple developer account is required. App Sandbox is enabled. Xcode disables Hardened Runtime for ordinary ad-hoc builds; `make install` explicitly enables it and omits debug entitlements. The current bundle identifier is `local.ure.app`; settle an owner-controlled identifier before distribution and before storing valuable data.
 
 The main window contains Workshop, Watches, Calibers, Parts, and Archive. Use **Option-Command-1** through **Option-Command-5** to select a section. **Command-comma** opens Settings. Startup creates or reopens the local library. Workshop shows open jobs. Watches and Calibers have saved-record lists and editors. Parts shows requirements from open jobs. Archive shows archived watches and calibers, plus closed jobs.
 
@@ -273,6 +281,7 @@ The Release configuration enables optimization and whole-module compilation. The
 - [W027 restore staging verification](docs/planning/restore-staging-verification.md)
 - [W028 restore activation verification](docs/planning/restore-activation-verification.md)
 - [Design: brand, app icon, and macOS 27 screen rules](docs/design/README.md)
+- [Paper design foundations and local installation verification](docs/planning/design-install-verification.md)
 
 The user approved the current-platform direction and W002's SQLite/GRDB storage design on 1 October 2026. Shared caliber records and the repair history rule were approved on 2 October 2026. Watch, caliber, intake, stage, and condition forms use explicit Save and Cancel editing. W003, W004, and W005 are merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29), [PR #31](https://github.com/jorgerodrigues/ure/pull/31), and [PR #32](https://github.com/jorgerodrigues/ure/pull/32). W006 is merged in [PR #33](https://github.com/jorgerodrigues/ure/pull/33). W007 is merged in [PR #34](https://github.com/jorgerodrigues/ure/pull/34). W008 is implemented in [PR #35](https://github.com/jorgerodrigues/ure/pull/35). Native UI and device checks are deferred to release acceptance by agreement. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.
 

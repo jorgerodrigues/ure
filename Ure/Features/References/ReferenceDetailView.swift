@@ -51,7 +51,9 @@ struct ReferenceDetailView: View {
                     Button("Remove Link", role: .destructive, action: requestRemoval)
                         .disabled(editing.isSaving || !editing.canWrite(owner))
                         .accessibilityIdentifier("removeLink")
-                    Button("Edit Link", action: edit)
+                    Button("Edit Link", systemImage: "pencil", action: edit)
+                        .labelStyle(.iconOnly)
+                        .help("Edit Link (⌥⌘E)")
                         .disabled(editing.isSaving || !editing.canWrite(owner))
                         .accessibilityIdentifier("editReference")
                 }

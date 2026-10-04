@@ -8,6 +8,7 @@ struct CaliberDetailView: View {
     @Environment(PhotoState.self) private var photos
     @Environment(ReferenceState.self) private var references
 
+    @Environment(WorkshopNavigation.self) private var navigation
     @Environment(WorkshopEditing.self) private var editing
 
     var body: some View {
@@ -31,6 +32,7 @@ struct CaliberDetailView: View {
             NoteDetailView(owner: .caliber(caliber.id))
         } else if let caliber = calibers.selectedCaliber {
             Form {
+                RecordHeading(title: caliber.label, subtitle: caliber.manufacturer)
                 Section {
                     if caliber.archivedAt != nil {
                         Label("Archived. Unarchive to make changes.", systemImage: "archivebox")
@@ -70,10 +72,12 @@ struct CaliberDetailView: View {
             }
             .formStyle(.grouped)
             .textSelection(.enabled)
-            .navigationTitle(caliber.label)
+            .navigationTitle(navigation.selectedSection.title)
             .focusedSceneValue(\.recordMenuActions, menuActions(for: caliber))
             .toolbar {
-                Button("Edit", action: calibers.edit)
+                Button("Edit", systemImage: "pencil", action: calibers.edit)
+                    .labelStyle(.iconOnly)
+                    .help("Edit Caliber (⌥⌘E)")
                     .disabled(editing.isSaving || caliber.archivedAt != nil)
                     .accessibilityIdentifier("editCaliber")
             }

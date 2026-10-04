@@ -73,7 +73,9 @@ struct JobTaskDetailView: View {
                     Button("Remove Task", role: .destructive, action: requestRemoval)
                         .disabled(editing.isSaving || !tasks.canWrite(jobID, jobs: jobs))
                         .accessibilityIdentifier("removeTask")
-                    Button("Edit Task", action: edit)
+                    Button("Edit Task", systemImage: "pencil", action: edit)
+                        .labelStyle(.iconOnly)
+                        .help("Edit Task (⌥⌘E)")
                         .disabled(editing.isSaving || !tasks.canWrite(jobID, jobs: jobs))
                         .accessibilityIdentifier("editTask")
                 }
