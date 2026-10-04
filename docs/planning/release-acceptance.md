@@ -1,10 +1,10 @@
 # W032 first-release acceptance
 
-First-release acceptance is **pending**. The complete isolated behavioral suite passes on the development Mac. Native acceptance stopped after desktop interference. Minimum macOS 27.0 and optimized native performance remain untested. The W031 async image-memory observation remains unresolved. Neither this report nor a green CI run declares the release complete.
+First-release acceptance is **pending**. The complete isolated behavioral suite passes on the development Mac. Native acceptance stopped after desktop interference. Native acceptance on minimum macOS 27.0 and optimized native performance remain untested. The W031 async image-memory observation remains unresolved. Neither this report nor a green CI run declares the release complete.
 
 Recorded on 4 October 2026 for [W032, issue #28](https://github.com/jorgerodrigues/ure/issues/28). Dependencies #25, #26, and #27 were checked closed. PRs #55, #56, and #57 were checked merged. The fixed implementation base is `cb5a15a3cd7dfb6ce6579bb063f7c3c73fedca2b` on the live default branch, `w002-recoverable-library`.
 
-Hardware: Mac16,8, Apple M4 Pro, 48 GiB. Development system: macOS 27.2 beta, build 26B5091g. Toolchain: Xcode 27.0, build 27A266a. The proposed minimum is macOS 27.0 on Apple silicon. No minimum-OS Mac was available in this run.
+Hardware: Mac16,8, Apple M4 Pro, 48 GiB. Development system: macOS 27.2 beta, build 26B5091g. Toolchain: Xcode 27.0, build 27A266a. The proposed minimum is macOS 27.0 on Apple silicon. No minimum-OS Mac was available for local native acceptance. CI separately verified the builds and isolated unit suite on macOS 27.0, build 26A428.
 
 ## Restored gates and demonstrated fixes
 
@@ -31,6 +31,7 @@ The PDF state change follows the existing reader controls. Live Paper Ure screen
 | Optimized app, `make release` | Passed on the final snapshot implementation |
 | `make recovery` | Passed all 58 scenarios on the final snapshot implementation; retained run `f9de07ab-28b0-44d7-9420-ca1250075990` |
 | Fresh source build without local config or prior derived data | Passed `make check` and `make release` in an isolated source copy with new derived data and no `Config/Local.xcconfig`; the beta cache flag was passed explicitly |
+| CI on macOS 27.0 | [Run 37184716702](https://github.com/jorgerodrigues/ure/actions/runs/37184716702) passed formatting, Debug, all 280 definitions / 537 executions including parameter cases, and optimized Release on reviewed implementation `ff8044ed7960a1695b8dfedec6e2b155148b1060`; no native UI tests ran |
 | Local native watch tests | Three completed tests passed before the run was interrupted; see below |
 | Independent read-only review and final CI | Results recorded in the PR before acceptance or merge |
 
