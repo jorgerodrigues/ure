@@ -18,6 +18,23 @@ Each scenario gets a new library under `.build/recovery-runs/<run-id>/`. The dri
 
 The matrix covers imports, new and replacement exports, upgrades, restore staging, pre-restore recovery copies, activation, rollback, and damaged opens. Logs and a passing `summary.json` stay under the run directory for inspection. These are disposable test libraries. Remove the run directory after inspecting a run. This command is separate from the app tests and native acceptance deferred to W032. See the [W029 verification report](docs/planning/process-recovery-verification.md) for the matrix and its limits.
 
+## Library performance measurements
+
+Run `make performance XCODE_EXTRA_FLAGS=SDK_STAT_CACHE_ENABLE=NO` to build the optimized `UrePerformanceHarness` command-line target and measure W031's synthetic library. Python 3 uses only its standard library. This command does not start the app or UI automation.
+
+The fixture has 500 watches, 1,000 jobs, 10,000 tasks, and 5,000 photo items with separate managed originals. It also has notes, supplier links, archived records, and Unicode and punctuation identifiers. Three deterministic JPEG templates cover 640 × 480, 2400 × 1600, and 6000 × 4000 images. The logical original size is about 4.6 GB. Each fresh measurement process opens through `LibraryCoordinator` with `URE_TESTING=1` and an injected library location.
+
+The driver retains raw samples and `summary.json` under `.build/performance-runs/<run-id>/`. It checks exact result IDs, task and part counts, database integrity, and every original's size and SHA-256. It reports warm queries, thumbnail decoding, coordinator open time, and resident memory during 20 large-image open/release cycles. A successful command means the measurements and data checks completed. It does not mean all performance acceptance passed. Native usable-window, scrolling, task input, and viewer memory acceptance remain W032 gates. See the [W031 verification report](docs/planning/performance-verification.md).
+
+To compare an optimization against the same library, rebuild the Release harness and run:
+
+```sh
+python3 PerformanceHarness/run.py .build/DerivedData/Build/Products/Release/UrePerformanceHarness \
+  --fixture .build/performance-runs/<run-id>
+```
+
+Copy the earlier summary before rerunning because measurement files are replaced. Keep the fixture for W032's native checks. Remove only that disposable run directory when acceptance no longer needs it. W029's frozen fixtures and recovery driver are separate.
+
 ## Build and run
 
 Open `Ure.xcodeproj`, select the shared **Ure** scheme, and run. Or use:
@@ -225,7 +242,7 @@ SwiftUI views render state and forward actions. Observation owns feature state. 
 
 Use standard navigation, controls, and window APIs for the current macOS appearance and accessibility behavior. Keep observation close to the views that need it. Lists must use stable record IDs. Load originals only for viewers and decode thumbnails off the main actor. Add caching or extra layers only after profiling shows a need.
 
-The Release configuration enables optimization and whole-module compilation. The shared scheme's Profile action uses Release. Use **Product > Profile** with Instruments' SwiftUI and Time Profiler tools to find expensive updates and main-thread work. The realistic library benchmarks remain W031; this empty shell does not establish their performance.
+The Release configuration enables optimization and whole-module compilation. The shared scheme's Profile action uses Release. Use **Product > Profile** with Instruments' SwiftUI and Time Profiler tools to find expensive updates and main-thread work. W031 records realistic data and decoding measurements through `make performance`. Those command-line measurements do not establish native rendering or input performance.
 
 ## Project context
 
