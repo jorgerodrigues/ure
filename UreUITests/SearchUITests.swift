@@ -49,7 +49,14 @@ nonisolated final class SearchUITests: XCTestCase {
         field.click()
         field.typeKey("a", modifierFlags: .command)
         field.typeText("No matching record")
-        XCTAssertTrue(app.staticTexts["No Results"].waitForExistence(timeout: 5))
+        let noResults = app.staticTexts.matching(
+            NSPredicate(format: "value BEGINSWITH %@", "No Results for")
+        ).firstMatch
+        XCTAssertTrue(noResults.waitForExistence(timeout: 5))
+        XCTAssertTrue((noResults.value as? String)?.contains("No matching record") == true)
+        XCTAssertEqual(
+            app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "searchResult-"))
+                .count, 0)
         app.buttons["closeGlobalSearch"].click()
         XCTAssertTrue(app.buttons["editNote"].waitForExistence(timeout: 5))
     }

@@ -78,6 +78,7 @@ private struct SearchResultRow: View {
                     Text("Archived").font(.caption).foregroundStyle(.secondary)
                 }
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(editing.isSaving || editing.isNavigationPending)

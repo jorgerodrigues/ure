@@ -66,7 +66,7 @@ struct WatchEditorView: View {
                     .disabled(!watches.canSave)
             }
         }
-        .onAppear(perform: focusName)
+        .task(focusName)
     }
 
     private var editorTitle: String {
@@ -74,7 +74,11 @@ struct WatchEditorView: View {
         return "Edit Watch"
     }
 
-    private func focusName() { focusedField = .name }
+    private func focusName() async {
+        await Task.yield()
+        guard !Task.isCancelled else { return }
+        focusedField = .name
+    }
 
     private func field(_ keyPath: WritableKeyPath<WatchDraft, String>) -> Binding<String> {
         Binding(
