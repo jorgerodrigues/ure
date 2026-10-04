@@ -26,6 +26,8 @@ final class DocumentReaderState {
             let document = try await source.document(for: assetID)
             try Task.checkCancellation()
             pdfView.document = document
+            pdfView.minScaleFactor = 0.1
+            pdfView.maxScaleFactor = 8
             pdfView.autoScales = true
             refresh()
             isLoading = false

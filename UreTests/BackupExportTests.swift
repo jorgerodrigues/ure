@@ -294,11 +294,17 @@ nonisolated struct BackupExportTests {
         #expect(try Data(contentsOf: wal).count > 0)
         let destination = fixture.directory.appending(path: "wal.watchbackup")
         _ = try await coordinator.exportBackup(to: destination, applicationVersion: "fixture")
-        let reader = try DatabaseQueue(path: LibraryFiles.database(in: destination).path)
+        let exportedFiles = try FileManager.default.contentsOfDirectory(atPath: destination.path)
+        #expect(
+            Set(exportedFiles) == ["library.sqlite", "manifest.json", "backup.json", "originals"])
+        var readConfiguration = Configuration()
+        readConfiguration.readonly = true
+        let reader = try DatabaseQueue(
+            path: LibraryFiles.database(in: destination).path, configuration: readConfiguration)
         #expect(try await reader.read(WatchQueries.fetchAll) == [watch])
         #expect(
-            !FileManager.default.fileExists(
-                atPath: destination.appending(path: "library.sqlite-wal").path))
+            try await reader.read { try String.fetchOne($0, sql: "PRAGMA journal_mode") }
+                == "delete")
         try reader.close()
         try await coordinator.close()
     }

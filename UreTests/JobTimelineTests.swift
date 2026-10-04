@@ -149,9 +149,9 @@ nonisolated struct JobTimelineTests {
         #expect(entries.allSatisfy { $0.source == nil && $0.unavailableSource != nil })
         let history = try #require(
             entries.first { $0.title == ActivityKind.taskStatusChanged.rawValue })
-        #expect(history.subject == taskDraft.title && history.next.first?.text == taskDraft.title)
+        #expect(history.subject == task.title && history.next.first?.text == task.title)
         let partHistory = try #require(entries.first { $0.summary == "Ordered to Needed" })
-        #expect(partHistory.subject == draft.description)
+        #expect(partHistory.subject == needed.record.description)
         #expect(partHistory.prior.contains { $0.label == "Price" && $0.text == "0012.3400" })
         #expect(partHistory.prior.contains { $0.label == "Ordered" && $0.date == clock })
         #expect(

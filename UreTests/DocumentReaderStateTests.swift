@@ -34,9 +34,10 @@ struct DocumentReaderStateTests {
         reader.zoomIn()
         #expect(reader.scale > beforeZoom && !reader.pdfView.autoScales)
         for _ in 0..<50 { reader.zoomIn() }
-        #expect(reader.scale == reader.pdfView.maxScaleFactor)
+        #expect(reader.pdfView.maxScaleFactor == 8)
+        #expect(reader.scale == Double(reader.pdfView.maxScaleFactor))
         for _ in 0..<50 { reader.zoomOut() }
-        #expect(reader.scale == reader.pdfView.minScaleFactor)
+        #expect(reader.scale == Double(reader.pdfView.minScaleFactor))
         reader.fit()
         #expect(reader.pdfView.autoScales)
         try FileManager.default.removeItem(
