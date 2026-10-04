@@ -61,7 +61,7 @@ struct WatchEditorView: View {
                 Button("Cancel", action: watches.cancel)
                     .accessibilityIdentifier("cancelWatch")
                     .disabled(watches.isSaving)
-                Button("Save", action: watches.saveCommand)
+                Button("Save", action: watches.saveCommand).buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("saveWatch")
                     .disabled(!watches.canSave)
             }

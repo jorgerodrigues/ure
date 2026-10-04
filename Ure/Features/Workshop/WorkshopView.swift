@@ -25,7 +25,7 @@ struct WorkshopView: View {
 
         NavigationSplitView {
             WorkshopSidebar()
-                .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
+                .navigationSplitViewColumnWidth(min: 180, ideal: UreLayout.sidebarWidth, max: 260)
         } content: {
             Group {
                 if search.isPresented {
@@ -42,7 +42,7 @@ struct WorkshopView: View {
                     ArchiveView()
                 }
             }
-            .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 400)
+            .navigationSplitViewColumnWidth(min: 260, ideal: UreLayout.listWidth, max: 400)
         } detail: {
             GeometryReader { geometry in
                 HStack(spacing: 0) {
@@ -91,6 +91,8 @@ struct WorkshopView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Search Library", systemImage: "magnifyingglass", action: search.present)
+                    .labelStyle(.iconOnly)
+                    .help("Search Library (⇧⌘F)")
                     .accessibilityIdentifier("searchLibrary")
             }.visibilityPriority(.high)
             if hasActiveJob {

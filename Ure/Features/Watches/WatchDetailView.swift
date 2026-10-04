@@ -8,6 +8,7 @@ struct WatchDetailView: View {
     @Environment(PhotoState.self) private var photos
     @Environment(ReferenceState.self) private var references
 
+    @Environment(WorkshopNavigation.self) private var navigation
     @Environment(WorkshopEditing.self) private var editing
 
     var body: some View {
@@ -28,6 +29,7 @@ struct WatchDetailView: View {
             NoteDetailView(owner: .watch(watch.id))
         } else if let watch = watches.selectedWatch {
             Form {
+                RecordHeading(title: watch.name, subtitle: watch.condition.rawValue)
                 Section {
                     if watch.archivedAt != nil {
                         Label("Archived. Unarchive to make changes.", systemImage: "archivebox")
@@ -84,10 +86,12 @@ struct WatchDetailView: View {
             }
             .formStyle(.grouped)
             .textSelection(.enabled)
-            .navigationTitle(watch.name)
+            .navigationTitle(navigation.selectedSection.title)
             .focusedSceneValue(\.recordMenuActions, menuActions(for: watch))
             .toolbar {
-                Button("Edit", action: watches.edit)
+                Button("Edit", systemImage: "pencil", action: watches.edit)
+                    .labelStyle(.iconOnly)
+                    .help("Edit Watch (⌥⌘E)")
                     .disabled(editing.isSaving || watch.archivedAt != nil)
                     .accessibilityIdentifier("editWatch")
             }
@@ -111,7 +115,13 @@ private struct WatchValue: View {
     let value: String?
 
     var body: some View {
-        LabeledContent(label, value: value ?? "Unknown")
+        LabeledContent(label) {
+            if let value {
+                Text(value)
+            } else {
+                Text("Not recorded").foregroundStyle(.tertiary)
+            }
+        }
     }
 }
 
@@ -124,7 +134,7 @@ private struct WatchDimension: View {
             if let value {
                 Text("\(value.formatted()) mm")
             } else {
-                Text("Unknown")
+                Text("Not recorded").foregroundStyle(.tertiary)
             }
         }
     }

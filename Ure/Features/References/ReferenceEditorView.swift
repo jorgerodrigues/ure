@@ -46,10 +46,11 @@ struct ReferenceEditorView: View {
                 if references.isSaving { ProgressView().controlSize(.small) }
                 Button("Cancel", action: references.cancel).disabled(references.isSaving)
                     .accessibilityIdentifier("cancelReference")
-                Button("Save", action: references.saveCommand).disabled(
-                    !references.canSave || !editing.canWrite(owner)
-                )
-                .accessibilityIdentifier("saveReference")
+                Button("Save", action: references.saveCommand).buttonStyle(.borderedProminent)
+                    .disabled(
+                        !references.canSave || !editing.canWrite(owner)
+                    )
+                    .accessibilityIdentifier("saveReference")
             }
         }
         .onAppear(perform: focusTitle)

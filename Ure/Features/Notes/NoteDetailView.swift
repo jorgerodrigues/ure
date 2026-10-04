@@ -36,7 +36,9 @@ struct NoteDetailView: View {
                     Button("Remove Note", role: .destructive, action: requestRemoval)
                         .disabled(editing.isSaving || !editing.canWrite(owner))
                         .accessibilityIdentifier("removeNote")
-                    Button("Edit Note", action: edit)
+                    Button("Edit Note", systemImage: "pencil", action: edit)
+                        .labelStyle(.iconOnly)
+                        .help("Edit Note (⌥⌘E)")
                         .disabled(editing.isSaving || !editing.canWrite(owner))
                         .accessibilityIdentifier("editNote")
                 }

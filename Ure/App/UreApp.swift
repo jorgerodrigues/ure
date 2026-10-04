@@ -43,14 +43,17 @@ struct UreApp: App {
                 .environment(restore.session.editing)
                 .environment(restore.session.bench)
                 .focusedSceneValue(\.allowsWorkshopEditing, !restore.isActivating)
-                .frame(minWidth: 1000, minHeight: 650 - mainWindowVerticalInset)
+                .frame(
+                    minWidth: UreLayout.minimumWindowWidth,
+                    minHeight: UreLayout.minimumWindowHeight - mainWindowVerticalInset
+                )
                 .onGeometryChange(for: CGFloat.self) { geometry in
                     geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom
                 } action: { inset in
                     mainWindowVerticalInset = inset
                 }
         }
-        .defaultSize(width: 1200, height: 800)
+        .defaultSize(width: UreLayout.defaultWindowWidth, height: UreLayout.defaultWindowHeight)
         .windowResizability(.contentMinSize)
         .commands {
             SidebarCommands()

@@ -4,16 +4,18 @@ SHELL := /bin/bash
 DERIVED_DATA := $(CURDIR)/.build/DerivedData
 BRANCH := $(shell git branch --show-current | tr / -)
 TEST_ASSETS ?= $(HOME)/Developer/test-assets/$(if $(BRANCH),$(BRANCH),ure)
+INSTALL_DIR ?= $(HOME)/Applications
 TEST_RESULT := $(TEST_ASSETS)/ure-$(shell date +%Y%m%d-%H%M%S).xcresult
 XCODE_EXTRA_FLAGS ?=
 LOCAL_XCODE_FLAGS := $(if $(wildcard Config/Local.xcconfig),-xcconfig "$(CURDIR)/Config/Local.xcconfig")
 XCODE_FLAGS := -project Ure.xcodeproj -scheme Ure -destination 'platform=macOS,arch=arm64' -derivedDataPath "$(DERIVED_DATA)" $(LOCAL_XCODE_FLAGS) $(XCODE_EXTRA_FLAGS)
 
-.PHONY: help build release run test test-ui test-all recovery performance format lint check
+.PHONY: help build release install run test test-ui test-all recovery performance format lint check
 
 help:
 	@printf '%s\n' 'make build     Unsigned Debug build' 'make release   Unsigned optimized Release build' 'make run       Build with local signing and open Ure' 'make test      Swift Testing unit tests' 'make test-ui   Native keyboard and window tests' 'make test-all  All tests' 'make format    Format Swift sources' 'make lint      Check formatting and unsafe Swift constructs' 'make check     Lint, build, and unit tests'
 	@printf '%s\n' 'make recovery  Run isolated process interruption matrix without launching Ure'
+	@printf '%s\n' 'make install   Build a locally signed Release and install in ~/Applications'
 	@printf '%s\n' 'make performance  Measure the isolated W031 library in an optimized command-line worker'
 
 build:
@@ -21,6 +23,11 @@ build:
 
 release:
 	xcodebuild $(XCODE_FLAGS) -configuration Release CODE_SIGNING_ALLOWED=NO build
+
+install:
+	xcodebuild $(XCODE_FLAGS) -configuration Release CODE_SIGNING_ALLOWED=YES CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO OTHER_CODE_SIGN_FLAGS='--options runtime' build
+	bash scripts/install-local.sh "$(DERIVED_DATA)/Build/Products/Release/Ure.app" "$(INSTALL_DIR)"
+	open "$(INSTALL_DIR)/Ure.app"
 
 run:
 	xcodebuild $(XCODE_FLAGS) -configuration Debug build

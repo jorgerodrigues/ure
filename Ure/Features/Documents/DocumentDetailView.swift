@@ -59,7 +59,9 @@ struct DocumentDetailView: View {
                     Button("Remove Document", role: .destructive, action: requestRemoval)
                         .disabled(editing.isSaving || !editing.canWrite(owner))
                         .accessibilityIdentifier("removeDocument")
-                    Button("Edit Document", action: edit)
+                    Button("Edit Document", systemImage: "pencil", action: edit)
+                        .labelStyle(.iconOnly)
+                        .help("Edit Document (⌥⌘E)")
                         .disabled(editing.isSaving || !editing.canWrite(owner))
                     Button("Export Original", action: exportOriginal).disabled(editing.isSaving)
                 }

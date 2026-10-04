@@ -51,7 +51,9 @@ struct PartDetailView: View {
                 .formStyle(.grouped).textSelection(.enabled)
                 .navigationTitle(part.record.description)
                 .toolbar {
-                    Button("Edit Part", action: edit)
+                    Button("Edit Part", systemImage: "pencil", action: edit)
+                        .labelStyle(.iconOnly)
+                        .help("Edit Part (⌥⌘E)")
                         .disabled(editing.isSaving || !parts.canWrite(jobID, jobs: jobs))
                         .accessibilityIdentifier("editPart")
                 }

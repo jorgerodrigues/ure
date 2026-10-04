@@ -81,9 +81,10 @@ private struct WorkshopJobRow: View {
     let row: WorkshopJob
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            PhotoThumbnailView(photoID: row.watch.coverPhotoID).frame(width: 36, height: 36)
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .top, spacing: UreLayout.rowSpacing) {
+            PhotoThumbnailView(photoID: row.watch.coverPhotoID)
+                .frame(width: UreLayout.rowThumbnailSize, height: UreLayout.rowThumbnailSize)
+            VStack(alignment: .leading, spacing: UreLayout.textSpacing) {
                 Text(row.watch.name).font(.body).fontWeight(.semibold)
                 Text(row.job.title).font(.subheadline)
                 Text(row.job.stage.rawValue)

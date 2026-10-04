@@ -57,8 +57,10 @@ struct PartEditorView: View {
                 if parts.isSaving { ProgressView().controlSize(.small) }
                 Button("Cancel", action: parts.cancel).disabled(parts.isSaving)
                     .accessibilityIdentifier("cancelPart")
-                Button("Save", action: parts.saveCommand).disabled(!parts.canSave(jobs: jobs))
-                    .accessibilityIdentifier("savePart")
+                Button("Save", action: parts.saveCommand).buttonStyle(.borderedProminent).disabled(
+                    !parts.canSave(jobs: jobs)
+                )
+                .accessibilityIdentifier("savePart")
             }
         }
         .alert("Remove this saved link?", isPresented: removalPresented) {

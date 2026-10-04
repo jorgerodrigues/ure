@@ -44,7 +44,7 @@ struct NoteEditorView: View {
                 if notes.isSaving { ProgressView().controlSize(.small) }
                 Button("Cancel", action: notes.cancel).disabled(notes.isSaving)
                     .accessibilityIdentifier("cancelNote")
-                Button("Save", action: notes.saveCommand).disabled(
+                Button("Save", action: notes.saveCommand).buttonStyle(.borderedProminent).disabled(
                     !notes.canSave || !editing.canWrite(owner)
                 )
                 .accessibilityIdentifier("saveNote")

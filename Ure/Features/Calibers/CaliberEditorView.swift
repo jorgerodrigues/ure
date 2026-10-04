@@ -66,7 +66,7 @@ struct CaliberEditorView: View {
                 Button("Cancel", action: calibers.cancel)
                     .accessibilityIdentifier("cancelCaliber")
                     .disabled(calibers.isSaving)
-                Button("Save", action: calibers.saveCommand)
+                Button("Save", action: calibers.saveCommand).buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("saveCaliber")
                     .disabled(!calibers.canSave)
             }
