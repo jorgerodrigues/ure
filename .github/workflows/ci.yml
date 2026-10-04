@@ -23,6 +23,6 @@ jobs:
         with:
           persist-credentials: false
       - name: Check formatting, Debug build, and isolated unit tests
-        run: make check
+        run: make check XCODE_EXTRA_FLAGS='-parallel-testing-enabled NO'
       - name: Build optimized Release
         run: make release

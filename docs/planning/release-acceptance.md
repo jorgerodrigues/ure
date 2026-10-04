@@ -8,7 +8,9 @@ Hardware: Mac16,8, Apple M4 Pro, 48 GiB. Development system: macOS 27.2 beta, bu
 
 ## Restored gates and demonstrated fixes
 
-CI now runs `make check` and `make release` on pull requests and pushes to the actual default branch. `make check` selects only `UreTests`. UI and device automation remain off CI. Swift 6, complete concurrency checking, and warnings as errors remain enabled. Local commands pass `XCODE_EXTRA_FLAGS=SDK_STAT_CACHE_ENABLE=NO` for the development beta's build-cache stall. CI uses its default settings.
+CI now runs `make check XCODE_EXTRA_FLAGS='-parallel-testing-enabled NO'` and `make release` on pull requests and pushes to the actual default branch. `make check` selects only `UreTests`. Serial test execution retains every test and its internal concurrency checks. UI and device automation remain off CI. Swift 6, complete concurrency checking, and warnings as errors remain enabled. Local commands also pass `SDK_STAT_CACHE_ENABLE=NO` for the development beta's build-cache stall. CI keeps the default SDK cache settings.
+
+The first restored CI run compiled the Debug app and test bundles on macOS 27.0, then reached its 15-minute limit without reporting test results. A diagnostic rerun was started without source changes. The local full suite passed with serial test execution, including all concurrent-write and restore-activation tests. CI now uses that setting. The original stall's cause is not established. Final CI evidence is recorded in the PR.
 
 The first full execution found four failing test definitions. None was removed or skipped.
 
