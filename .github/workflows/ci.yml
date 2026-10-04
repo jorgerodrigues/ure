@@ -2,7 +2,7 @@ name: Native app checks
 
 on:
   push:
-    branches: [main]
+    branches: [w002-recoverable-library]
   pull_request:
 
 permissions:
@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Check Swift formatting
-        run: make lint
-      - name: Build Debug
-        run: make build
+      - name: Check formatting, Debug build, and isolated unit tests
+        run: make check XCODE_EXTRA_FLAGS='-parallel-testing-enabled NO'
+      - name: Build optimized Release
+        run: make release

@@ -28,7 +28,7 @@ nonisolated final class JobUITests: XCTestCase {
         app.buttons["backFromTask"].click()
         app.buttons["showJobActivity"].click()
         XCTAssertTrue(app.staticTexts["Created as Done"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.staticTexts.matching(identifier: "Inspection finding").count, 1)
+        XCTAssertEqual(app.buttons.matching(identifier: "Open Note: Inspection finding").count, 1)
         app.buttons["Open Note: Inspection finding"].click()
         XCTAssertTrue(app.buttons["editNote"].waitForExistence(timeout: 5))
         app.buttons["editNote"].click()
@@ -38,7 +38,7 @@ nonisolated final class JobUITests: XCTestCase {
         app.buttons["backFromNote"].click()
         app.buttons["showJobActivity"].click()
         XCTAssertTrue(app.staticTexts["Corrected finding"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.staticTexts.matching(identifier: "Corrected finding").count, 1)
+        XCTAssertEqual(app.buttons.matching(identifier: "Open Note: Corrected finding").count, 1)
         XCTAssertFalse(app.staticTexts["Inspection finding"].exists)
         app.buttons["Open Task: Inspect escapement"].click()
         XCTAssertTrue(app.buttons["editTask"].waitForExistence(timeout: 5))
@@ -108,7 +108,7 @@ nonisolated final class JobUITests: XCTestCase {
         let pin = app.descendants(matching: .any)["pinReference"].firstMatch
         XCTAssertTrue(pin.waitForExistence(timeout: 5))
         pin.click()
-        app.menuItems["Job · Link · Bench sheet"].click()
+        app.windows.firstMatch.menuItems["Job · Link · Bench sheet"].click()
         app.buttons["addNote"].click()
         enter("Unfinished note", in: "noteTitle", app: app)
         let main = app.windows.firstMatch
@@ -234,8 +234,12 @@ nonisolated final class JobUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["reopenJob"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Owner will handle inspection"].exists)
-        XCTAssertTrue(
-            app.buttons.containing(.staticText, identifier: "Inspect escapement").firstMatch.exists)
+        XCTAssertEqual(
+            app.buttons.matching(
+                NSPredicate(
+                    format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "task-",
+                    "Inspect escapement")
+            ).count, 1)
         app.buttons["reopenJob"].click()
         app.windows.firstMatch.typeKey("s", modifierFlags: .command)
         XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
@@ -254,8 +258,7 @@ nonisolated final class JobUITests: XCTestCase {
         XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
         let progress = app.descendants(matching: .any)["taskProgressSummary"].firstMatch
         XCTAssertTrue(progress.waitForExistence(timeout: 5))
-        XCTAssertEqual(progress.label, "Task progress")
-        XCTAssertEqual(progress.value as? String, "No tasks planned. 0 skipped.")
+        XCTAssertEqual(progress.label, "Task progress: No tasks planned. 0 skipped.")
         for (title, status) in [("Inspect", "Done"), ("Polish", "Skipped"), ("Test", "To do")] {
             app.buttons["addTask"].click()
             enter(title, in: "taskTitle", app: app)
@@ -267,7 +270,7 @@ nonisolated final class JobUITests: XCTestCase {
             app.buttons["backFromTask"].click()
             XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
         }
-        XCTAssertEqual(progress.value as? String, "1 of 2 tasks done, 50 percent. 1 skipped.")
+        XCTAssertEqual(progress.label, "Task progress: 1 of 2 tasks done, 50 percent. 1 skipped.")
         let rows = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "task-"))
         rows.element(boundBy: 0).click()
         XCTAssertTrue(app.buttons["moveTaskDown"].waitForExistence(timeout: 5))
@@ -283,27 +286,33 @@ nonisolated final class JobUITests: XCTestCase {
         app.buttons["backFromTask"].click()
         XCTAssertTrue(rows.element(boundBy: 0).label.contains("Polish"))
         XCTAssertTrue(rows.element(boundBy: 1).label.contains("Inspect"))
-        rows.element(boundBy: 2).press(forDuration: 1, thenDragTo: rows.element(boundBy: 0))
-        let testFirst = NSPredicate(format: "label CONTAINS %@", "Test")
+        let polishID = rows.element(boundBy: 0).identifier
+        let inspectID = rows.element(boundBy: 1).identifier
+        let testID = rows.element(boundBy: 2).identifier
+        rows.element(boundBy: 2).scrollFullyIntoView(in: app.windows.firstMatch)
+        rows.element(boundBy: 2).click(forDuration: 1, thenDragTo: rows.element(boundBy: 0))
+        let testFirst = NSPredicate(format: "identifier == %@", testID)
         XCTAssertEqual(
             XCTWaiter.wait(
                 for: [
                     XCTNSPredicateExpectation(
                         predicate: testFirst, object: rows.element(boundBy: 0))
                 ], timeout: 5), .completed)
+        XCTAssertEqual(rows.element(boundBy: 1).identifier, polishID)
+        XCTAssertEqual(rows.element(boundBy: 2).identifier, inspectID)
         app.terminate()
         app.launch()
         XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
-        XCTAssertTrue(rows.element(boundBy: 0).label.contains("Test"))
-        XCTAssertTrue(rows.element(boundBy: 1).label.contains("Polish"))
-        XCTAssertTrue(rows.element(boundBy: 2).label.contains("Inspect"))
+        XCTAssertEqual(rows.element(boundBy: 0).identifier, testID)
+        XCTAssertEqual(rows.element(boundBy: 1).identifier, polishID)
+        XCTAssertEqual(rows.element(boundBy: 2).identifier, inspectID)
         rows.element(boundBy: 2).click()
         app.buttons["editTask"].click()
         choose("Doing", picker: "taskStatus", app: app)
         app.windows.firstMatch.typeKey("s", modifierFlags: .command)
         XCTAssertTrue(app.buttons["backFromTask"].waitForExistence(timeout: 5))
         app.buttons["backFromTask"].click()
-        XCTAssertEqual(progress.value as? String, "0 of 2 tasks done, 0 percent. 1 skipped.")
+        XCTAssertEqual(progress.label, "Task progress: 0 of 2 tasks done, 0 percent. 1 skipped.")
     }
 
     @MainActor

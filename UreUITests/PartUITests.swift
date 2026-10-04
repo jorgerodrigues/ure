@@ -152,15 +152,15 @@ nonisolated final class PartUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["0012.3400 DKK"].exists)
         app.buttons["editPart"].click()
         app.buttons["removePartLink-\(firstID)"].click()
-        XCTAssertTrue(app.buttons["Remove"].waitForExistence(timeout: 3))
-        app.buttons["Remove"].click()
+        XCTAssertTrue(app.sheets.buttons["Remove"].waitForExistence(timeout: 3))
+        app.sheets.buttons["Remove"].click()
         app.buttons["cancelPart"].click()
         XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
         XCTAssertEqual(openActions.count, 2)
         app.buttons["editPart"].click()
         app.buttons["removePartLink-\(firstID)"].click()
-        XCTAssertTrue(app.buttons["Remove"].waitForExistence(timeout: 3))
-        app.buttons["Remove"].click()
+        XCTAssertTrue(app.sheets.buttons["Remove"].waitForExistence(timeout: 3))
+        app.sheets.buttons["Remove"].click()
         app.windows.firstMatch.typeKey("s", modifierFlags: .command)
         XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["No supplier option selected."].exists)
@@ -234,6 +234,14 @@ nonisolated final class PartUITests: XCTestCase {
         XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
         app.terminate()
         app.launch()
+        let replacement = app.buttons.matching(
+            NSPredicate(
+                format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "part-",
+                "Replacement on hand")
+        ).firstMatch
+        XCTAssertTrue(replacement.waitForExistence(timeout: 5))
+        replacement.scrollFullyIntoView(in: app.windows.firstMatch)
+        replacement.click()
         XCTAssertTrue(app.staticTexts["Replacement on hand"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Arrived"].exists)
     }
@@ -252,6 +260,7 @@ nonisolated final class PartUITests: XCTestCase {
     @MainActor
     private func replace(_ text: String, field: XCUIElement) {
         XCTAssertTrue(field.waitForExistence(timeout: 3))
+        field.scrollFullyIntoView(in: XCUIApplication().windows.firstMatch)
         field.click()
         field.typeKey("a", modifierFlags: .command)
         field.typeText(text)

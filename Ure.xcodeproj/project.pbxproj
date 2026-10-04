@@ -10,6 +10,7 @@
 		AC0000000000000000000002 = {isa = PBXBuildFile; productRef = AD0000000000000000000002; };
 		AC0000000000000000000003 = {isa = PBXBuildFile; productRef = AD0000000000000000000003; };
 		AC0000000000000000000004 = {isa = PBXBuildFile; productRef = AD0000000000000000000004; };
+		AC0000000000000000000005 = {isa = PBXBuildFile; fileRef = A3000000000000000000000A; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,6 +40,7 @@
 		A30000000000000000000007 = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Ure.entitlements; sourceTree = "<group>"; };
 		A30000000000000000000008 = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; path = UreRecoveryHarness; sourceTree = BUILT_PRODUCTS_DIR; };
 		A30000000000000000000009 = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; path = UrePerformanceHarness; sourceTree = BUILT_PRODUCTS_DIR; };
+		A3000000000000000000000A = {isa = PBXFileReference; lastKnownFileType = folder; path = RecoveryHarness/Fixtures; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -197,7 +199,7 @@
 
 /* Begin PBXResourcesBuildPhase section */
 		A90000000000000000000001 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		A90000000000000000000002 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A90000000000000000000002 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (AC0000000000000000000005); runOnlyForDeploymentPostprocessing = 0; };
 		A90000000000000000000003 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 

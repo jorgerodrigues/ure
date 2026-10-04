@@ -2,6 +2,8 @@
 
 A native Mac app for watch repair and restoration. The current implementation includes the native shell, recoverable library, watch records, shared caliber records, job intake with repair history, scoped notes, technical reference links, and local photos. Further repair features follow in the [planning backlog](docs/planning/issues.md).
 
+Start with the [local handover guide](docs/handover.md). The [release acceptance report](docs/planning/release-acceptance.md) records executed checks and remaining native and minimum-OS gates. First-release acceptance is still pending.
+
 ## Requirements
 
 - An Apple silicon Mac running macOS 27 or later.
@@ -216,7 +218,7 @@ make release    # Unsigned optimized Release build
 make test       # Swift Testing unit tests
 make test-ui    # XCUITest keyboard navigation, Settings, and light/dark window launch
 make test-all   # All tests
-make check      # Full lint, Debug build, and unit tests; deferred CI gate at W032
+make check      # Full lint, Debug build, and isolated unit tests
 ```
 
 On this development Mac, macOS 27.2 beta with Xcode 27 stalls in `clang-stat-cache`. The ignored `Config/Local.xcconfig` sets `SDK_STAT_CACHE_ENABLE = NO`. Make commands pass this optional config to app and package targets. This affects build-time file caching only. A fresh checkout on the same machine can use `make run XCODE_EXTRA_FLAGS=SDK_STAT_CACHE_ENABLE=NO`, or create the same local config. CI retains Xcode's default cache setting. Direct `xcodebuild` commands can pass `-xcconfig Config/Local.xcconfig` when the file exists.
@@ -274,6 +276,6 @@ The Release configuration enables optimization and whole-module compilation. The
 
 The user approved the current-platform direction and W002's SQLite/GRDB storage design on 1 October 2026. Shared caliber records and the repair history rule were approved on 2 October 2026. Watch, caliber, intake, stage, and condition forms use explicit Save and Cancel editing. W003, W004, and W005 are merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29), [PR #31](https://github.com/jorgerodrigues/ure/pull/31), and [PR #32](https://github.com/jorgerodrigues/ure/pull/32). W006 is merged in [PR #33](https://github.com/jorgerodrigues/ure/pull/33). W007 is merged in [PR #34](https://github.com/jorgerodrigues/ure/pull/34). W008 is implemented in [PR #35](https://github.com/jorgerodrigues/ure/pull/35). Native UI and device checks are deferred to release acceptance by agreement. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.
 
-The GitHub Actions workflow uses the [macOS 27 arm64 runner](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md) and Xcode 27. During rapid implementation, it runs `make lint` and `make build` only. Unit test execution and the Release build return to CI in [W032 (#28)](https://github.com/jorgerodrigues/ure/issues/28) before first-release acceptance. Release builds are not required for each story during this phase. Keep behavioral tests current and compile affected tests when needed. The [GitHub remote](https://github.com/jorgerodrigues/ure) is configured. Native UI and device checks run locally during release acceptance and never on CI.
+The GitHub Actions workflow uses the [macOS 27 arm64 runner](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md) and Xcode 27. It runs `make check` and `make release` on pull requests and pushes to the live default branch, `w002-recoverable-library`. `make check` selects only `UreTests`. Native UI and device checks run locally during release acceptance and never on CI.
 
 Current platform references: [Apple's Xcode requirements](https://developer.apple.com/xcode/system-requirements/), [Observation](https://developer.apple.com/documentation/swiftui/migrating-from-the-observable-object-protocol-to-the-observable-macro), [Swift concurrency](https://docs.swift.org/swift-book/LanguageGuide/Concurrency.html), and [SwiftUI performance](https://developer.apple.com/documentation/xcode/understanding-and-improving-swiftui-performance).

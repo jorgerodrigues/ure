@@ -80,7 +80,7 @@ nonisolated final class PartsOverviewUITests: XCTestCase {
     private func overviewRow(watch: String, app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any).matching(
             NSPredicate(
-                format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "overviewPart-", watch)
+                format: "identifier BEGINSWITH %@ AND value CONTAINS %@", "overviewPart-", watch)
         ).firstMatch
     }
 

@@ -6,8 +6,19 @@ nonisolated enum RestoreFiles {
     static let maximumManifestBytes: Int64 = 16 * 1024 * 1024
 
     static func availableCapacity(at url: URL) throws -> Int64 {
-        let values = try url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-        guard let capacity = values.volumeAvailableCapacityForImportantUsage else {
+        let values = try url.resourceValues(forKeys: [
+            .volumeAvailableCapacityKey, .volumeAvailableCapacityForImportantUsageKey,
+        ])
+        return try availableCapacity(
+            available: values.volumeAvailableCapacity,
+            important: values.volumeAvailableCapacityForImportantUsage)
+    }
+
+    static func availableCapacity(available: Int?, important: Int64?) throws -> Int64 {
+        if let available {
+            return max(Int64(available), important ?? 0)
+        }
+        guard let capacity = important else {
             throw RestoreError.invalidItem("staging", "Free disk space could not be checked.")
         }
         return capacity

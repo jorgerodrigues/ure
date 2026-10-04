@@ -39,7 +39,7 @@ nonisolated final class WorkshopUITests: XCTestCase {
         search.typeText("Missing job")
         XCTAssertTrue(app.staticTexts["No matching jobs"].waitForExistence(timeout: 3))
         app.buttons["Clear Filters"].firstMatch.click()
-        app.buttons["editJob"].click()
+        app.windows.firstMatch.typeKey("e", modifierFlags: [.command, .option])
         enter("Corrected workshop service", identifier: "jobTitle", app: app)
         app.windows.firstMatch.typeKey("s", modifierFlags: .command)
         XCTAssertTrue(app.buttons["editJob"].waitForExistence(timeout: 5))
@@ -150,16 +150,21 @@ nonisolated final class WorkshopUITests: XCTestCase {
         XCTAssertTrue(window.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["No open jobs"].waitForExistence(timeout: 5))
 
-        let corner = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1))
-            .withOffset(CGVector(dx: -2, dy: -2))
-        let destination = corner.withOffset(
-            CGVector(dx: 1000 - window.frame.width, dy: 650 - window.frame.height)
-        )
-        corner.press(forDuration: 0.1, thenDragTo: destination)
+        let rightEdge = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5))
+            .withOffset(CGVector(dx: -1, dy: 0))
+        rightEdge.click(
+            forDuration: 0.1,
+            thenDragTo: rightEdge.withOffset(CGVector(dx: 1000 - window.frame.width, dy: 0)))
+        let bottomEdge = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1))
+            .withOffset(CGVector(dx: 0, dy: -1))
+        bottomEdge.click(
+            forDuration: 0.1,
+            thenDragTo: bottomEdge.withOffset(CGVector(dx: 0, dy: 650 - window.frame.height)))
 
         XCTAssertGreaterThanOrEqual(window.frame.width, 1000)
         XCTAssertLessThanOrEqual(window.frame.width, 1020)
         XCTAssertGreaterThanOrEqual(window.frame.height, 650)
+        XCTAssertLessThanOrEqual(window.frame.height, 670)
         XCTAssertTrue(app.staticTexts["No open jobs"].exists)
         XCTAssertTrue(app.staticTexts["Select a job"].exists)
 
@@ -167,6 +172,26 @@ nonisolated final class WorkshopUITests: XCTestCase {
         attachment.name = "Workshop-minimum-window"
         attachment.lifetime = .keepAlways
         add(attachment)
+
+        window.typeKey("2", modifierFlags: [.command, .option])
+        XCTAssertTrue(app.buttons["addWatch"].waitForExistence(timeout: 5))
+        window.typeKey("n", modifierFlags: .command)
+        XCTAssertTrue(app.textFields["watchName"].waitForExistence(timeout: 3))
+        window.typeText("Minimum window watch")
+        XCTAssertTrue(app.buttons["saveWatch"].isHittable)
+        XCTAssertTrue(app.buttons["cancelWatch"].isHittable)
+        window.typeKey("s", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["editWatch"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["startWatchJob"].isHittable)
+
+        window.typeKey("3", modifierFlags: [.command, .option])
+        XCTAssertTrue(app.buttons["addCaliber"].waitForExistence(timeout: 5))
+        window.typeKey("n", modifierFlags: .command)
+        XCTAssertTrue(app.textFields["caliberDesignation"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["saveCaliber"].isHittable)
+        XCTAssertTrue(app.buttons["cancelCaliber"].isHittable)
+        app.buttons["cancelCaliber"].click()
+        XCTAssertTrue(app.buttons["addCaliber"].waitForExistence(timeout: 5))
         app.terminate()
     }
 }

@@ -25,8 +25,7 @@ struct JobTaskProgressView: View {
                         .accessibilityIdentifier("taskSkippedCount")
                 }
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Task progress")
-                .accessibilityValue(progress.accessibilitySummary)
+                .accessibilityLabel("Task progress: \(progress.accessibilitySummary)")
                 .accessibilityIdentifier("taskProgressSummary")
             }
         }

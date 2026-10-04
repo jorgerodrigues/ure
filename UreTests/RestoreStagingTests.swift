@@ -9,6 +9,23 @@ import Testing
 
 nonisolated struct RestoreStagingTests {
     @Test
+    func physicalFreeSpaceAllowsRestoreWhenImportantCapacityIsZero() throws {
+        #expect(
+            try RestoreFiles.availableCapacity(available: 124_661_760, important: 0) == 124_661_760)
+        #expect(try RestoreFiles.availableCapacity(available: 0, important: 0) == 0)
+        #expect(try RestoreFiles.availableCapacity(available: 0, important: 512) == 512)
+        #expect(try RestoreFiles.availableCapacity(available: 512, important: nil) == 512)
+        #expect(try RestoreFiles.availableCapacity(available: nil, important: 512) == 512)
+    }
+
+    @Test
+    func unknownDiskCapacityRejectsRestore() {
+        #expect(throws: RestoreError.self) {
+            try RestoreFiles.availableCapacity(available: nil, important: nil)
+        }
+    }
+
+    @Test
     func validPackageStagesAnIndependentGenerationWithoutActivation() async throws {
         let fixture = RestoreFixture()
         defer { fixture.files.remove() }

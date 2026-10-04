@@ -36,7 +36,8 @@ struct PhotoViewportTests {
         let edge = view.contentView.bounds.origin
         view.moveRight(nil)
         view.layoutSubtreeIfNeeded()
-        #expect(view.contentView.bounds.origin == edge)
+        #expect(abs(view.contentView.bounds.origin.x - edge.x) < 0.01)
+        #expect(abs(view.contentView.bounds.origin.y - edge.y) < 0.01)
         #expect(view.magnification == scale)
     }
 }

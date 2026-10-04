@@ -65,7 +65,17 @@ nonisolated struct LibrarySnapshotService {
                 counts = [:]
                 migrations = []
             }
+            try destinationDatabase.writeWithoutTransaction { db in
+                guard try String.fetchOne(db, sql: "PRAGMA journal_mode = DELETE") == "delete"
+                else {
+                    throw LibraryError.invalidLibrary("The snapshot could not leave WAL mode.")
+                }
+            }
             try destinationDatabase.close()
+            let sharedMemory = staging.appending(path: "library.sqlite-shm")
+            if manager.fileExists(atPath: sharedMemory.path) {
+                try manager.removeItem(at: sharedMemory)
+            }
             try checkpoint(.copiedDatabase)
 
             let sourceManifest = generation.appending(path: "manifest.json")
