@@ -163,13 +163,6 @@ nonisolated struct JobTimelineEntry: Equatable, Identifiable, Sendable {
             .init("Installed", date: value.installedAt),
             .init("Cancelled", date: value.cancelledAt),
             .init("Order reference", value.orderReference),
-            .init("Supplier", value.supplierSnapshot?.supplierName),
-            .init("Listing", value.supplierSnapshot?.title),
-            .init("Supplier stock code", value.supplierSnapshot?.supplierStockCode),
-            .init("Supplier URL", value.supplierSnapshot?.url),
-            .init("Price", value.supplierSnapshot?.price),
-            .init("Currency", value.supplierSnapshot?.currency),
-            .init("Supplier notes", value.supplierSnapshot?.notes),
         ]
     }
 }

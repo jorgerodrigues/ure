@@ -19,6 +19,15 @@ WORKER = Path(sys.argv[1]).resolve()
 RUN = REPO / ".build/recovery-runs" / str(uuid.uuid4())
 GENERATION = "00000000-0000-4000-8000-000000000001"
 VERSIONS = ("v10-documents", "v15-part-procurement")
+CURRENT_MIGRATION = "v18-plain-part-links"
+# Columns that a later migration removes on purpose.
+REMOVED_COLUMNS = {
+    "partLink": {
+        "title", "supplierName", "supplierStockCode", "currency", "price", "notes", "isSelected",
+        "searchKey",
+    },
+    "partRequirement": {"supplierSnapshot"},
+}
 RESULTS = []
 
 
@@ -117,9 +126,10 @@ def preserved(before, after):
     require(before["originals"] == after["originals"], "Original and technical PDF bytes preserved")
     for table, rows in before["tables"].items():
         require(len(rows) == len(after["tables"][table]), f"{table}: record count")
-        old_columns = set(rows[0]) if rows else set()
+        old_columns = (set(rows[0]) if rows else set()) - REMOVED_COLUMNS.get(table, set())
+        kept = [{key: row[key] for key in old_columns} for row in rows]
         projected = [{key: row[key] for key in old_columns} for row in after["tables"][table]]
-        require(sorted(rows, key=lambda row: json.dumps(row, sort_keys=True)) == sorted(projected, key=lambda row: json.dumps(row, sort_keys=True)), f"{table}: IDs and saved values")
+        require(sorted(kept, key=lambda row: json.dumps(row, sort_keys=True)) == sorted(projected, key=lambda row: json.dumps(row, sort_keys=True)), f"{table}: IDs and saved values")
 
 
 def reopen_twice(case):
@@ -220,7 +230,7 @@ def upgrade_matrix():
             require(tree(original) == original_files, "Interrupted upgrade never changes retained generation")
             after = reopen_twice(case)
             preserved(before, after)
-            require(after["migrations"][-1] == "v17-search", "Current schema after retry")
+            require(after["migrations"][-1] == CURRENT_MIGRATION, "Current schema after retry")
             recoveries = list((case / "library/recovery").iterdir())
             complete = [path for path in recoveries if (path / "snapshot.json").is_file()]
             require(bool(complete), "Pre-upgrade recovery copy retained")

@@ -127,14 +127,14 @@ nonisolated enum PerformanceFixture {
             sql: """
                 INSERT INTO partRequirement (id, jobID, description, quantity, manufacturerReference,
                     compatibility, status, createdAt, updatedAt)
-                VALUES (?, ?, ?, 7, '001.20', 'Unchecked', 'Needed', ?, ?)
+                VALUES (?, ?, ?, 7, '00.A_%', 'Unchecked', 'Needed', ?, ?)
                 """,
             arguments: [partID, jobID, "Synthetic part \(index)", date, date + Double(index)])
         for position in 0..<2 {
             try db.execute(
                 sql: """
-                    INSERT INTO partLink (id, partID, position, url, supplierStockCode, createdAt, updatedAt)
-                    VALUES (?, ?, ?, 'https://example.com/part', '00.A_%', ?, ?)
+                    INSERT INTO partLink (id, partID, position, url, createdAt, updatedAt)
+                    VALUES (?, ?, ?, 'https://example.com/part', ?, ?)
                     """,
                 arguments: [
                     try id(9, index * 2 + position).uuidString, partID, position, date, date,

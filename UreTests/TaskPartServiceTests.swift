@@ -221,12 +221,7 @@ nonisolated struct TaskPartServiceTests {
             JobTaskFixture.draft(.waiting), for: job.id, editing: nil)
         let tasks = try await taskService.move(waiting.id, for: job.id, to: .up)
         var partDraft = PartFixture.draft()
-        var supplier = PartLinkDraft(url: "https://example.org/0012-A")
-        supplier.supplierName = "Supplier Å時計"
-        supplier.price = "0012.3400"
-        supplier.currency = "DKK"
-        partDraft.links = [supplier]
-        partDraft.selectedLinkID = supplier.id
+        partDraft.links = [PartLinkDraft(url: "https://example.org/0012-A")]
         let parts = PartService(coordinator: coordinator)
         let needed = try await parts.save(partDraft, for: job.id, editing: nil)
         let ordered = try await TaskPartFixture.change(needed, to: .ordered, using: parts)

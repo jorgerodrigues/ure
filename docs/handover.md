@@ -24,7 +24,7 @@ If `clang-stat-cache` stalls on the development beta, pass `XCODE_EXTRA_FLAGS=SD
 
 1. Select Watches with **Option-Command-2**. Use **Command-N**, enter a name, and save with **Command-S**. Leave unknown specifications blank.
 2. Use **Start Job** in the watch detail. Enter its title and intake. Save. The intake snapshot keeps the watch identity at that time.
-3. Add notes, tasks, parts, supplier links, photos, and PDFs in that job. A part link can contain only a complete HTTP or HTTPS URL. Keep manufacturer references separate from supplier stock codes.
+3. Add notes, tasks, parts, part links, photos, and PDFs in that job. A part link holds only a complete HTTP or HTTPS URL.
 4. Import originals before removing source files. Saved photos and PDFs remain local. External links need their destination website.
 5. Pin a reference while working on tasks. Use **Option-Command-R** for the read-only reference window. Use **Change Job Stage** to record Waiting and its reason. Part arrival changes availability, without resuming a Waiting task.
 6. Use **Change Stage** to complete the job. Enter an outcome and explain unfinished work when requested. A later repair uses **Start Job** on the same watch. Earlier intake and outcome stay saved.
@@ -53,7 +53,7 @@ open -n --env URE_TESTING=1 --env URE_TEST_LIBRARY_ID="$test_library_id" \
 
 The marker selects only a temporary test library. A UUID reuses that isolated library across marked restarts. It cannot inject an arbitrary path. Check Settings to confirm the temporary location before restoring. Quit this instance when done. An ordinary `make run` reopens the regular library.
 
-After restore, compare watch names and exact identifiers, job history, task/part states, supplier links, notes, and file counts with the source library. Open the restored photos and PDFs with networking disconnected. Export sample originals and compare bytes with the backup originals. The automated `ReleaseJourneyTests` also checks all record values and every original's size and SHA-256 for fresh, v10, and v15 libraries.
+After restore, compare watch names and exact identifiers, job history, task/part states, part links, notes, and file counts with the source library. Open the restored photos and PDFs with networking disconnected. Export sample originals and compare bytes with the backup originals. The automated `ReleaseJourneyTests` also checks all record values and every original's size and SHA-256 for fresh, v10, and v15 libraries.
 
 ## Verification and remaining acceptance
 

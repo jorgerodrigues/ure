@@ -38,12 +38,7 @@ nonisolated struct SearchQueriesTests {
         var partDraft = PartFixture.draft()
         partDraft.description = "Ressort"
         partDraft.manufacturerReference = "0007-A/02"
-        partDraft.links = [
-            PartLinkDraft(url: "https://example.org/part"),
-            PartLinkDraft(url: "https://example.org/other"),
-        ]
-        partDraft.links[0].supplierStockCode = "0012–Å/stock"
-        partDraft.links[1].supplierStockCode = "0012–Å/stock"
+        partDraft.links = [PartLinkDraft(url: "https://example.org/part")]
         let part = try await PartService(coordinator: coordinator).save(
             partDraft, for: job.id, editing: nil)
         var referenceDraft = ReferenceFixture.draft
@@ -76,7 +71,7 @@ nonisolated struct SearchQueriesTests {
             ("RÉPARATION", job.id), ("finding", note.id), ("cafe\u{301}", note.id),
             ("100%_", note.id), ("[brackets]", note.id), ("'quotes'", note.id),
             ("\"double\"", note.id), ("\\path", note.id), ("'; DROP TABLE watch;--", note.id),
-            ("ressort", part.id), ("0007-A/02", part.id), ("0012–å/stock", part.id),
+            ("ressort", part.id), ("0007-A/02", part.id),
             ("sheet link", reference.id), ("dial photo", photo.id), ("légende", photo.id),
             ("technical pdf", document.id),
         ]
@@ -277,34 +272,7 @@ nonisolated struct SearchQueriesTests {
     }
 
     @Test
-    func orderSnapshotStockCodeStaysSearchableAfterSupplierOptionRemoval() async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        let job = try await JobTaskFixture.job(coordinator)
-        let service = PartService(coordinator: coordinator)
-        var draft = PartFixture.draft()
-        draft.links = [PartLinkDraft(url: "https://example.org/supplier")]
-        draft.links[0].supplierStockCode = "0009-Å/ordered"
-        draft.selectedLinkID = draft.links[0].id
-        let needed = try await service.save(draft, for: job.id, editing: nil)
-        var orderDraft = PartDraft(part: needed)
-        orderDraft.status = .ordered
-        let ordered = try await service.save(orderDraft, for: job.id, editing: needed.id)
-        var edit = PartDraft(part: ordered)
-        edit.links = []
-        edit.selectedLinkID = nil
-        let saved = try await service.save(edit, for: job.id, editing: ordered.id)
-        #expect(saved.record.supplierSnapshot == ordered.record.supplierSnapshot)
-        #expect(
-            try await coordinator.read { try SearchQueries.fetch("0009-å/ordered", in: $0) }.map(
-                \.recordID) == [ordered.id])
-        try await coordinator.close()
-    }
-
-    @Test
-    func migrationBackfillsPartsAndSupplierCodesWithoutChangingSavedRecords() async throws {
+    func migrationBackfillsPartsWithoutChangingSavedRecords() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -313,7 +281,6 @@ nonisolated struct SearchQueriesTests {
         var draft = PartFixture.draft()
         draft.manufacturerReference = "0012-Å"
         draft.links = [PartLinkDraft(url: "https://example.org/part")]
-        draft.links[0].supplierStockCode = "0009/É"
         let part = try await PartService(coordinator: coordinator).save(
             draft, for: job.id, editing: nil)
         try await coordinator.mutate { db, _, _ in try SearchMigrationFixture.removeSearch(in: db) }
@@ -322,9 +289,6 @@ nonisolated struct SearchQueriesTests {
         _ = try await upgraded.open()
         #expect(
             try await upgraded.read { try SearchQueries.fetch("0012-å", in: $0) }.map(\.recordID)
-                == [part.id])
-        #expect(
-            try await upgraded.read { try SearchQueries.fetch("0009/é", in: $0) }.map(\.recordID)
                 == [part.id])
         #expect(try await upgraded.read(PartQueries.fetchAll) == [part])
         #expect(try await upgraded.read(JobQueries.fetchAll) == [job])
@@ -336,9 +300,12 @@ nonisolated struct SearchFixtureFailure: Error {}
 
 nonisolated enum SearchMigrationFixture {
     static func removeSearch(in db: Database) throws {
-        for table in SearchKey.Table.allCases {
-            try db.execute(sql: "DROP INDEX \(table.rawValue)_searchKey")
-            try db.execute(sql: "ALTER TABLE \(table.rawValue) DROP COLUMN searchKey")
+        try PartLinkMigrationFixture.restoreSupplierOptions(in: db)
+        for table in [
+            "watch", "caliber", "job", "note", "libraryItem", "partRequirement", "partLink",
+        ] {
+            try db.execute(sql: "DROP INDEX \(table)_searchKey")
+            try db.execute(sql: "ALTER TABLE \(table) DROP COLUMN searchKey")
         }
         for table in ["watch", "caliber", "job"] {
             try db.execute(sql: "DROP INDEX \(table)_archivedAt")

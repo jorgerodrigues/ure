@@ -33,10 +33,7 @@ final class PartState {
         parts.filter {
             $0.record.jobID == jobID
                 && SearchKey.matches(
-                    [
-                        $0.record.description, $0.record.manufacturerReference,
-                        $0.record.supplierSnapshot?.supplierStockCode,
-                    ] + $0.links.map(\.supplierStockCode), query: query)
+                    [$0.record.description, $0.record.manufacturerReference], query: query)
         }
     }
 
@@ -156,18 +153,8 @@ final class PartState {
     }
 
     func setLinkURL(_ url: String, id: UUID) {
-        setLinkField(url, id: id, keyPath: \.url)
-    }
-
-    func setLinkField(_ value: String, id: UUID, keyPath: WritableKeyPath<PartLinkDraft, String>) {
         guard !isSaving, let index = draft?.links.firstIndex(where: { $0.id == id }) else { return }
-        draft?.links[index][keyPath: keyPath] = value
-    }
-
-    func selectLink(_ id: UUID?) {
-        guard !isSaving, draft != nil else { return }
-        if let id, draft?.links.contains(where: { $0.id == id }) != true { return }
-        draft?.selectedLinkID = id
+        draft?.links[index].url = url
     }
 
     func removeLink(_ id: UUID) {
@@ -187,7 +174,6 @@ final class PartState {
 
     private func removeDraftLink(_ id: UUID) {
         draft?.links.removeAll { $0.id == id }
-        if draft?.selectedLinkID == id { draft?.selectedLinkID = nil }
     }
 
     func openLink(_ link: PartLink) {

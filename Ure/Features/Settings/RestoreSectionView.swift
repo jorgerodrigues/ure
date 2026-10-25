@@ -88,7 +88,7 @@ private struct RestoreCountRow: View {
         case "job": "Jobs"
         case "jobTask": "Tasks"
         case "partRequirement": "Parts"
-        case "partLink": "Supplier links"
+        case "partLink": "Part links"
         case "taskPart": "Task part links"
         case "note": "Notes"
         case "libraryItem": "Photos, PDFs and references"

@@ -30,8 +30,8 @@ struct SearchStateTests {
         }
         #expect(search.results.isEmpty)
         var draft = PartFixture.draft()
+        draft.manufacturerReference = "0012–Å/stock"
         draft.links = [PartLinkDraft(url: "https://example.org/part")]
-        draft.links[0].supplierStockCode = "0012–Å/stock"
         let service = PartService(coordinator: coordinator)
         let part = try await service.save(draft, for: job.id, editing: nil)
         try await SearchEditingFixture.waitUntil {
@@ -42,7 +42,7 @@ struct SearchStateTests {
         #expect(overview.filteredRows.map(\.id) == [part.id])
         #expect(editing.parts.records(for: job.id, matching: "0012–å/stock").map(\.id) == [part.id])
         var edit = PartDraft(part: part)
-        edit.links[0].supplierStockCode = "replacement"
+        edit.manufacturerReference = "replacement"
         edit.status = .arrived
         try await JobTaskFixture.failEvents(coordinator)
         await #expect(throws: DatabaseError.self) {
@@ -61,7 +61,7 @@ struct SearchStateTests {
             try await coordinator.read { try SearchQueries.fetch("replacement", in: $0) }.map(
                 \.recordID) == [part.id])
         edit = PartDraft(part: saved)
-        edit.links = []
+        edit.manufacturerReference = ""
         _ = try await service.save(edit, for: job.id, editing: part.id)
         #expect(
             try await coordinator.read { try SearchQueries.fetch("replacement", in: $0) }.isEmpty)

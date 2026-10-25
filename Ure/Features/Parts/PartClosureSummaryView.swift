@@ -18,15 +18,11 @@ struct PartClosureSummaryView: View {
                 ForEach(parts.records(for: jobID)) { part in
                     VStack(alignment: .leading) {
                         LabeledContent(part.record.description, value: part.record.status.rawValue)
-                        if part.record.status.isUnresolved {
-                            if let supplier = part.record.supplierSnapshot?.supplierName {
-                                Text("Ordered from \(supplier)").font(.caption).foregroundStyle(
-                                    .secondary)
-                            }
-                            if let reference = part.record.orderReference {
-                                Text("Order reference: \(reference)").font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                        if part.record.status.isUnresolved,
+                            let reference = part.record.orderReference
+                        {
+                            Text("Order reference: \(reference)").font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }

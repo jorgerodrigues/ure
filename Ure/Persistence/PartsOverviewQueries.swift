@@ -22,14 +22,9 @@ nonisolated enum PartsOverviewQueries {
         let rows = try Row.fetchAll(
             db,
             sql: """
-                SELECT p.*, p.searchKey || char(10) || coalesce(links.keys, '') AS combinedSearchKey
-                FROM partRequirement p
-                LEFT JOIN (
-                    SELECT partID, group_concat(searchKey, char(10)) AS keys
-                    FROM partLink GROUP BY partID
-                ) links ON links.partID = p.id
+                SELECT * FROM partRequirement
                 WHERE jobID IN (\(openJobs))
-                ORDER BY p.updatedAt DESC, p.id
+                ORDER BY updatedAt DESC, id
                 """)
         let jobs = try JobRecord.fetchAll(db, sql: "SELECT * FROM job WHERE id IN (\(openJobs))")
         let watches = try WatchRecord.fetchAll(
@@ -45,7 +40,7 @@ nonisolated enum PartsOverviewQueries {
                 throw PartError.missingRecord
             }
             return OverviewPart(
-                part: part, job: job, watch: watch, searchKey: row["combinedSearchKey"])
+                part: part, job: job, watch: watch, searchKey: row["searchKey"])
         }
     }
 }

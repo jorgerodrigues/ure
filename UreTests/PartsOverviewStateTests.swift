@@ -70,7 +70,7 @@ struct PartsOverviewStateTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func exactNavigationAndFiltersProtectDraftsAndNeverOpenSupplierLinks() async throws {
+    func exactNavigationAndFiltersProtectDraftsAndNeverOpenPartLinks() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let date = Date(timeIntervalSince1970: 1_700_000_000)
