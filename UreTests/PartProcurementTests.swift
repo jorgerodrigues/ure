@@ -137,7 +137,7 @@ nonisolated struct PartProcurementTests {
     }
 
     @Test
-    func supplierSnapshotSurvivesEditsRemovalCorrectionsCancellationAndRestart() async throws {
+    func orderReferenceSurvivesLinkRemovalCorrectionsCancellationAndRestart() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let clock = clock
@@ -146,43 +146,25 @@ nonisolated struct PartProcurementTests {
         let job = try await JobTaskFixture.job(coordinator)
         let service = PartService(coordinator: coordinator)
         var draft = PartFixture.draft()
-        var option = PartLinkDraft(url: "https://example.org/part?code=0012")
-        option.supplierName = "Supplier Å時計"
-        option.title = "Spring for caliber 123"
-        option.supplierStockCode = "00012-A/03"
-        option.price = "0012.3400"
-        option.currency = "dkk"
-        option.notes = "Original sealed lot"
-        draft.links = [option]
-        draft.selectedLinkID = option.id
+        draft.links = [PartLinkDraft(url: "https://example.org/part?code=0012")]
         let needed = try await service.save(draft, for: job.id, editing: nil)
         var order = PartDraft(part: needed)
         order.status = .ordered
         order.orderReference = "  000042–Å/03  "
         let ordered = try await service.save(order, for: job.id, editing: needed.id)
-        let snapshot = try #require(ordered.record.supplierSnapshot)
-        #expect(snapshot == PartSupplierSnapshot(link: ordered.links[0]))
-        #expect(snapshot.price == "0012.3400" && snapshot.currency == "DKK")
         #expect(ordered.record.orderReference == "000042–Å/03")
         var edit = PartDraft(part: ordered)
-        edit.links[0].supplierName = "Changed supplier"
-        edit.links[0].url = "https://example.net/changed"
-        edit.links[0].price = "99"
-        let changed = try await service.save(edit, for: job.id, editing: ordered.id)
-        #expect(changed.record.supplierSnapshot == snapshot)
-        edit = PartDraft(part: changed)
         edit.links = []
-        edit.selectedLinkID = nil
-        let removed = try await service.save(edit, for: job.id, editing: changed.id)
-        #expect(removed.record.supplierSnapshot == snapshot)
+        let removed = try await service.save(edit, for: job.id, editing: ordered.id)
+        #expect(removed.links.isEmpty && removed.record.orderReference == "000042–Å/03")
         let installed = try await change(removed, to: .installed, service: service)
         let corrected = try await change(installed, to: .ordered, service: service)
         #expect(
-            corrected.record.supplierSnapshot == snapshot && corrected.record.orderedAt == clock)
+            corrected.record.orderReference == "000042–Å/03"
+                && corrected.record.orderedAt == clock)
         #expect(corrected.record.arrivedAt == nil && corrected.record.installedAt == nil)
         let cancelled = try await change(corrected, to: .cancelled, service: service)
-        #expect(cancelled.record.supplierSnapshot == snapshot)
-        #expect(cancelled.record.orderReference == ordered.record.orderReference)
+        #expect(cancelled.record.orderReference == "000042–Å/03")
         let events = try await coordinator.read(ActivityQueries.fetchAll)
         #expect(events.last?.priorValue == .part(PartProcurementValue(part: corrected.record)))
         try await coordinator.close()
@@ -192,17 +174,14 @@ nonisolated struct PartProcurementTests {
         #expect(try await reopened.read(ActivityQueries.fetchAll) == events)
         let serviceAfterRestart = PartService(coordinator: reopened)
         let restored = try await change(cancelled, to: .ordered, service: serviceAfterRestart)
-        #expect(restored.record.supplierSnapshot == snapshot)
-        #expect(restored.record.orderReference == ordered.record.orderReference)
+        #expect(restored.record.orderReference == "000042–Å/03")
         let reset = try await change(restored, to: .needed, service: serviceAfterRestart)
-        #expect(reset.record.supplierSnapshot == nil && reset.record.orderReference == nil)
-        let reordered = try await change(reset, to: .ordered, service: serviceAfterRestart)
-        #expect(reordered.record.supplierSnapshot == nil)
+        #expect(reset.record.orderReference == nil && reset.record.orderedAt == nil)
         try await reopened.close()
     }
 
     @Test
-    func historyFailureRollsBackPartAndSupplierWritesAndStaleStatusIsRejected() async throws {
+    func historyFailureRollsBackPartAndLinkWritesAndStaleStatusIsRejected() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let clock = clock
@@ -215,8 +194,7 @@ nonisolated struct PartProcurementTests {
         let needed = try await service.save(draft, for: job.id, editing: nil)
         var order = PartDraft(part: needed)
         order.status = .ordered
-        order.links[0].supplierName = "New supplier"
-        order.selectedLinkID = order.links[0].id
+        order.links[0].url = "https://example.org/changed"
         order.orderReference = "000012"
         try await JobTaskFixture.failEvents(coordinator)
         await #expect(throws: DatabaseError.self) {
@@ -240,52 +218,6 @@ nonisolated struct PartProcurementTests {
         #expect(
             try await service.save(PartDraft(part: ordered), for: job.id, editing: ordered.id)
                 == ordered)
-        try await coordinator.close()
-    }
-
-    @Test
-    func restorationKeepsUnknownSupplierButFirstOrderCapturesSelectedOption() async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let clock = clock
-        let coordinator = fixture.coordinator(dependencies: LibraryDependencies(now: { clock }))
-        _ = try await coordinator.open()
-        let job = try await JobTaskFixture.job(coordinator)
-        let service = PartService(coordinator: coordinator)
-        var draft = PartFixture.draft()
-        draft.links = [PartLinkDraft(url: "https://example.org/later-choice")]
-        let needed = try await service.save(draft, for: job.id, editing: nil)
-        var order = PartDraft(part: needed)
-        order.status = .ordered
-        order.orderReference = "PO-1"
-        let ordered = try await service.save(order, for: job.id, editing: needed.id)
-        #expect(ordered.record.supplierSnapshot == nil)
-        var selection = PartDraft(part: ordered)
-        selection.selectedLinkID = ordered.links[0].id
-        let selected = try await service.save(selection, for: job.id, editing: ordered.id)
-        #expect(selected.record.supplierSnapshot == nil)
-        let cancelled = try await change(selected, to: .cancelled, service: service)
-        let restored = try await change(cancelled, to: .ordered, service: service)
-        #expect(restored.record.supplierSnapshot == nil && restored.record.orderReference == "PO-1")
-        let cancelledAgain = try await change(restored, to: .cancelled, service: service)
-        let arrived = try await change(cancelledAgain, to: .arrived, service: service)
-        let recancelled = try await change(arrived, to: .cancelled, service: service)
-        let restoredAgain = try await change(recancelled, to: .ordered, service: service)
-        #expect(
-            restoredAgain.record.supplierSnapshot == nil
-                && restoredAgain.record.orderReference == "PO-1")
-        let reset = try await change(restoredAgain, to: .needed, service: service)
-        let firstAfterReset = try await change(reset, to: .ordered, service: service)
-        #expect(
-            firstAfterReset.record.supplierSnapshot
-                == reset.selectedLink.map(PartSupplierSnapshot.init))
-        draft.links[0] = PartLinkDraft(url: "https://example.org/never-ordered")
-        draft.selectedLinkID = draft.links[0].id
-        let other = try await service.save(draft, for: job.id, editing: nil)
-        let cancelledBeforeOrder = try await change(other, to: .cancelled, service: service)
-        let firstOrder = try await change(cancelledBeforeOrder, to: .ordered, service: service)
-        #expect(
-            firstOrder.record.supplierSnapshot == other.selectedLink.map(PartSupplierSnapshot.init))
         try await coordinator.close()
     }
 
@@ -372,7 +304,7 @@ nonisolated struct PartProcurementTests {
     }
 
     @Test
-    func forwardMigrationPreservesSupplierDataHistoryOrderCoverAndOriginals() async throws {
+    func forwardMigrationPreservesLinksHistoryOrderCoverAndOriginals() async throws {
         let fixture = ImportFixture()
         defer { fixture.remove() }
         let clock = clock
@@ -391,12 +323,7 @@ nonisolated struct PartProcurementTests {
             JobTaskFixture.draft(.waiting), for: job.id, editing: nil)
         let tasks = try await taskService.move(second.id, for: job.id, to: .up)
         var draft = PartFixture.draft()
-        var link = PartLinkDraft(url: "https://example.org/part")
-        link.supplierName = "Supplier Å時計"
-        link.price = "0012.3400"
-        link.currency = "DKK"
-        draft.links = [link]
-        draft.selectedLinkID = link.id
+        draft.links = [PartLinkDraft(url: "https://example.org/part")]
         let part = try await PartService(coordinator: coordinator).save(
             draft, for: job.id, editing: nil)
         let events = try await coordinator.read(ActivityQueries.fetchAll)
@@ -417,7 +344,7 @@ nonisolated struct PartProcurementTests {
         #expect(try Data(contentsOf: await reopened.originalURL(for: photo.asset.id)) == bytes)
         let ordered = try await change(
             part, to: .ordered, service: PartService(coordinator: reopened))
-        #expect(ordered.record.supplierSnapshot == part.selectedLink.map(PartSupplierSnapshot.init))
+        #expect(ordered.record.orderedAt == clock && ordered.links == part.links)
         #expect(
             try await reopened.read(ActivityQueries.fetchAll).last?.ordering
                 == (events.last?.ordering ?? 0) + 1)

@@ -47,17 +47,10 @@ nonisolated struct PartRecord: Codable, Equatable, Identifiable, Sendable, Fetch
     var arrivedAt: Date?
     var installedAt: Date?
     var cancelledAt: Date?
-    var supplierSnapshot: PartSupplierSnapshot?
     var orderReference: String?
     var statusReason: String?
     let createdAt: Date
     let updatedAt: Date
-
-    static func databaseJSONEncoder(for column: String) -> JSONEncoder {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = .sortedKeys
-        return encoder
-    }
 
     static func databaseUUIDEncodingStrategy(for column: String) -> DatabaseUUIDEncodingStrategy {
         .uppercaseString
@@ -70,26 +63,6 @@ nonisolated struct PartRecord: Codable, Equatable, Identifiable, Sendable, Fetch
     }
 }
 
-nonisolated struct PartSupplierSnapshot: Codable, Equatable, Sendable {
-    let url: String
-    let title: String?
-    let supplierName: String?
-    let supplierStockCode: String?
-    let price: String?
-    let currency: String?
-    let notes: String?
-
-    init(link: PartLink) {
-        url = link.url
-        title = link.title
-        supplierName = link.supplierName
-        supplierStockCode = link.supplierStockCode
-        price = link.price
-        currency = link.currency
-        notes = link.notes
-    }
-}
-
 nonisolated struct PartLink: Codable, Equatable, Identifiable, Sendable, FetchableRecord,
     PersistableRecord
 {
@@ -99,13 +72,6 @@ nonisolated struct PartLink: Codable, Equatable, Identifiable, Sendable, Fetchab
     let partID: UUID
     let position: Int
     let url: String
-    let title: String?
-    let supplierName: String?
-    let supplierStockCode: String?
-    let price: String?
-    let currency: String?
-    let notes: String?
-    let isSelected: Bool
     let createdAt: Date
     var updatedAt: Date
 
@@ -124,7 +90,6 @@ nonisolated struct PartRequirement: Equatable, Identifiable, Sendable {
     let record: PartRecord
     let links: [PartLink]
     var id: UUID { record.id }
-    var selectedLink: PartLink? { links.first { $0.isSelected } }
 }
 
 nonisolated enum PartQueries {
@@ -154,18 +119,5 @@ nonisolated enum PartQueries {
                 SELECT * FROM partRequirement WHERE jobID = ? AND status IN ('Needed', 'Ordered')
                 ORDER BY createdAt, id
                 """, arguments: [jobID.uuidString])
-    }
-
-    static func hasRecordedOrder(_ partID: UUID, for jobID: UUID, in db: Database) throws -> Bool {
-        let events = try ActivityEvent.fetchAll(
-            db,
-            sql: "SELECT * FROM activityEvent WHERE jobID = ? AND kind = ? ORDER BY ordering DESC",
-            arguments: [jobID.uuidString, ActivityKind.partStatusChanged.rawValue])
-        for event in events {
-            guard case .part(let next) = event.nextValue, next.partID == partID else { continue }
-            if next.status == .needed { return false }
-            if next.status == .ordered || next.orderedAt != nil { return true }
-        }
-        return false
     }
 }

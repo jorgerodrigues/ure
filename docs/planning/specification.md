@@ -1,6 +1,6 @@
 # Watch workshop app specification
 
-Version 0.9. Updated on 3 October 2026. This is the first-release contract for review. The current-platform direction, app foundation, and W002 SQLite/GRDB storage design were approved on 1 October 2026. The user approved the shared caliber design and repair history rule on 2 October 2026. Optional supplier price and currency were approved on 3 October 2026 for W016. A watch can have several jobs, with at most one open job. W005 uses the existing Save and Cancel editing pattern. Other proposed defaults are not yet an approved product baseline. PDF report creation is deferred. Parts must accept saved links.
+Version 0.9. Updated on 24 October 2026. This is the first-release contract for review. The current-platform direction, app foundation, and W002 SQLite/GRDB storage design were approved on 1 October 2026. The user approved the shared caliber design and repair history rule on 2 October 2026. On 24 October 2026 the user removed supplier details, price, currency, and supplier selection from part links. A part link holds only its URL. A watch can have several jobs, with at most one open job. W005 uses the existing Save and Cancel editing pattern. Other proposed defaults are not yet an approved product baseline. PDF report creation is deferred. Parts must accept saved links.
 
 Build a native Mac app that keeps a watch's identity, repair work, and supporting evidence together. A watch is a lasting record. A job is one repair or restoration of that watch. A caliber is reusable technical knowledge. All app data stays on the Mac. The user chooses when to open an external link or export a file.
 
@@ -42,7 +42,7 @@ These choices make the draft concrete. They are recommendations, not user approv
 | Editing | W003 to W008 forms, note editors, and link editors use explicit Save and Cancel, Cmd-S, and unsaved-draft protection; later immediate status actions remain proposed |
 | Notes | W007 specifies plain-text editing with Save and Cancel; saved text is selectable; no rich text editor. Clickable links within text remain proposed |
 | Measurements | Written notes and attached instrument photos in version 1; structured measurement forms later |
-| Parts cost | Approved on 3 October 2026: optional supplier price and currency; no job accounting or invoice totals |
+| Parts cost | Not tracked. Supplier price and currency were removed on 24 October 2026; no job accounting or invoice totals |
 | Naming | Ure is the working title; distribution identity remains to be settled |
 
 If the repair history or shared caliber rules change, revise the model and dependent issues before implementation. Do not build both alternatives.
@@ -58,7 +58,7 @@ flowchart TD
   C[Caliber knowledge] --> W[Watch identity]
   W --> J[Repair or restoration job]
   J --> T[Tasks and progress]
-  J --> P[Parts and supplier options]
+  J --> P[Parts and saved links]
   J --> N[Notes and findings]
   J --> A[Photos and reference files]
 ```
@@ -83,7 +83,7 @@ Create a watch with a name only. All other specifications can remain unknown. Ad
 
 ### Plan and source
 
-Add tasks in the order they will be done. Group them under optional stage labels such as Inspection, Disassembly, Cleaning, Assembly, and Testing. These are user-entered labels. Add required parts and compare supplier links. Keep the manufacturer's part reference separate from each supplier's stock code. Mark uncertain compatibility explicitly. Link a task to a required part when that part holds up the task.
+Add tasks in the order they will be done. Group them under optional stage labels such as Inspection, Disassembly, Cleaning, Assembly, and Testing. These are user-entered labels. Add required parts and save links to listings or references. Mark uncertain compatibility explicitly. Link a task to a required part when that part holds up the task.
 
 ### Work at the bench
 
@@ -121,7 +121,7 @@ The header shows watch identity, job stage, watch condition, and task progress. 
 
 ### Parts overview
 
-Show parts from open jobs. Filter by Needed, Ordered, Arrived, Installed, or Cancelled. Each row names its job and watch. An action opens that part's job. Supplier websites open in the default browser only after a user action.
+Show parts from open jobs. Filter by Needed, Ordered, Arrived, Installed, or Cancelled. Each row names its job and watch. An action opens that part's job. Saved links open in the default browser only after a user action.
 
 ### Caliber detail
 
@@ -161,11 +161,11 @@ TaskPart links tasks to parts from the same job. Foreign keys protect existence.
 
 ### Part requirement and links
 
-A part requirement belongs to one job. Required: description and positive whole-number quantity, default 1. Optional: manufacturer name, manufacturer reference, compatibility notes, saved links, and selected supplier option. Compatibility is Unchecked, Confirmed, or Unsuitable. Confirmed requires a short evidence note. This records the user's assessment, not an automated guarantee.
+A part requirement belongs to one job. Required: description and positive whole-number quantity, default 1. Optional: manufacturer name, manufacturer reference, compatibility notes, and saved links. Compatibility is Unchecked, Confirmed, or Unsuitable. Confirmed requires a short evidence note. This records the user's assessment, not an automated guarantee.
 
-Each PartLink belongs to one part requirement. Required: HTTP or HTTPS URL. Optional: title, supplier name, supplier stock code, price, currency, and notes. The part editor has an Add link action during creation and later editing. A URL alone is enough to save a link. No supplier, price, or reference number is required for it. A part can also be saved without links. Show every saved link in the part detail with an Open action. Several links can coexist, including product listings and identification references. Supplier comparison uses these same records; do not keep a duplicate URL field on the part. Store a non-negative price as an exact decimal string. Use ASCII digits and an optional decimal point with digits on both sides. Preserve leading zeros and trailing decimal digits. A price requires a validated ISO currency code. Accept lowercase currency input and store its uppercase code. A valid currency can be saved while the price remains unknown. Do not calculate totals or convert currencies. Removing the selected supplier link clears the selection.
+Each PartLink belongs to one part requirement. It holds only an HTTP or HTTPS URL. The part editor has an Add link action during creation and later editing. A part can also be saved without links. Show every saved link in the part detail with an Open action. Several links can coexist, including product listings and identification references. Do not keep a duplicate URL field on the part.
 
-Procurement status is Needed, Ordered, Arrived, Installed, or Cancelled. Store the date of each current milestone. Ordering can optionally capture a snapshot of the selected supplier details and order reference. Later changes to a link do not rewrite this snapshot. A part can start at Arrived if it was already on hand. Installed is separate from Arrived.
+Procurement status is Needed, Ordered, Arrived, Installed, or Cancelled. Store the date of each current milestone. Ordering can record an optional order reference. A part can start at Arrived if it was already on hand. Installed is separate from Arrived.
 
 Each line moves as one unit or lot. Partial deliveries and several purchases for the same line are outside version 1. The user can create separate lines for separately tracked quantities. Do not imply partial receipt support with a quantity counter. An ordered lot that needs partial tracking can be split manually into new lines with explanatory notes; the original line is cancelled and retained.
 
@@ -261,7 +261,7 @@ Do not place the live SQLite library in an iCloud Drive or Dropbox folder. File 
 
 Archive is reversible and separate from job completion. A watch can be archived only when it has no open job. Archived watches, closed jobs, and unused archived calibers remain readable and can be restored to normal lists. A caliber in use can be archived from the caliber list without breaking its existing watch links.
 
-Top-level watch and job deletion is outside version 1. Archive covers their removal from normal views. Child tasks, supplier options, notes, and library items can be removed after confirmation. A task with parts links must list those links in the confirmation. Part requirements use Cancelled to preserve procurement history. Removing a linked note or library item clears its selections and cover references. Remove unreferenced asset files only after the database operation succeeds. Retry failed cleanup safely at startup.
+Top-level watch and job deletion is outside version 1. Archive covers their removal from normal views. Child tasks, part links, notes, and library items can be removed after confirmation. A task with parts links must list those links in the confirmation. Part requirements use Cancelled to preserve procurement history. Removing a linked note or library item clears its selections and cover references. Remove unreferenced asset files only after the database operation succeeds. Retry failed cleanup safely at startup.
 
 ### Backup
 
@@ -279,7 +279,7 @@ Local pre-migration and pre-restore recovery copies protect against app failures
 
 ## 11 Search and accessibility
 
-Global search covers watch identity, caliber designation, job titles, note titles and bodies, part descriptions, manufacturer references, supplier stock codes, and library item titles and captions. It does not index PDF contents or text within images. Group results by record kind and include watch or job context. Opening a result selects the exact item. Archive inclusion is an explicit filter.
+Global search covers watch identity, caliber designation, job titles, note titles and bodies, part descriptions, manufacturer references, and library item titles and captions. It does not index PDF contents or text within images. Group results by record kind and include watch or job context. Opening a result selects the exact item. Archive inclusion is an explicit filter.
 
 Use bound SQL parameters. Define a consistent case-insensitive Unicode search key in Swift and keep it updated in each affected transaction. Use simple indexed queries and contains matching first. Introduce FTS only if the measured library size requires it. Do not rely on SQLite's basic NOCASE behavior for all languages.
 
@@ -294,7 +294,7 @@ During rapid implementation, run `make lint` and `make build` before a PR is rea
 The first release passes these journeys:
 
 1. Create a watch with unknown specifications; restart and recover the saved record.
-2. Create a job, notes, tasks, and parts. Save a part with a URL and no supplier metadata, add another link, restart, and reopen both URLs. Keep manufacturer and supplier codes distinct.
+2. Create a job, notes, tasks, and parts. Save a part with a URL, add another link, restart, and reopen both URLs.
 3. Import local files, remove their source copies, disconnect networking, and use the photos and PDF in the bench pane.
 4. Move a job to Waiting. Mark a part Arrived. See task availability change while its status remains Waiting.
 5. Complete, skip, add, and reopen tasks. Verify the defined progress count, including the no-task case.

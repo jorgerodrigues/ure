@@ -487,14 +487,16 @@ nonisolated enum LibrarySchema {
             try db.create(index: "taskPart_partID", on: "taskPart", columns: ["partID"])
         }
         migrator.registerMigration("v17-search", foreignKeyChecks: .immediate) { db in
-            for table in SearchKey.Table.allCases {
-                try db.alter(table: table.rawValue) { definition in
+            for table in [
+                "watch", "caliber", "job", "note", "libraryItem", "partRequirement", "partLink",
+            ] {
+                try db.alter(table: table) { definition in
                     definition.add(column: "searchKey", .text).notNull().defaults(to: "")
                 }
-                try db.create(
-                    index: "\(table.rawValue)_searchKey", on: table.rawValue,
-                    columns: ["searchKey"])
-                try SearchKey.backfill(table, in: db)
+                try db.create(index: "\(table)_searchKey", on: table, columns: ["searchKey"])
+                if let searchTable = SearchKey.Table(rawValue: table) {
+                    try SearchKey.backfill(searchTable, in: db)
+                }
             }
             for table in ["watch", "caliber", "job"] {
                 try db.alter(table: table) { definition in
@@ -502,6 +504,30 @@ nonisolated enum LibrarySchema {
                 }
                 try db.create(index: "\(table)_archivedAt", on: table, columns: ["archivedAt"])
             }
+        }
+        migrator.registerMigration("v18-plain-part-links", foreignKeyChecks: .immediate) { db in
+            try db.drop(index: "partLink_selected")
+            try db.drop(index: "partLink_searchKey")
+            try db.alter(table: "partLink") { table in
+                for column in [
+                    "price", "currency", "title", "supplierName", "supplierStockCode", "notes",
+                    "isSelected", "searchKey",
+                ] {
+                    table.drop(column: column)
+                }
+            }
+            try db.alter(table: "partRequirement") { table in
+                table.drop(column: "supplierSnapshot")
+            }
+            for column in ["priorValue", "nextValue"] {
+                try db.execute(
+                    sql: """
+                        UPDATE activityEvent
+                        SET \(column) = json_remove(\(column), '$.part._0.supplierSnapshot')
+                        WHERE json_type(\(column), '$.part._0.supplierSnapshot') IS NOT NULL
+                        """)
+            }
+            try SearchKey.backfill(.partRequirement, in: db)
         }
         return migrator
     }

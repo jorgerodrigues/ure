@@ -24,7 +24,7 @@ The matrix covers imports, new and replacement exports, upgrades, restore stagin
 
 Run `make performance XCODE_EXTRA_FLAGS=SDK_STAT_CACHE_ENABLE=NO` to build the optimized `UrePerformanceHarness` command-line target and measure W031's synthetic library. Python 3 uses only its standard library. This command does not start the app or UI automation.
 
-The fixture has 500 watches, 1,000 jobs, 10,000 tasks, and 5,000 photo items with separate managed originals. It also has notes, supplier links, archived records, and Unicode and punctuation identifiers. Three deterministic JPEG templates cover 640 × 480, 2400 × 1600, and 6000 × 4000 images. The logical original size is about 4.6 GB. Each fresh measurement process opens through `LibraryCoordinator` with `URE_TESTING=1` and an injected library location.
+The fixture has 500 watches, 1,000 jobs, 10,000 tasks, and 5,000 photo items with separate managed originals. It also has notes, part links, archived records, and Unicode and punctuation identifiers. Three deterministic JPEG templates cover 640 × 480, 2400 × 1600, and 6000 × 4000 images. The logical original size is about 4.6 GB. Each fresh measurement process opens through `LibraryCoordinator` with `URE_TESTING=1` and an injected library location.
 
 The driver retains raw samples and `summary.json` under `.build/performance-runs/<run-id>/`. It checks exact result IDs, task and part counts, database integrity, and every original's size and SHA-256. It reports warm queries, thumbnail decoding, coordinator open time, and resident memory during 20 large-image open/release cycles. A successful command means the measurements and data checks completed. It does not mean all performance acceptance passed. Native usable-window, scrolling, task input, and viewer memory acceptance remain W032 gates. See the [W031 verification report](docs/planning/performance-verification.md).
 
@@ -73,15 +73,15 @@ Select a row to open that exact watch and job in Workshop. The existing editors,
 
 Use **Search Library** in the toolbar or **Shift-Command-F** for global search. Results group watches, calibers, jobs, notes, parts, links, photos, and PDFs. Each result names its watch, job, or shared caliber. Selecting it opens the exact saved record through the existing draft guard. Closed jobs remain searchable. **Include Archived** also searches archived watches, jobs, calibers, and their owned records. Use Archive to read archived owners and closed jobs.
 
-Search matches saved watch identity, caliber designation, job titles, note titles and bodies, part descriptions, manufacturer references, supplier stock codes, and library item titles and captions. It preserves leading zeros and punctuation. Unicode case matching uses the same rule in every local filter. SQL characters such as `%`, `_`, and quotes are literal search text. PDF contents and text within images are not indexed.
+Search matches saved watch identity, caliber designation, job titles, note titles and bodies, part descriptions, manufacturer references, and library item titles and captions. It preserves leading zeros and punctuation. Unicode case matching uses the same rule in every local filter. SQL characters such as `%`, `_`, and quotes are literal search text. PDF contents and text within images are not indexed.
 
-The normal Watches, Calibers, Workshop, and Parts lists have local search. Job history, notes, parts, links, photos, and PDFs also have local text filters. Photo text combines with the stage filter. Part text includes supplier options and the saved order-time stock code. Filtering keeps an already open detail readable.
+The normal Watches, Calibers, Workshop, and Parts lists have local search. Job history, notes, parts, links, photos, and PDFs also have local text filters. Photo text combines with the stage filter. Part text covers descriptions and manufacturer references. Filtering keeps an already open detail readable.
 
 ## Archive and removal
 
 Use **Archive Watch** or **Archive Caliber** in its saved detail or the Record menu. A watch cannot archive while it has an open job. **Unarchive** restores normal list visibility. Existing watch links to archived calibers stay readable. Archived owners reject changes until restored. Closed jobs require Reopen, and their watch must first be unarchived.
 
-Tasks, notes, photos, PDFs, and external references have a **Remove** action in saved detail. Removal requires confirmation. Task confirmation lists its part links. Parts and historical activity summaries stay saved. Supplier removal stays in the part editor and commits with **Save**. Part requirements use **Cancelled** rather than deletion.
+Tasks, notes, photos, PDFs, and external references have a **Remove** action in saved detail. Removal requires confirmation. Task confirmation lists its part links. Parts and historical activity summaries stay saved. Part link removal stays in the part editor and commits with **Save**. Part requirements use **Cancelled** rather than deletion.
 
 Removing a photo clears its cover reference and any pin. Removed file items close their viewers. The database commits before unreferenced originals are removed. Failed file cleanup retries at startup. Originals still used by another item stay saved. There is no permanent watch or job deletion.
 
@@ -89,7 +89,7 @@ Removing a photo clears its cover reference and any pin. Removed file items clos
 
 Parts shows requirements from open jobs in every procurement status. Each row names its watch, job, stage, manufacturer reference, quantity, and status. The most recently saved parts appear first. Filter by Needed, Ordered, Arrived, Installed, or Cancelled. Text search matches the part description, manufacturer reference, watch identity, or job title. Text and status filters combine.
 
-Select a row to open that exact part in its job. Supplier links open only through their explicit **Open** buttons. **Edit Part**, **Save**, **Cancel**, and **Command-S** use the existing procurement service and draft protection. Committed changes refresh both the overview and job list. Filters retain the selected detail and show a message when excluded. Closing removes the job's parts from the overview and keeps them readable in watch history. **Clear Filters** resets text and status. Loading failures show an error and Retry. Bench references and job activity remain available in Parts.
+Select a row to open that exact part in its job. Part links open only through their explicit **Open** buttons. **Edit Part**, **Save**, **Cancel**, and **Command-S** use the existing procurement service and draft protection. Committed changes refresh both the overview and job list. Filters retain the selected detail and show a message when excluded. Closing removes the job's parts from the overview and keeps them readable in watch history. **Clear Filters** resets text and status. Loading failures show an error and Retry. Bench references and job activity remain available in Parts.
 
 ## Watch records
 
@@ -119,7 +119,7 @@ Use **Change Condition** to record Unknown, Running, Running poorly, Stopped, or
 
 Use **Show Activity** in a job to read saved changes and job notes together, newest first. Notes use their occurred dates. Editing a note updates its one entry. Equal dates keep a stable order.
 
-Expand **Previous and new values** to read saved reasons, outcomes, milestones, and supplier details. **Open Job**, **Open Watch**, **Open Task**, **Open Part**, and **Open Note** show surviving sources. Removed tasks or parts keep their historical summaries. Closed sources remain readable. This is a repair history, not a complete audit log.
+Expand **Previous and new values** to read saved reasons, outcomes, milestones, and order references. **Open Job**, **Open Watch**, **Open Task**, **Open Part**, and **Open Note** show surviving sources. Removed tasks or parts keep their historical summaries. Closed sources remain readable. This is a repair history, not a complete audit log.
 
 ## Job tasks
 
@@ -139,19 +139,15 @@ The job header shows Done divided by all non-Skipped tasks, with both counts and
 
 Use **Add Part** in a job detail. Enter a description and a positive whole-number quantity, default 1. Track each separate unit or lot with its own requirement. Manufacturer reference is optional text and keeps leading zeros and punctuation. Compatibility is Unchecked, Confirmed, or Unsuitable. Confirmed requires an evidence note. New parts start Needed or Arrived if the complete lot is already on hand.
 
-Use **Add link** during creation or editing. A complete HTTP or HTTPS URL is enough. A part can have no links or several links. Each saved link has an explicit **Open** action. Saving, loading, and selecting parts do not fetch external content or open the browser. Removing a saved link requires confirmation and takes effect after Save.
-
-Each saved link can also hold a supplier name, listing title, supplier stock code, price and currency, and notes. Adding those details edits the same link. Supplier stock codes stay separate from the manufacturer's reference and retain leading zeros and punctuation. Use **Selected supplier option** in the part editor to choose one option or clear the choice. Keep the other options for comparison. Removing the selected link clears the choice when you save. Cancel keeps the saved links and choice.
-
-Price is optional. Use a non-negative decimal with a point, such as `12.3400`, and a valid currency code, such as `DKK` or `EUR`. The entered digits are stored exactly. A price requires a currency. Lowercase currency input is accepted and saved in uppercase. No totals or conversion are calculated.
+Use **Add link** during creation or editing. Each link holds only a complete HTTP or HTTPS URL. A part can have no links or several links. Each saved link has an explicit **Open** action. Saving, loading, and selecting parts do not fetch external content or open the browser. Removing a saved link requires confirmation and takes effect after Save.
 
 Part editing uses **Save**, **Cancel**, **Command-S**, and the shared draft guard. A failed save keeps all draft fields and links. Pending saves block duplicate writes. Closed-job parts remain readable. Reopen the job before adding or editing a part. The service rejects stale saves after closure. Closing a job shows its parts summary and requires a separate explanation for Needed or Ordered parts. Closing preserves their statuses and saves the explanation in history.
 
 Use **Edit Part** to choose Needed, Ordered, Arrived, Installed, or Cancelled. Save records current milestone dates and the transition history together. Arrived means the whole lot is on hand. Installed means fitted. Installing from Needed, Ordered, or Cancelled requires confirmation that the whole lot is on hand. Save records arrival and installation together. There is no partial-delivery counter.
 
-Ordering saves a copy of the selected supplier option and an optional order reference. No supplier selection is required. Later supplier edits, selection changes, and link removal leave that copy intact. Correcting Arrived, Installed, or Cancelled back to Ordered retains an existing order snapshot. Moving back to Needed clears the current order details. Previous values remain in history.
+Ordering saves an optional order reference. Correcting Arrived, Installed, or Cancelled back to Ordered keeps the order reference. Moving back to Needed clears the current order details. Previous values remain in history.
 
-Backward corrections, cancellation, and restoring a cancelled part require a reason. Save clears milestone dates that no longer apply. Cancellation keeps the supplier snapshot and order reference for reading. Cancel in the editor discards the draft. A status changed by another saved action requires cancelling and reopening the stale editor. Procurement never changes task status, job stage, or watch condition. Use **Show Activity** to read the saved changes.
+Backward corrections, cancellation, and restoring a cancelled part require a reason. Save clears milestone dates that no longer apply. Cancellation keeps the order reference for reading. Cancel in the editor discards the draft. A status changed by another saved action requires cancelling and reopening the stale editor. Procurement never changes task status, job stage, or watch condition. Use **Show Activity** to read the saved changes.
 
 ## Scoped notes
 

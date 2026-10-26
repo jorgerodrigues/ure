@@ -60,7 +60,6 @@ nonisolated struct PartProcurementValue: Codable, Equatable, Sendable {
     let arrivedAt: Date?
     let installedAt: Date?
     let cancelledAt: Date?
-    let supplierSnapshot: PartSupplierSnapshot?
     let orderReference: String?
     let reason: String?
 
@@ -73,7 +72,6 @@ nonisolated struct PartProcurementValue: Codable, Equatable, Sendable {
         arrivedAt = isNew ? nil : part.arrivedAt
         installedAt = isNew ? nil : part.installedAt
         cancelledAt = isNew ? nil : part.cancelledAt
-        supplierSnapshot = isNew ? nil : part.supplierSnapshot
         orderReference = isNew ? nil : part.orderReference
         reason = isNew ? nil : part.statusReason
     }

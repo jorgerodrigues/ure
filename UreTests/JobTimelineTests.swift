@@ -121,12 +121,7 @@ nonisolated struct JobTimelineTests {
         draft.description = String(repeating: "Long part Å時計 ", count: 400)
         var link = PartLinkDraft()
         link.url = "https://example.org/0012"
-        link.supplierName = "Saved supplier"
-        link.price = "0012.3400"
-        link.currency = "DKK"
-        link.notes = "Evidence\n  Exact spacing"
         draft.links = [link]
-        draft.selectedLinkID = link.id
         let needed = try await parts.save(draft, for: job.id, editing: nil)
         var order = PartDraft(part: needed)
         order.status = .ordered
@@ -152,7 +147,6 @@ nonisolated struct JobTimelineTests {
         #expect(history.subject == task.title && history.next.first?.text == task.title)
         let partHistory = try #require(entries.first { $0.summary == "Ordered to Needed" })
         #expect(partHistory.subject == needed.record.description)
-        #expect(partHistory.prior.contains { $0.label == "Price" && $0.text == "0012.3400" })
         #expect(partHistory.prior.contains { $0.label == "Ordered" && $0.date == clock })
         #expect(
             partHistory.prior.contains { $0.label == "Order reference" && $0.text == "000042–Å" })

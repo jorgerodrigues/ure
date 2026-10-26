@@ -54,45 +54,22 @@ nonisolated struct PartService: Sendable {
                 let url = link.url.trimmingCharacters(in: .whitespacesAndNewlines)
                 var candidate = PartLink(
                     id: link.id, partID: record.id, position: position, url: url,
-                    title: JobDraft.optional(link.title),
-                    supplierName: JobDraft.optional(link.supplierName),
-                    supplierStockCode: JobDraft.optional(link.supplierStockCode),
-                    price: JobDraft.optional(link.price),
-                    currency: JobDraft.optional(link.currency)?.uppercased(),
-                    notes: JobDraft.optional(link.notes),
-                    isSelected: draft.selectedLinkID == link.id,
                     createdAt: saved?.createdAt ?? now, updatedAt: saved?.updatedAt ?? now)
                 if let saved, saved != candidate {
                     candidate.updatedAt = now
                 }
                 links.append(candidate)
             }
-            var hasRecordedOrder =
-                existing?.record.orderedAt != nil
-                || existing?.record.supplierSnapshot != nil
-            if let existing, draft.status == .ordered, !hasRecordedOrder {
-                hasRecordedOrder = try PartQueries.hasRecordedOrder(existing.id, for: jobID, in: db)
-            }
-            Self.applyProcurement(
-                draft, to: &record, existing: existing?.record, links: links,
-                hasRecordedOrder: hasRecordedOrder, now: now)
+            Self.applyProcurement(draft, to: &record, existing: existing?.record, now: now)
             let result = PartRequirement(record: record, links: links)
             if let existing, PartDraft(part: existing) == PartDraft(part: result) {
                 return existing
             }
             if existing != nil { try record.update(db) } else { try record.insert(db) }
-            if existing?.selectedLink?.id != draft.selectedLinkID {
-                try db.execute(
-                    sql: "UPDATE partLink SET isSelected = 0 WHERE partID = ? AND isSelected = 1",
-                    arguments: [record.id.uuidString])
-            }
             for link in existing?.links ?? [] where !seen.contains(link.id) {
                 try link.delete(db)
             }
-            for link in links {
-                try link.save(db)
-                try SearchKey.refresh(link.id, table: .partLink, in: db)
-            }
+            for link in links { try link.save(db) }
             try SearchKey.refresh(record.id, table: .partRequirement, in: db)
             if let existing {
                 if existing.record.status != record.status
@@ -116,8 +93,7 @@ nonisolated struct PartService: Sendable {
     }
 
     private static func applyProcurement(
-        _ draft: PartDraft, to record: inout PartRecord, existing: PartRecord?,
-        links: [PartLink], hasRecordedOrder: Bool, now: Date
+        _ draft: PartDraft, to record: inout PartRecord, existing: PartRecord?, now: Date
     ) {
         if draft.status == .ordered {
             record.orderReference = JobDraft.optional(draft.orderReference)
@@ -132,16 +108,11 @@ nonisolated struct PartService: Sendable {
             record.orderedAt = nil
             record.arrivedAt = nil
             record.installedAt = nil
-            record.supplierSnapshot = nil
             record.orderReference = nil
         case .ordered:
             record.orderedAt = record.orderedAt ?? now
             record.arrivedAt = nil
             record.installedAt = nil
-            if !hasRecordedOrder {
-                record.supplierSnapshot = links.first(where: \.isSelected).map(
-                    PartSupplierSnapshot.init)
-            }
         case .arrived:
             record.arrivedAt = record.arrivedAt ?? now
             record.installedAt = nil

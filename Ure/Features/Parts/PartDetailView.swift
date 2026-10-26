@@ -36,8 +36,6 @@ struct PartDetailView: View {
                     Section("Saved links") {
                         if part.links.isEmpty {
                             Text("No links saved.").foregroundStyle(.secondary)
-                        } else if part.selectedLink == nil {
-                            Text("No supplier option selected.").foregroundStyle(.secondary)
                         }
                         ForEach(part.links) { link in PartLinkRow(link: link) }
                         if let error = parts.openError {
@@ -103,25 +101,6 @@ struct PartProcurementSection: View {
             if let reference = record.orderReference {
                 LabeledContent("Order reference", value: reference)
             }
-            if let snapshot = record.supplierSnapshot {
-                Text("Supplier at order time").font(.headline)
-                if let supplier = snapshot.supplierName {
-                    LabeledContent("Supplier", value: supplier)
-                }
-                if let title = snapshot.title { LabeledContent("Listing", value: title) }
-                if let code = snapshot.supplierStockCode {
-                    LabeledContent("Supplier stock code", value: code)
-                }
-                LabeledContent("URL", value: snapshot.url)
-                if let price = snapshot.price, let currency = snapshot.currency {
-                    LabeledContent("Price", value: "\(price) \(currency)")
-                } else if let currency = snapshot.currency {
-                    LabeledContent("Currency", value: currency)
-                }
-                if let notes = snapshot.notes { LabeledContent("Notes", value: notes) }
-            } else if record.status == .ordered {
-                Text("No supplier was selected when ordering.").foregroundStyle(.secondary)
-            }
         }
     }
 }
@@ -130,28 +109,11 @@ private struct PartLinkRow: View {
     @Environment(PartState.self) private var parts
     let link: PartLink
     var body: some View {
-        VStack(alignment: .leading) {
-            if link.isSelected {
-                Label("Selected supplier option", systemImage: "checkmark.circle")
-                    .accessibilityIdentifier("selectedPartLink-\(link.id.uuidString)")
-            }
-            if let supplier = link.supplierName { LabeledContent("Supplier", value: supplier) }
-            if let title = link.title { LabeledContent("Listing", value: title) }
-            if let code = link.supplierStockCode {
-                LabeledContent("Supplier stock code", value: code)
-            }
-            if let price = link.price, let currency = link.currency {
-                LabeledContent("Price", value: "\(price) \(currency)")
-            } else if let currency = link.currency {
-                LabeledContent("Currency", value: currency)
-            }
-            HStack {
-                Text(link.url).frame(maxWidth: .infinity, alignment: .leading)
-                Button("Open", action: open)
-                    .accessibilityLabel("Open \(link.url) in browser")
-                    .accessibilityIdentifier("openPartLink-\(link.id.uuidString)")
-            }
-            if let notes = link.notes { LabeledContent("Notes", value: notes) }
+        HStack {
+            Text(link.url).frame(maxWidth: .infinity, alignment: .leading)
+            Button("Open", action: open)
+                .accessibilityLabel("Open \(link.url) in browser")
+                .accessibilityIdentifier("openPartLink-\(link.id.uuidString)")
         }
     }
     private func open() { parts.openLink(link) }

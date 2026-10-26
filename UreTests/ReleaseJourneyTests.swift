@@ -40,7 +40,6 @@ nonisolated struct ReleaseJourneyTests {
         var edit = PartDraft(part: initialPart)
         var secondLink = PartLinkDraft()
         secondLink.url = "https://example.org/supplier"
-        secondLink.supplierStockCode = "00042-S"
         edit.links.append(secondLink)
         let linkedPart = try await parts.save(edit, for: job.id, editing: initialPart.id)
         #expect(linkedPart.record.manufacturerReference == "0012-A")

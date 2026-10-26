@@ -17,7 +17,7 @@ nonisolated enum SearchKey {
     }
 
     enum Table: String, CaseIterable {
-        case watch, caliber, job, note, libraryItem, partRequirement, partLink
+        case watch, caliber, job, note, libraryItem, partRequirement
 
         var fields: [String] {
             switch self {
@@ -26,23 +26,16 @@ nonisolated enum SearchKey {
             case .job: ["title"]
             case .note: ["title", "body"]
             case .libraryItem: ["title", "caption"]
-            case .partRequirement: ["description", "manufacturerReference", "supplierStockCode"]
-            case .partLink: ["supplierStockCode"]
+            case .partRequirement: ["description", "manufacturerReference"]
             }
-        }
-
-        var projection: String {
-            if self == .partRequirement {
-                return
-                    "description, manufacturerReference, json_extract(supplierSnapshot, '$.supplierStockCode') AS supplierStockCode"
-            }
-            return fields.joined(separator: ", ")
         }
     }
 
     static func refresh(_ id: UUID, table: Table, in db: Database) throws {
         if let row = try Row.fetchOne(
-            db, sql: "SELECT id, \(table.projection) FROM \(table.rawValue) WHERE id = ?",
+            db,
+            sql:
+                "SELECT id, \(table.fields.joined(separator: ", ")) FROM \(table.rawValue) WHERE id = ?",
             arguments: [id.uuidString])
         {
             try refresh(row, table: table, in: db)
@@ -51,7 +44,7 @@ nonisolated enum SearchKey {
 
     static func backfill(_ table: Table, in db: Database) throws {
         for row in try Row.fetchAll(
-            db, sql: "SELECT id, \(table.projection) FROM \(table.rawValue)")
+            db, sql: "SELECT id, \(table.fields.joined(separator: ", ")) FROM \(table.rawValue)")
         {
             try refresh(row, table: table, in: db)
         }

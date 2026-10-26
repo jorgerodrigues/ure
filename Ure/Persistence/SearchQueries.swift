@@ -88,14 +88,9 @@ nonisolated enum SearchQueries {
                     UNION ALL
                     SELECT r.id, 'Part', r.description, w.id, j.id, NULL,
                         w.name, j.title, NULL,
-                        w.archivedAt IS NOT NULL OR j.archivedAt IS NOT NULL,
-                        r.searchKey || char(10) || coalesce(links.keys, '')
+                        w.archivedAt IS NOT NULL OR j.archivedAt IS NOT NULL, r.searchKey
                     FROM partRequirement r
                     JOIN job j ON j.id = r.jobID JOIN watch w ON w.id = j.watchID
-                    LEFT JOIN (
-                        SELECT partID, group_concat(searchKey, char(10)) AS keys
-                        FROM partLink GROUP BY partID
-                    ) links ON links.partID = r.id
                     UNION ALL
                     SELECT r.id, r.kind, r.title, w.id, j.id, c.id,
                         w.name, j.title, c.designation || coalesce(' · ' || c.variant, ''),
