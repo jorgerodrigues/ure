@@ -5,7 +5,6 @@ nonisolated enum JobTimelineSource: Equatable, Sendable {
     case watch(UUID)
     case task(UUID)
     case part(UUID)
-    case note(UUID)
 
     var label: String {
         switch self {
@@ -13,7 +12,6 @@ nonisolated enum JobTimelineSource: Equatable, Sendable {
         case .watch: "Open Watch"
         case .task: "Open Task"
         case .part: "Open Part"
-        case .note: "Open Note"
         }
     }
 }
@@ -38,18 +36,12 @@ nonisolated struct JobTimelineField: Equatable, Identifiable, Sendable {
 }
 
 nonisolated struct JobTimelineEntry: Equatable, Identifiable, Sendable {
-    enum ID: Equatable, Hashable, Sendable {
-        case event(UUID)
-        case note(UUID)
-    }
-
-    let id: ID
+    let id: UUID
     let occurredAt: Date
-    let ordering: Int64?
+    let ordering: Int64
     let title: String
     let subject: String?
     let summary: String
-    let body: String?
     let prior: [JobTimelineField]
     let next: [JobTimelineField]
     let source: JobTimelineSource?
@@ -57,36 +49,15 @@ nonisolated struct JobTimelineEntry: Equatable, Identifiable, Sendable {
 
     static func newestFirst(_ lhs: Self, _ rhs: Self) -> Bool {
         if lhs.occurredAt != rhs.occurredAt { return lhs.occurredAt > rhs.occurredAt }
-        switch (lhs.id, rhs.id) {
-        case (.event(let left), .event(let right)):
-            if lhs.ordering != rhs.ordering { return (lhs.ordering ?? 0) > (rhs.ordering ?? 0) }
-            return left.uuidString < right.uuidString
-        case (.event, .note): return true
-        case (.note, .event): return false
-        case (.note(let left), .note(let right)): return left.uuidString < right.uuidString
-        }
-    }
-
-    init(note: NoteRecord) {
-        id = .note(note.id)
-        occurredAt = note.occurredAt
-        ordering = nil
-        title = note.title
-        subject = nil
-        summary = note.kind.rawValue
-        body = note.body
-        prior = []
-        next = []
-        source = .note(note.id)
-        unavailableSource = nil
+        if lhs.ordering != rhs.ordering { return lhs.ordering > rhs.ordering }
+        return lhs.id.uuidString < rhs.id.uuidString
     }
 
     init(event: ActivityEvent, watchID: UUID, taskIDs: Set<UUID>, partIDs: Set<UUID>) throws {
-        id = .event(event.id)
+        id = event.id
         occurredAt = event.occurredAt
         ordering = event.ordering
         title = event.kind.rawValue
-        body = nil
         switch (event.kind, event.priorValue, event.nextValue) {
         case (.jobStageChanged, .job(let previous), .job(let current)):
             subject = nil

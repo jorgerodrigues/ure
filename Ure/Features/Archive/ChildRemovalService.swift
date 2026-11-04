@@ -18,23 +18,6 @@ nonisolated enum RemovalError: LocalizedError, Equatable {
 nonisolated struct ChildRemovalService: Sendable {
     let coordinator: LibraryCoordinator
 
-    func removeNote(_ id: UUID, for owner: NoteOwner) async throws {
-        try await coordinator.mutate { db, _, _ in
-            let itemOwner: LibraryItemOwner
-            switch owner {
-            case .watch(let id): itemOwner = .watch(id)
-            case .job(let id): itemOwner = .job(id)
-            case .caliber(let id): itemOwner = .caliber(id)
-            }
-            try RecordAccess.requireOwner(itemOwner, in: db)
-            guard let note = try NoteQueries.fetch(id, in: db) else {
-                throw RemovalError.missingRecord
-            }
-            guard note.belongs(to: owner) else { throw RemovalError.scopeMismatch }
-            _ = try note.delete(db)
-        }
-    }
-
     func removeTask(_ id: UUID, for jobID: UUID, confirmedPartIDs: Set<UUID>) async throws
         -> [JobTaskRecord]
     {

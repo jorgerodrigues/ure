@@ -82,7 +82,7 @@ nonisolated struct RecoveryOperation: Sendable {
         var migrator = LibrarySchema.migrator
         if checkpoint == "upgrade.transaction" {
             migrator.registerMigration("w029-interrupted-transaction") { db in
-                try db.execute(sql: "DELETE FROM note")
+                try db.execute(sql: "UPDATE job SET notes = ''")
                 try interrupt("upgrade.transaction")
             }
         }

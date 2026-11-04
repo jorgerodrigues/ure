@@ -19,7 +19,7 @@ WORKER = Path(sys.argv[1]).resolve()
 RUN = REPO / ".build/recovery-runs" / str(uuid.uuid4())
 GENERATION = "00000000-0000-4000-8000-000000000001"
 VERSIONS = ("v10-documents", "v15-part-procurement")
-CURRENT_MIGRATION = "v18-plain-part-links"
+CURRENT_MIGRATION = "v19-record-notes"
 # Columns that a later migration removes on purpose.
 REMOVED_COLUMNS = {
     "partLink": {
@@ -28,6 +28,9 @@ REMOVED_COLUMNS = {
     },
     "partRequirement": {"supplierSnapshot"},
 }
+# Tables that a later migration joins into the notes text of the record that owns each row.
+JOINED_INTO_NOTES = {"note"}
+NOTE_OWNERS = (("watchID", "watch"), ("jobID", "job"), ("caliberID", "caliber"))
 RESULTS = []
 
 
@@ -125,6 +128,15 @@ def inspect(generation):
 def preserved(before, after):
     require(before["originals"] == after["originals"], "Original and technical PDF bytes preserved")
     for table, rows in before["tables"].items():
+        if table in JOINED_INTO_NOTES:
+            require(table not in after["tables"], f"{table}: joined into record notes")
+            for note in rows:
+                column, owner_table = next(pair for pair in NOTE_OWNERS if note[pair[0]])
+                owner = next(row for row in after["tables"][owner_table] if row["id"] == note[column])
+                text = owner["notes"]
+                require(note["kind"] + " · " + note["title"] in text, f"{table}: date, kind and title kept")
+                require(note["body"].rstrip() in text, f"{table}: body kept")
+            continue
         require(len(rows) == len(after["tables"][table]), f"{table}: record count")
         old_columns = (set(rows[0]) if rows else set()) - REMOVED_COLUMNS.get(table, set())
         kept = [{key: row[key] for key in old_columns} for row in rows]
@@ -212,7 +224,7 @@ def tree(directory):
 def change_current(case):
     with sqlite3.connect(active(case) / "library.sqlite") as db:
         db.execute("UPDATE watch SET name = 'Newer current watch – 時計', updatedAt = 30.125")
-        db.execute("UPDATE note SET body = 'Newer current finding', updatedAt = 31.25")
+        db.execute("UPDATE job SET notes = 'Newer current finding', updatedAt = 31.25")
     worker(case, "import-pdf")
 
 

@@ -62,7 +62,7 @@ nonisolated struct ChildRemovalTests {
     }
 
     @Test
-    func noteAndLinkRemovalUpdatesSearchAndClosedOrArchivedOwnersRejectRemoval() async throws {
+    func linkRemovalUpdatesSearchAndClosedOrArchivedOwnersRejectRemoval() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -71,47 +71,36 @@ nonisolated struct ChildRemovalTests {
         let job = try #require(try await coordinator.read(JobQueries.fetchAll).first)
         let caliber = try #require(try await coordinator.read(CaliberQueries.fetchAll).first)
         let removal = ChildRemovalService(coordinator: coordinator)
+        var needle = ReferenceFixture.draft
+        needle.title = "Needle link"
         for owner in owners {
-            var draft = NoteDraft()
-            draft.title = "Needle note"
-            let note = try await NoteService(coordinator: coordinator).save(
-                draft, for: owner, editing: nil)
-            let itemOwner: LibraryItemOwner
-            switch owner {
-            case .watch(let id): itemOwner = .watch(id)
-            case .job(let id): itemOwner = .job(id)
-            case .caliber(let id): itemOwner = .caliber(id)
-            }
             let link = try await ReferenceService(coordinator: coordinator).save(
-                ReferenceFixture.draft, for: itemOwner, editing: nil)
-            try await removal.removeNote(note.id, for: owner)
-            try await removal.removeItem(link.id, for: itemOwner, kind: .link)
-            #expect(try await coordinator.read { try NoteQueries.fetch(note.id, in: $0) } == nil)
+                needle, for: owner, editing: nil)
+            try await removal.removeItem(link.id, for: owner, kind: .link)
             #expect(
                 try await coordinator.read { try LibraryItemQueries.fetch(link.id, in: $0) } == nil)
         }
         #expect(
             try await coordinator.read {
-                try SearchQueries.fetch("Needle note", includeArchived: true, in: $0)
+                try SearchQueries.fetch("Needle link", includeArchived: true, in: $0)
             }.isEmpty)
-        var draft = NoteDraft()
-        draft.title = "Kept note"
-        let jobNote = try await NoteService(coordinator: coordinator).save(
-            draft, for: .job(job.id), editing: nil)
-        let caliberNote = try await NoteService(coordinator: coordinator).save(
-            draft, for: .caliber(caliber.id), editing: nil)
+        let references = ReferenceService(coordinator: coordinator)
+        let jobLink = try await references.save(
+            ReferenceFixture.draft, for: .job(job.id), editing: nil)
+        let caliberLink = try await references.save(
+            ReferenceFixture.draft, for: .caliber(caliber.id), editing: nil)
         var closure = JobTransitionDraft(stage: .cancelled)
         closure.cancellationReason = "Retain records"
         _ = try await JobService(coordinator: coordinator).transition(job.id, using: closure)
         await #expect(throws: JobError.closedJob) {
-            try await removal.removeNote(jobNote.id, for: .job(job.id))
+            try await removal.removeItem(jobLink.id, for: .job(job.id), kind: .link)
         }
         _ = try await ArchiveService(coordinator: coordinator).setCaliber(
             caliber.id, archived: true)
         await #expect(throws: ArchiveError.archived) {
-            try await removal.removeNote(caliberNote.id, for: .caliber(caliber.id))
+            try await removal.removeItem(caliberLink.id, for: .caliber(caliber.id), kind: .link)
         }
-        #expect(try await coordinator.read(NoteQueries.fetchAll).count == 2)
+        #expect(try await coordinator.read(LibraryItemQueries.fetchAll).count == 2)
         try await coordinator.close()
     }
 

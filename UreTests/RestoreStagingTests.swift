@@ -458,7 +458,8 @@ nonisolated private struct RestoreFixture: Sendable {
             try await mutatePackage("DROP INDEX job_one_open_per_watch")
         case .extraTrigger:
             try await mutatePackage(
-                "CREATE TRIGGER sqlitex_wipe AFTER INSERT ON fileAsset BEGIN DELETE FROM note; END")
+                "CREATE TRIGGER sqlitex_wipe AFTER INSERT ON fileAsset BEGIN DELETE FROM jobTask; END"
+            )
         case .futureVersion:
             try write(manifest, version: BackupManifest.currentVersion + 1)
         case .futureMigration:

@@ -1,6 +1,6 @@
 # Watch workshop app specification
 
-Version 0.9. Updated on 24 October 2026. This is the first-release contract for review. The current-platform direction, app foundation, and W002 SQLite/GRDB storage design were approved on 1 October 2026. The user approved the shared caliber design and repair history rule on 2 October 2026. On 24 October 2026 the user removed supplier details, price, currency, and supplier selection from part links. A part link holds only its URL. A watch can have several jobs, with at most one open job. W005 uses the existing Save and Cancel editing pattern. Other proposed defaults are not yet an approved product baseline. PDF report creation is deferred. Parts must accept saved links.
+Version 0.10. Updated on 4 November 2026. This is the first-release contract for review. The current-platform direction, app foundation, and W002 SQLite/GRDB storage design were approved on 1 October 2026. The user approved the shared caliber design and repair history rule on 2 October 2026. On 24 October 2026 the user removed supplier details, price, currency, and supplier selection from part links. A part link holds only its URL. A watch can have several jobs, with at most one open job. W005 uses the existing Save and Cancel editing pattern. Other proposed defaults are not yet an approved product baseline. PDF report creation is deferred. Parts must accept saved links. On 4 November 2026 the user approved the Rework designed in the Paper page "Rework · Simple", delivered as W033 to W042. W033 replaces separate note records with one notes text per watch, caliber, and job that saves as you type.
 
 Build a native Mac app that keeps a watch's identity, repair work, and supporting evidence together. A watch is a lasting record. A job is one repair or restoration of that watch. A caliber is reusable technical knowledge. All app data stays on the Mac. The user chooses when to open an external link or export a file.
 
@@ -39,8 +39,8 @@ These choices make the draft concrete. They are recommendations, not user approv
 | Persistence | Approved: SQLite through GRDB; photos and PDFs in app-managed files |
 | Minimum system | Approved: macOS 27 on Apple silicon; no older-system compatibility layer |
 | Distribution | Run locally from Xcode first; store distribution and automatic updates are later work |
-| Editing | W003 to W008 forms, note editors, and link editors use explicit Save and Cancel, Cmd-S, and unsaved-draft protection; later immediate status actions remain proposed |
-| Notes | W007 specifies plain-text editing with Save and Cancel; saved text is selectable; no rich text editor. Clickable links within text remain proposed |
+| Editing | Approved on 4 November 2026: the Rework moves every record to edit in place with autosave and Undo. W033 starts with notes. Forms that later Rework stories replace keep Save and Cancel, Cmd-S, and unsaved-draft protection until then |
+| Notes | Approved on 4 November 2026: one plain-text notes text per watch, caliber, and job that saves as you type; no rich text, Markdown rendering, or note history. Clickable links within text remain proposed |
 | Measurements | Written notes and attached instrument photos in version 1; structured measurement forms later |
 | Parts cost | Not tracked. Supplier price and currency were removed on 24 October 2026; no job accounting or invoice totals |
 | Naming | Ure is the working title; distribution identity remains to be settled |
@@ -129,7 +129,9 @@ Show manufacturer, exact designation and variant, structured specifications, not
 
 ### Save and failure behavior
 
-Forms and note editors show Save and Cancel. Cmd-S saves the active editor. Navigation, window closure, and app termination with an unsaved draft offer Save, Discard, or Stay. A failed save keeps the draft and shows a useful error. Buttons become disabled during their own pending operation. A success state appears only after persistence succeeds. W013 task changes follow the existing Save and Cancel editor pattern. Immediate task-row status actions remain proposed. Failure keeps the draft and the prior saved task state.
+Notes save as you type. A change saves half a second after typing stops, again when focus leaves the notes, and before the window closes or the app quits. Cmd-Z undoes a notes change, even after it saved, and Shift-Cmd-Z redoes it. Esc puts back the notes as they were when focus entered them. A failed notes save keeps the text on screen, says that it did not save, and offers Try Again. Quitting while a notes save has failed asks before it quits. Leaving the notes asks nothing. The autosave lives in the feature state layer, so later Rework stories reuse it for other fields.
+
+Forms that the Rework has not replaced yet show Save and Cancel. Cmd-S saves the active editor. Navigation, window closure, and app termination with an unsaved draft offer Save, Discard, or Stay. A failed save keeps the draft and shows a useful error. Buttons become disabled during their own pending operation. A success state appears only after persistence succeeds. W013 task changes follow the existing Save and Cancel editor pattern. Immediate task-row status actions remain proposed. Failure keeps the draft and the prior saved task state.
 
 ## 5 Records and validation
 
@@ -171,7 +173,9 @@ Each line moves as one unit or lot. Partial deliveries and several purchases for
 
 ### Notes
 
-A note belongs to exactly one watch, job, or caliber. It has a title, body, note kind, and occurred date. Kinds are Observation, Research, Work log, and Measurement. Measurement is plain text in version 1. Created and updated times remain separate from the occurred date. Users can correct a note without losing its original occurrence date. Body text is not rendered as executable HTML.
+Each watch, caliber, and job has one plain-text notes text. It is empty by default. Text is 15 pt with a 24 pt line height and stops at about 75 characters a line. Cmd-D types today's date in the long date format of the user's locale. Saving notes updates the record's updated time and its search key. Text is not rendered as HTML or Markdown. A closed job's notes and an archived record's notes stay readable and cannot change until the job is reopened or the record is unarchived.
+
+Libraries before W033 kept separate note records with a title, body, kind, and occurred date. The W033 migration joins each record's notes into its notes text, oldest first by occurred date and then created time. Each old note starts on its own line with its date, kind, and title, such as "14 October 2026 · Work log · Mainspring", followed by its body. A blank line separates old notes. Then the note table goes. Nothing typed is lost: when a later Rework story removes a field, its migration writes the value into the owning record's notes under "From the old record".
 
 ### Library items and file assets
 
@@ -181,7 +185,7 @@ A file asset describes an immutable local original: ID, generated relative stora
 
 ### Activity records
 
-ActivityEvent belongs to a job. It stores an event kind, occurrence time, stable local ordering value, and enough prior and next values to explain a status or condition change. Events cover job transitions, watch condition changes made through a job, task completion and reopening, and procurement transitions. Create the event and state update in one database transaction. Notes appear alongside events in the timeline without being duplicated into event rows. This is a work history, not a general audit or sync log.
+ActivityEvent belongs to a job. It stores an event kind, occurrence time, stable local ordering value, and enough prior and next values to explain a status or condition change. Events cover job transitions, watch condition changes made through a job, task completion and reopening, and procurement transitions. Create the event and state update in one database transaction. This is a work history, not a general audit or sync log.
 
 ## 6 State and progress rules
 
@@ -261,7 +265,7 @@ Do not place the live SQLite library in an iCloud Drive or Dropbox folder. File 
 
 Archive is reversible and separate from job completion. A watch can be archived only when it has no open job. Archived watches, closed jobs, and unused archived calibers remain readable and can be restored to normal lists. A caliber in use can be archived from the caliber list without breaking its existing watch links.
 
-Top-level watch and job deletion is outside version 1. Archive covers their removal from normal views. Child tasks, part links, notes, and library items can be removed after confirmation. A task with parts links must list those links in the confirmation. Part requirements use Cancelled to preserve procurement history. Removing a linked note or library item clears its selections and cover references. Remove unreferenced asset files only after the database operation succeeds. Retry failed cleanup safely at startup.
+Top-level watch and job deletion is outside version 1. Archive covers their removal from normal views. Child tasks, part links, and library items can be removed after confirmation. A task with parts links must list those links in the confirmation. Part requirements use Cancelled to preserve procurement history. Removing a linked library item clears its selections and cover references. Remove unreferenced asset files only after the database operation succeeds. Retry failed cleanup safely at startup.
 
 ### Backup
 
@@ -279,7 +283,7 @@ Local pre-migration and pre-restore recovery copies protect against app failures
 
 ## 11 Search and accessibility
 
-Global search covers watch identity, caliber designation, job titles, note titles and bodies, part descriptions, manufacturer references, and library item titles and captions. It does not index PDF contents or text within images. Group results by record kind and include watch or job context. Opening a result selects the exact item. Archive inclusion is an explicit filter.
+Global search covers watch identity, caliber designation, job titles, the notes text of watches, calibers, and jobs, part descriptions, manufacturer references, and library item titles and captions. It does not index PDF contents or text within images. Group results by record kind and include watch or job context. Opening a result selects the exact item. Archive inclusion is an explicit filter.
 
 Use bound SQL parameters. Define a consistent case-insensitive Unicode search key in Swift and keep it updated in each affected transaction. Use simple indexed queries and contains matching first. Introduce FTS only if the measured library size requires it. Do not rely on SQLite's basic NOCASE behavior for all languages.
 

@@ -15,19 +15,16 @@ nonisolated enum JobTimelineQueries {
         let events = try ActivityEvent.fetchAll(
             db, sql: "SELECT * FROM activityEvent WHERE jobID = ? ORDER BY ordering",
             arguments: [jobID.uuidString])
-        let notes = try NoteRecord.fetchAll(
-            db, sql: "SELECT * FROM note WHERE jobID = ?", arguments: [jobID.uuidString])
         let taskIDs = Set(try JobTaskQueries.ordered(for: jobID, in: db).map(\.id))
         let partIDs = Set(
             try PartRecord.fetchAll(
                 db, sql: "SELECT * FROM partRequirement WHERE jobID = ?",
                 arguments: [jobID.uuidString]
             ).map(\.id))
-        let entries =
-            try events.map {
-                try JobTimelineEntry(
-                    event: $0, watchID: job.watchID, taskIDs: taskIDs, partIDs: partIDs)
-            } + notes.map(JobTimelineEntry.init)
+        let entries = try events.map {
+            try JobTimelineEntry(
+                event: $0, watchID: job.watchID, taskIDs: taskIDs, partIDs: partIDs)
+        }
         return entries.sorted(by: JobTimelineEntry.newestFirst)
     }
 }

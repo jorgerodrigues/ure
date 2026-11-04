@@ -59,15 +59,9 @@ final class JobTimelineState {
                     let part = editing.parts.records(for: jobID).first(where: { $0.id == id })
                 else { self.sourceUnavailable(); return }
                 open = { editing.parts.open(part, for: jobID) }
-            case .note(let id):
-                guard !editing.notes.isLoading, editing.notes.loadError == nil,
-                    let note = editing.notes.records(for: .job(jobID)).first(where: { $0.id == id })
-                else { self.sourceUnavailable(); return }
-                open = { editing.notes.open(note, for: .job(jobID)) }
             }
             editing.tasks.close()
             editing.parts.close()
-            editing.notes.close()
             editing.references.close()
             editing.photos.close()
             editing.documents.close()

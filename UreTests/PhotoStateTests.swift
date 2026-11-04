@@ -213,7 +213,7 @@ struct PhotoStateTests {
             watches: WatchState(service: WatchService(coordinator: coordinator)),
             calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
             jobs: JobState(service: JobService(coordinator: coordinator)),
-            notes: NoteState(service: NoteService(coordinator: coordinator)),
+            notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
             references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
             photos: photos,
             documents: DocumentState(service: DocumentService(coordinator: coordinator)),

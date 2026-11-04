@@ -29,12 +29,9 @@ nonisolated struct SearchQueriesTests {
         jobDraft.title = "Réparation"
         let job = try await JobService(coordinator: coordinator).save(
             jobDraft, for: watch.id, editing: nil)
-        var noteDraft = NoteDraft(occurredAt: date)
-        noteDraft.title = "Finding"
-        noteDraft.body =
-            "Café e\u{301} 100%_ [brackets] 'quotes' \"double\" \\path '; DROP TABLE watch;--"
-        let note = try await NoteService(coordinator: coordinator).save(
-            noteDraft, for: .job(job.id), editing: nil)
+        try await RecordNotesService(coordinator: coordinator).save(
+            "Finding\nCafé e\u{301} 100%_ [brackets] 'quotes' \"double\" \\path '; DROP TABLE watch;--",
+            for: .job(job.id))
         var partDraft = PartFixture.draft()
         partDraft.description = "Ressort"
         partDraft.manufacturerReference = "0007-A/02"
@@ -68,9 +65,9 @@ nonisolated struct SearchQueriesTests {
         let cases: [(String, UUID)] = [
             ("STRASSE", watch.id), ("時計", watch.id), ("μάρκα", watch.id), ("модель", watch.id),
             ("0012–å/04", watch.id), ("000042.7-a", watch.id), ("éта 0012/å", caliber.id),
-            ("RÉPARATION", job.id), ("finding", note.id), ("cafe\u{301}", note.id),
-            ("100%_", note.id), ("[brackets]", note.id), ("'quotes'", note.id),
-            ("\"double\"", note.id), ("\\path", note.id), ("'; DROP TABLE watch;--", note.id),
+            ("RÉPARATION", job.id), ("finding", job.id), ("cafe\u{301}", job.id),
+            ("100%_", job.id), ("[brackets]", job.id), ("'quotes'", job.id),
+            ("\"double\"", job.id), ("\\path", job.id), ("'; DROP TABLE watch;--", job.id),
             ("ressort", part.id), ("0007-A/02", part.id),
             ("sheet link", reference.id), ("dial photo", photo.id), ("légende", photo.id),
             ("technical pdf", document.id),
@@ -83,7 +80,7 @@ nonisolated struct SearchQueriesTests {
         for query in ["missing", "%", "_", "   "] {
             let results = try await coordinator.read { try SearchQueries.fetch(query, in: $0) }
             if query == "%" || query == "_" {
-                #expect(results.map(\.recordID) == [note.id])
+                #expect(results.map(\.recordID) == [job.id])
             } else {
                 #expect(results.isEmpty)
             }
@@ -173,30 +170,26 @@ nonisolated struct SearchQueriesTests {
         let coordinator = fixture.coordinator(dependencies: LibraryDependencies(now: { date }))
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let service = NoteService(coordinator: coordinator)
-        var draft = NoteDraft(occurredAt: date)
-        draft.title = "Duplicate"
-        draft.body = "original"
-        let note = try await service.save(draft, for: .job(job.id), editing: nil)
-        let duplicate = try await service.save(draft, for: .watch(job.watchID), editing: nil)
+        let service = RecordNotesService(coordinator: coordinator)
+        try await service.save("Duplicate original", for: .job(job.id))
+        try await service.save("Duplicate original", for: .watch(job.watchID))
         #expect(
             Set(
                 try await coordinator.read { try SearchQueries.fetch("duplicate", in: $0) }.map(
-                    \.recordID)) == [note.id, duplicate.id])
-        draft.body = "corrected"
-        _ = try await service.save(draft, for: .job(job.id), editing: note.id)
+                    \.recordID)) == [job.id, job.watchID])
+        try await service.save("Duplicate corrected", for: .job(job.id))
         #expect(
             try await coordinator.read { try SearchQueries.fetch("original", in: $0) }.map(
-                \.recordID) == [duplicate.id])
+                \.recordID) == [job.watchID])
         #expect(
             try await coordinator.read { try SearchQueries.fetch("corrected", in: $0) }.map(
-                \.recordID) == [note.id])
+                \.recordID) == [job.id])
         await #expect(throws: SearchFixtureFailure.self) {
             try await coordinator.mutate { db, _, _ in
                 try db.execute(
-                    sql: "UPDATE note SET body = 'rolled back' WHERE id = ?",
-                    arguments: [note.id.uuidString])
-                try SearchKey.refresh(note.id, table: .note, in: db)
+                    sql: "UPDATE job SET notes = 'rolled back' WHERE id = ?",
+                    arguments: [job.id.uuidString])
+                try SearchKey.refresh(job.id, table: .job, in: db)
                 throw SearchFixtureFailure()
             }
         }
@@ -223,7 +216,9 @@ nonisolated struct SearchQueriesTests {
                 try SearchQueries.fetch("duplicate", includeArchived: true, in: $0)
             }.count == 2)
         try await coordinator.mutate { db, _, _ in
-            try db.execute(sql: "DELETE FROM note WHERE id = ?", arguments: [note.id.uuidString])
+            try db.execute(
+                sql: "UPDATE job SET notes = '' WHERE id = ?", arguments: [job.id.uuidString])
+            try SearchKey.refresh(job.id, table: .job, in: db)
         }
         #expect(
             try await coordinator.read {
@@ -247,10 +242,8 @@ nonisolated struct SearchQueriesTests {
             let caliber = try await CaliberService(coordinator: coordinator).save(
                 draft, editing: nil)
             labels[caliber.id] = caliber.label
-            var noteDraft = NoteDraft(occurredAt: date)
-            noteDraft.title = "Service interval"
-            _ = try await NoteService(coordinator: coordinator).save(
-                noteDraft, for: .caliber(caliber.id), editing: nil)
+            try await RecordNotesService(coordinator: coordinator).save(
+                "Service interval", for: .caliber(caliber.id))
             var linkDraft = ReferenceFixture.draft
             linkDraft.title = "Service interval"
             _ = try await ReferenceService(coordinator: coordinator).save(

@@ -222,9 +222,7 @@ nonisolated struct ReferenceServiceTests {
         guard case .job(let jobID) = owners[1] else { throw NoteFixtureError() }
         _ = try await JobService(coordinator: old).transition(
             jobID, using: JobTransitionDraft(stage: .inProgress))
-        var draft = NoteDraft()
-        draft.title = "Existing research"
-        let note = try await NoteService(coordinator: old).save(draft, for: owners[0], editing: nil)
+        try await RecordNotesService(coordinator: old).save("Existing research", for: owners[0])
         let watches = try await old.read(WatchQueries.fetchAll)
         let calibers = try await old.read(CaliberQueries.fetchAll)
         let jobs = try await old.read(JobQueries.fetchAll)
@@ -243,7 +241,9 @@ nonisolated struct ReferenceServiceTests {
         #expect(try await upgraded.read(CaliberQueries.fetchAll) == calibers)
         #expect(try await upgraded.read(JobQueries.fetchAll) == jobs)
         #expect(try await upgraded.read(ActivityQueries.fetchAll) == events)
-        #expect(try await upgraded.read(NoteQueries.fetchAll) == [note])
+        #expect(
+            try await RecordNotesService(coordinator: upgraded).text(for: owners[0])
+                .hasSuffix(" · Observation · Notes\nExisting research"))
         #expect(try await upgraded.read(LibraryItemQueries.fetchAll).isEmpty)
         #expect(
             try Data(
@@ -274,12 +274,6 @@ nonisolated enum ReferenceFixture {
     }
 
     static func owners(_ coordinator: LibraryCoordinator) async throws -> [LibraryItemOwner] {
-        try await NoteFixture.owners(coordinator).map { owner in
-            switch owner {
-            case .watch(let id): .watch(id)
-            case .job(let id): .job(id)
-            case .caliber(let id): .caliber(id)
-            }
-        }
+        try await NoteFixture.owners(coordinator)
     }
 }

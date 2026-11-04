@@ -98,6 +98,7 @@ nonisolated struct PartLinkMigrationTests {
 
 nonisolated enum PartLinkMigrationFixture {
     static func restoreSupplierOptions(in db: Database) throws {
+        try RecordNotesMigrationFixture.restoreNoteRecords(in: db)
         try db.alter(table: "partLink") { table in
             for column in ["title", "supplierName", "supplierStockCode", "notes"] {
                 table.add(column: column, .text)

@@ -14,6 +14,7 @@ Read the specification and the selected GitHub issue before editing. Do not star
 | Overview | W019 to W023 | History, workshop view, parts overview, search, and archive |
 | Recovery | W026 to W028 | User-exported backups and recoverable restore |
 | Release | W029 to W032 | Verified recovery, accessibility, performance, and release journeys |
+| Rework | W033 to W042 | Four simple records (calibers, watches, jobs, and parts) edited in place, with autosave and Undo |
 
 Milestones describe implementation order, not separate production releases. Do not use the app as the only copy of valuable records before Recovery and Release pass.
 
@@ -64,3 +65,13 @@ Milestones describe implementation order, not separate production releases. Do n
 | W030 | [Verify keyboard access and native window behavior (#26)](https://github.com/jorgerodrigues/ure/issues/26) ([verification](keyboard-access-verification.md)). Source audit fixes implemented; keyboard, VoiceOver, and native window acceptance remain deferred to W032. | [W023](https://github.com/jorgerodrigues/ure/issues/21), [W028](https://github.com/jorgerodrigues/ure/issues/24) |
 | W031 | [Measure and fix library browsing performance (#27)](https://github.com/jorgerodrigues/ure/issues/27) ([verification](performance-verification.md)). Optimized data measurements recorded; async image memory growth and native performance acceptance remain open for W032. | [W022](https://github.com/jorgerodrigues/ure/issues/20), [W028](https://github.com/jorgerodrigues/ure/issues/24) |
 | W032 | [Run first-release acceptance and write the handover guide (#28)](https://github.com/jorgerodrigues/ure/issues/28). ([acceptance report](release-acceptance.md); [handover](../handover.md)). CI gates restored. Native and minimum-OS acceptance remain pending. | [W029](https://github.com/jorgerodrigues/ure/issues/25), [W030](https://github.com/jorgerodrigues/ure/issues/26), [W031](https://github.com/jorgerodrigues/ure/issues/27) |
+| W033 | [Keep one notes text per record that saves as you type (#61)](https://github.com/jorgerodrigues/ure/issues/61). In progress. [Verification](record-notes-verification.md). | None |
+| W034 | [Show photos PDFs and links in one Material section (#62)](https://github.com/jorgerodrigues/ure/issues/62) | [W033](https://github.com/jorgerodrigues/ure/issues/61) |
+| W035 | [Edit the caliber page in place (#63)](https://github.com/jorgerodrigues/ure/issues/63) | [W034](https://github.com/jorgerodrigues/ure/issues/62) |
+| W036 | [Edit the watch page in place and archive watches freely (#64)](https://github.com/jorgerodrigues/ure/issues/64) | [W035](https://github.com/jorgerodrigues/ure/issues/63) |
+| W037 | [Simplify jobs to three states and rebuild the job page (#65)](https://github.com/jorgerodrigues/ure/issues/65) | [W036](https://github.com/jorgerodrigues/ure/issues/64) |
+| W038 | [Group the sidebar and start jobs inline (#66)](https://github.com/jorgerodrigues/ure/issues/66) | [W037](https://github.com/jorgerodrigues/ure/issues/65) |
+| W039 | [Type a job checklist like a note (#67)](https://github.com/jorgerodrigues/ure/issues/67) | [W038](https://github.com/jorgerodrigues/ure/issues/66) |
+| W040 | [Track parts as their own records with spares (#68)](https://github.com/jorgerodrigues/ure/issues/68) | [W039](https://github.com/jorgerodrigues/ure/issues/67) |
+| W041 | [Compare buying options and record what you paid (#69)](https://github.com/jorgerodrigues/ure/issues/69) | [W040](https://github.com/jorgerodrigues/ure/issues/68) |
+| W042 | [Accept the reworked app (#70)](https://github.com/jorgerodrigues/ure/issues/70) | [W041](https://github.com/jorgerodrigues/ure/issues/69) |

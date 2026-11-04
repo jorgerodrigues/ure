@@ -1,3 +1,4 @@
+import Foundation
 import GRDB
 
 nonisolated enum LibrarySchema {
@@ -487,6 +488,14 @@ nonisolated enum LibrarySchema {
             try db.create(index: "taskPart_partID", on: "taskPart", columns: ["partID"])
         }
         migrator.registerMigration("v17-search", foreignKeyChecks: .immediate) { db in
+            let searchFields = [
+                "watch": ["name", "brand", "model", "caseReference", "serial", "approximateYear"],
+                "caliber": ["designation", "manufacturer", "variant"],
+                "job": ["title"],
+                "note": ["title", "body"],
+                "libraryItem": ["title", "caption"],
+                "partRequirement": ["description", "manufacturerReference"],
+            ]
             for table in [
                 "watch", "caliber", "job", "note", "libraryItem", "partRequirement", "partLink",
             ] {
@@ -494,8 +503,8 @@ nonisolated enum LibrarySchema {
                     definition.add(column: "searchKey", .text).notNull().defaults(to: "")
                 }
                 try db.create(index: "\(table)_searchKey", on: table, columns: ["searchKey"])
-                if let searchTable = SearchKey.Table(rawValue: table) {
-                    try SearchKey.backfill(searchTable, in: db)
+                if let fields = searchFields[table] {
+                    try SearchKey.backfill(table, fields: fields, in: db)
                 }
             }
             for table in ["watch", "caliber", "job"] {
@@ -527,7 +536,27 @@ nonisolated enum LibrarySchema {
                         WHERE json_type(\(column), '$.part._0.supplierSnapshot') IS NOT NULL
                         """)
             }
-            try SearchKey.backfill(.partRequirement, in: db)
+            try SearchKey.backfill(
+                "partRequirement", fields: ["description", "manufacturerReference"], in: db)
+        }
+        migrator.registerMigration("v19-record-notes", foreignKeyChecks: .immediate) { db in
+            for table in ["watch", "caliber", "job"] {
+                try db.alter(table: table) { definition in
+                    definition.add(column: "notes", .text).notNull().defaults(to: "")
+                }
+            }
+            try NoteRecordsMigration.join(in: db, locale: .current, timeZone: .current)
+            try db.drop(table: "note")
+            let searchFields = [
+                "watch": [
+                    "name", "brand", "model", "caseReference", "serial", "approximateYear", "notes",
+                ],
+                "caliber": ["designation", "manufacturer", "variant", "notes"],
+                "job": ["title", "notes"],
+            ]
+            for (table, fields) in searchFields {
+                try SearchKey.backfill(table, fields: fields, in: db)
+            }
         }
         return migrator
     }

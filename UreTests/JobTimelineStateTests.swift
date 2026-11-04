@@ -6,7 +6,7 @@ import Testing
 
 struct JobTimelineStateTests {
     @Test(.timeLimit(.minutes(1)))
-    func observationRefreshesEditedNotesAndCommittedEventsOnly() async throws {
+    func observationRefreshesCommittedEventsOnly() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -17,17 +17,11 @@ struct JobTimelineStateTests {
         defer { observation.cancel() }
         try await waitUntil { !timeline.isLoading }
         #expect(timeline.entries.isEmpty && timeline.loadError == nil)
-        let service = NoteService(coordinator: coordinator)
-        var draft = NoteDraft(occurredAt: Date(timeIntervalSince1970: 42))
-        draft.title = "Initial finding"
-        let note = try await service.save(draft, for: .job(job.id), editing: nil)
+        _ = try await JobService(coordinator: coordinator).transition(
+            job.id, using: JobTransitionDraft(stage: .inProgress))
         try await waitUntil { timeline.entries.count == 1 }
-        var edit = NoteDraft(note: note)
-        edit.body = "Corrected finding"
-        _ = try await service.save(edit, for: .job(job.id), editing: note.id)
-        try await waitUntil { timeline.entries.first?.body == edit.body }
-        #expect(
-            timeline.entries.count == 1 && timeline.entries.first?.occurredAt == note.occurredAt)
+        try await RecordNotesService(coordinator: coordinator).save(
+            "Notes are not activity", for: .job(job.id))
         try await JobTaskFixture.failEvents(coordinator)
         await #expect(throws: DatabaseError.self) {
             try await JobTaskService(coordinator: coordinator).save(
@@ -106,10 +100,6 @@ struct JobTimelineStateTests {
         partDraft.status = .arrived
         let part = try await PartService(coordinator: coordinator).save(
             partDraft, for: job.id, editing: nil)
-        var noteDraft = NoteDraft()
-        noteDraft.title = "Evidence"
-        let note = try await NoteService(coordinator: coordinator).save(
-            noteDraft, for: .job(job.id), editing: nil)
         let jobs = JobService(coordinator: coordinator)
         _ = try await jobs.setCondition(
             job.id, using: WatchConditionDraft(condition: .running, note: "Tested"))
@@ -119,34 +109,31 @@ struct JobTimelineStateTests {
         let observations = [
             Task { await editing.watches.observe() }, Task { await editing.jobs.observe() },
             Task { await editing.tasks.observe() }, Task { await editing.parts.observe() },
-            Task { await editing.notes.observe() },
+            Task { await editing.references.observe() },
             Task { await timeline.observe(jobID: job.id, coordinator: coordinator) },
         ]
         defer { observations.forEach { $0.cancel() } }
         try await waitUntil {
             !editing.watches.isLoading && !editing.jobs.isLoading && !editing.tasks.isLoading
-                && !editing.parts.isLoading && !editing.notes.isLoading && !timeline.isLoading
+                && !editing.parts.isLoading && !editing.references.isLoading && !timeline.isLoading
         }
         editing.watches.select(job.watchID)
         editing.jobs.open(job)
         let taskEntry = try #require(timeline.entries.first { $0.source == .task(task.id) })
-        let noteEntry = try #require(timeline.entries.first { $0.source == .note(note.id) })
+        editing.references.create(for: .job(job.id))
+        editing.references.draft?.title = "Keep this draft"
+        editing.references.draft?.sourceURL = "https://example.org/keep"
         var opened = false
-        timeline.openSource(noteEntry, jobID: job.id, editing: editing) { opened = true }
-        #expect(opened && editing.notes.selectedNote == note)
-        editing.notes.edit()
-        editing.notes.draft?.body = "Keep this draft"
-        opened = false
         timeline.openSource(taskEntry, jobID: job.id, editing: editing) { opened = true }
         #expect(editing.showsUnsavedChanges && !opened)
         editing.stay()
-        #expect(editing.notes.draft?.body == "Keep this draft")
+        #expect(editing.references.draft?.title == "Keep this draft")
         timeline.openSource(taskEntry, jobID: job.id, editing: editing) { opened = true }
         await editing.saveAndContinue()
         #expect(opened && editing.tasks.selectedTask == task)
-        #expect(editing.notes.owner == nil)
-        let savedNote = try await coordinator.read { try NoteQueries.fetch(note.id, in: $0) }
-        #expect(savedNote?.body == "Keep this draft")
+        #expect(editing.references.owner == nil)
+        let saved = try await coordinator.read(LibraryItemQueries.fetchAll)
+        #expect(saved.map(\.title) == ["Keep this draft"])
         var closure = JobTransitionDraft(stage: .completed)
         closure.outcome = "Done"
         _ = try await jobs.transition(job.id, using: closure)
@@ -170,7 +157,7 @@ struct JobTimelineStateTests {
             watches: WatchState(service: WatchService(coordinator: coordinator)),
             calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
             jobs: JobState(service: JobService(coordinator: coordinator)),
-            notes: NoteState(service: NoteService(coordinator: coordinator)),
+            notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
             references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
             photos: PhotoState(service: PhotoService(coordinator: coordinator)),
             documents: DocumentState(service: DocumentService(coordinator: coordinator)),

@@ -91,42 +91,37 @@ struct SearchStateTests {
         let search = SearchState(coordinator: coordinator)
         let source = try fixture.source(type: .png)
         let pdf = try DocumentFixture.source(in: fixture)
-        var records: [(String, SearchKind, UUID, NoteOwner)] = []
+        var records: [(String, SearchKind, UUID, LibraryItemOwner)] = []
         for (index, owner) in owners.enumerated() {
-            var noteDraft = NoteDraft(occurredAt: date)
-            noteDraft.title = "Duplicate needle"
-            noteDraft.body = "body \(index)"
-            let note = try await NoteService(coordinator: coordinator).save(
-                noteDraft, for: owner, editing: nil)
-            records.append(("body \(index)", .note, note.id, owner))
-            let itemOwner: LibraryItemOwner
+            try await RecordNotesService(coordinator: coordinator).save(
+                "Notes needle \(index)", for: owner)
             switch owner {
-            case .watch(let id): itemOwner = .watch(id);
-            case .job(let id): itemOwner = .job(id);
-            case .caliber(let id): itemOwner = .caliber(id)
+            case .watch(let id): records.append(("notes needle \(index)", .watch, id, owner))
+            case .job(let id): records.append(("notes needle \(index)", .job, id, owner))
+            case .caliber(let id): records.append(("notes needle \(index)", .caliber, id, owner))
             }
             var referenceDraft = ReferenceFixture.draft
             referenceDraft.title = "Link needle \(index)"
             let item = try await ReferenceService(coordinator: coordinator).save(
-                referenceDraft, for: itemOwner, editing: nil)
+                referenceDraft, for: owner, editing: nil)
             records.append((referenceDraft.title, .link, item.id, owner))
             let photo = try #require(
-                await PhotoService(coordinator: coordinator).importFiles([source], for: itemOwner)
+                await PhotoService(coordinator: coordinator).importFiles([source], for: owner)
                     .first
             ).outcome.get()
             var photoDraft = PhotoDraft(item: photo.item)
             photoDraft.title = "Photo needle \(index)"
             _ = try await PhotoService(coordinator: coordinator).save(
-                photoDraft, for: itemOwner, editing: photo.id)
+                photoDraft, for: owner, editing: photo.id)
             records.append((photoDraft.title, .photo, photo.id, owner))
             let document = try #require(
-                await DocumentService(coordinator: coordinator).importFiles([pdf], for: itemOwner)
+                await DocumentService(coordinator: coordinator).importFiles([pdf], for: owner)
                     .first
             ).outcome.get()
             var documentDraft = DocumentDraft(item: document.item)
             documentDraft.title = "PDF needle \(index)"
             _ = try await DocumentService(coordinator: coordinator).save(
-                documentDraft, for: itemOwner, editing: document.id)
+                documentDraft, for: owner, editing: document.id)
             records.append((documentDraft.title, .document, document.id, owner))
         }
         var partDraft = PartFixture.draft()
@@ -161,7 +156,6 @@ struct SearchStateTests {
                     editing.calibers.selectedID == id && editing.jobs.selectedID == nil
                         && navigation.selection == .calibers)
             }
-            #expect(editing.notes.selectedID == (kind == .note ? id : nil))
             #expect(editing.references.selectedID == (kind == .link ? id : nil))
             #expect(editing.photos.selectedID == (kind == .photo ? id : nil))
             #expect(editing.documents.selectedID == (kind == .document ? id : nil))
@@ -272,7 +266,7 @@ enum SearchEditingFixture {
             watches: WatchState(service: WatchService(coordinator: coordinator)),
             calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
             jobs: JobState(service: JobService(coordinator: coordinator)),
-            notes: NoteState(service: NoteService(coordinator: coordinator)),
+            notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
             references: ReferenceState(
                 service: ReferenceService(coordinator: coordinator, openBrowser: { _ in false })),
             photos: PhotoState(service: PhotoService(coordinator: coordinator)),
@@ -284,7 +278,7 @@ enum SearchEditingFixture {
     static func observe(_ editing: WorkshopEditing) -> [Task<Void, Never>] {
         [
             Task { await editing.watches.observe() }, Task { await editing.calibers.observe() },
-            Task { await editing.jobs.observe() }, Task { await editing.notes.observe() },
+            Task { await editing.jobs.observe() },
             Task { await editing.references.observe() }, Task { await editing.photos.observe() },
             Task { await editing.documents.observe() }, Task { await editing.tasks.observe() },
             Task { await editing.parts.observe() },
@@ -292,7 +286,7 @@ enum SearchEditingFixture {
     }
     static func loaded(_ editing: WorkshopEditing) -> Bool {
         !editing.watches.isLoading && !editing.calibers.isLoading && !editing.jobs.isLoading
-            && !editing.notes.isLoading && !editing.references.isLoading
+            && !editing.references.isLoading
             && !editing.photos.isLoading
             && !editing.documents.isLoading && !editing.tasks.isLoading && !editing.parts.isLoading
     }

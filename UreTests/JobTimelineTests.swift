@@ -8,7 +8,7 @@ nonisolated struct JobTimelineTests {
     private let clock = Date(timeIntervalSince1970: 1_778_307_200 + 21.0 / 4_194_304)
 
     @Test
-    func committedEventsAndScopedNotesHaveStableOrderAcrossRestart() async throws {
+    func committedEventsHaveStableOrderAcrossRestart() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let clock = clock
@@ -35,38 +35,20 @@ nonisolated struct JobTimelineTests {
             JobTaskDraft(task: task), for: job.id, editing: task.id)
         _ = try await PartService(coordinator: coordinator).save(
             PartDraft(part: savedPart), for: job.id, editing: savedPart.id)
-        let notes = NoteService(coordinator: coordinator)
-        var draft = NoteDraft(occurredAt: clock)
-        draft.title = "Inspection"
-        draft.body = "Å時計\n  Preserve spacing"
-        let a = try await notes.save(draft, for: .job(job.id), editing: nil)
-        let b = try await notes.save(draft, for: .job(job.id), editing: nil)
-        draft.occurredAt = clock.addingTimeInterval(-100)
-        let older = try await notes.save(draft, for: .job(job.id), editing: nil)
-        draft.occurredAt = clock.addingTimeInterval(100)
-        let newer = try await notes.save(draft, for: .job(job.id), editing: nil)
-        _ = try await notes.save(draft, for: .watch(job.watchID), editing: nil)
-        _ = try await notes.save(draft, for: .job(other.id), editing: nil)
         _ = try await jobs.transition(other.id, using: JobTransitionDraft(stage: .ready))
         let events = try await coordinator.read { db in
             try ActivityQueries.fetchAll(db).filter { $0.jobID == job.id }
         }
         let entries = try await fetch(job.id, coordinator)
-        let tiedNoteIDs = [a.id, b.id].sorted { $0.uuidString < $1.uuidString }
-        let expected: [JobTimelineEntry.ID] =
-            [.note(newer.id)]
-            + events.reversed().map { .event($0.id) }
-            + tiedNoteIDs.map { .note($0) } + [.note(older.id)]
-        #expect(entries.map(\.id) == expected)
-        #expect(entries.filter { $0.ordering != nil }.count == 4)
+        #expect(entries.map(\.id) == events.reversed().map(\.id))
+        #expect(entries.count == 4)
         #expect(entries.first(where: { $0.source == .task(task.id) })?.summary == "Created as Done")
         #expect(
             entries.first(where: { $0.source == .part(savedPart.id) })?.summary
                 == "Created as Arrived")
         #expect(entries.contains { $0.source == .watch(job.watchID) })
         #expect(entries.contains { $0.source == .job(job.id) })
-        #expect(entries.first(where: { $0.id == .note(a.id) })?.body == a.body)
-        #expect(entries.filter { $0.ordering != nil }.allSatisfy { $0.occurredAt == clock })
+        #expect(entries.allSatisfy { $0.occurredAt == clock })
         try await coordinator.close()
         let reopened = fixture.coordinator()
         _ = try await reopened.open()
@@ -75,29 +57,20 @@ nonisolated struct JobTimelineTests {
     }
 
     @Test
-    func noteEditsReplaceOneEntryAndUseOccurredDate() async throws {
+    func notesChangesAddNoActivity() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let clock = clock
         let coordinator = fixture.coordinator(dependencies: LibraryDependencies(now: { clock }))
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let service = NoteService(coordinator: coordinator)
-        var draft = NoteDraft(occurredAt: clock.addingTimeInterval(-3600))
-        draft.title = "Before cleaning"
-        let note = try await service.save(draft, for: .job(job.id), editing: nil)
-        var edit = NoteDraft(note: note)
-        edit.title = "Corrected finding"
-        edit.body = String(repeating: "時計 Å\n  Evidence.\n", count: 1500)
-        let saved = try await service.save(edit, for: .job(job.id), editing: note.id)
-        let entries = try await fetch(job.id, coordinator)
-        #expect(entries.count == 1 && entries.first?.id == .note(note.id))
-        #expect(entries.first?.occurredAt == note.occurredAt)
-        #expect(entries.first?.title == saved.title && entries.first?.body == saved.body)
+        let notes = RecordNotesService(coordinator: coordinator)
+        try await notes.save(
+            String(repeating: "時計 Å\n  Evidence.\n", count: 1500), for: .job(job.id))
+        try await notes.save("Corrected finding", for: .job(job.id))
+        try await notes.save("Watch history", for: .watch(job.watchID))
+        #expect(try await fetch(job.id, coordinator).isEmpty)
         #expect(try await coordinator.read(ActivityQueries.fetchAll).isEmpty)
-        edit.occurredAt = clock.addingTimeInterval(3600)
-        _ = try await service.save(edit, for: .job(job.id), editing: note.id)
-        #expect(try await fetch(job.id, coordinator).first?.occurredAt == edit.occurredAt)
         try await coordinator.close()
     }
 

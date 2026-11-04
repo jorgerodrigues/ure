@@ -127,7 +127,7 @@ struct WorkshopOverviewStateTests {
         #expect(
             editing.jobs.selectedID == second.id && editing.watches.selectedID == second.watchID)
         #expect(
-            editing.tasks.jobID == nil && editing.notes.owner == nil && editing.parts.jobID == nil)
+            editing.tasks.jobID == nil && editing.parts.jobID == nil)
         let saved = try await coordinator.read { try JobTaskQueries.fetch(task.id, in: $0) }
         #expect(saved?.title == "Keep my draft")
         workshop.open(UUID(), editing: editing)
@@ -149,7 +149,7 @@ struct WorkshopOverviewStateTests {
             watches: WatchState(service: WatchService(coordinator: coordinator)),
             calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
             jobs: JobState(service: JobService(coordinator: coordinator)),
-            notes: NoteState(service: NoteService(coordinator: coordinator)),
+            notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
             references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
             photos: PhotoState(service: PhotoService(coordinator: coordinator)),
             documents: DocumentState(service: DocumentService(coordinator: coordinator)),

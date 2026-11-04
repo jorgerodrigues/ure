@@ -13,7 +13,7 @@ import sqlite3
 
 
 REPO = Path(__file__).resolve().parent.parent
-VERSION = "W031-v1"
+VERSION = "W033-v1"
 
 
 def require(condition, message):
@@ -41,7 +41,7 @@ def expected_results():
         calibers = 50 if archived else 45
         groups = {
             "Watch": (2, watches), "Caliber": (1, calibers), "Job": (3, jobs),
-            "Note": (7, jobs), "Part": (8, jobs), "Photo": (6, watches * 10),
+            "Part": (8, jobs), "Photo": (6, watches * 10),
         }
         keys = {
             kind: [f"{kind}-{record_id(number, i)}" for i in range(count)]
@@ -49,7 +49,7 @@ def expected_results():
         }
         prefix = f"search:{str(archived).lower()}:"
         expected[prefix + "Synthetic"] = sum(keys.values(), [])
-        expected[prefix + "ÜHREN"] = keys["Watch"] + keys["Note"] + keys["Photo"]
+        expected[prefix + "ÜHREN"] = keys["Watch"] + keys["Job"] + keys["Photo"]
         expected[prefix + "00.A_%"] = keys["Part"]
         expected[prefix + "00.001_%'"] = [f"Watch-{record_id(2, 1)}"]
         expected[prefix + "no match"] = []
@@ -64,13 +64,13 @@ def inspect_fixture(case):
     with sqlite3.connect((generation / "library.sqlite").as_uri() + "?mode=ro", uri=True) as db:
         require(db.execute("PRAGMA integrity_check").fetchone() == ("ok",), "Database integrity")
         require(not db.execute("PRAGMA foreign_key_check").fetchall(), "Foreign keys")
-        tables = ["caliber", "watch", "job", "jobTask", "note", "partRequirement", "partLink", "taskPart", "fileAsset", "libraryItem"]
+        tables = ["caliber", "watch", "job", "jobTask", "partRequirement", "partLink", "taskPart", "fileAsset", "libraryItem"]
         for table in tables:
             rows = db.execute(f"SELECT * FROM {table} ORDER BY rowid").fetchall()
             counts[table] = len(rows)
             digest.update(json.dumps([table, rows], ensure_ascii=False).encode())
         assets = db.execute("SELECT storageKey, byteCount, sha256 FROM fileAsset ORDER BY id").fetchall()
-    require(counts == dict(caliber=50, watch=500, job=1000, jobTask=10000, note=1000,
+    require(counts == dict(caliber=50, watch=500, job=1000, jobTask=10000,
                            partRequirement=1000, partLink=2000, taskPart=2000, fileAsset=5000, libraryItem=5000), "Fixture counts")
     require(len(list((generation / "originals").iterdir())) == 5000, "Original file count")
     for key, size, sha in assets:

@@ -3,7 +3,6 @@ import SwiftUI
 struct CaliberDetailView: View {
     @Environment(CaliberState.self) private var calibers
     @Environment(WatchState.self) private var watches
-    @Environment(NoteState.self) private var notes
     @Environment(DocumentState.self) private var documents
     @Environment(PhotoState.self) private var photos
     @Environment(ReferenceState.self) private var references
@@ -26,10 +25,6 @@ struct CaliberDetailView: View {
             references.isPresenting(for: .caliber(caliber.id))
         {
             ReferenceDetailView(owner: .caliber(caliber.id))
-        } else if let caliber = calibers.selectedCaliber,
-            notes.isPresenting(for: .caliber(caliber.id))
-        {
-            NoteDetailView(owner: .caliber(caliber.id))
         } else if let caliber = calibers.selectedCaliber {
             Form {
                 RecordHeading(title: caliber.label, subtitle: caliber.manufacturer)
@@ -51,7 +46,7 @@ struct CaliberDetailView: View {
                 Section("Shared specifications") {
                     CaliberSpecificationsView(caliber: caliber)
                 }
-                NoteSectionView(owner: .caliber(caliber.id))
+                NotesSectionView(owner: .caliber(caliber.id))
                 PhotoSectionView(owner: .caliber(caliber.id))
                 ReferenceSectionView(owner: .caliber(caliber.id))
                 Section("Linked watches") {

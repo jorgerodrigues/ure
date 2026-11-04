@@ -413,11 +413,6 @@ actor LibraryCoordinator {
         }.values(in: database)
     }
 
-    func noteValues() throws -> AsyncValueObservation<[NoteRecord]> {
-        guard let database else { throw LibraryError.notOpen }
-        return ValueObservation.tracking(NoteQueries.fetchAll).values(in: database)
-    }
-
     func timelineValues(for jobID: UUID) throws -> AsyncValueObservation<[JobTimelineEntry]> {
         guard let database else { throw LibraryError.notOpen }
         return ValueObservation.tracking { db in

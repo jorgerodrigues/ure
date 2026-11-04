@@ -11,7 +11,7 @@ final class WorkshopSession {
     let search: SearchState
     let workshop: WorkshopOverviewState
     let partsOverview: PartsOverviewState
-    let notes: NoteState
+    let notes: RecordNotesState
     let tasks: JobTaskState
     let parts: PartState
     let references: ReferenceState
@@ -27,7 +27,7 @@ final class WorkshopSession {
         jobs = JobState(service: JobService(coordinator: coordinator))
         tasks = JobTaskState(service: JobTaskService(coordinator: coordinator))
         parts = PartState(service: PartService(coordinator: coordinator))
-        notes = NoteState(service: NoteService(coordinator: coordinator))
+        notes = RecordNotesState(service: RecordNotesService(coordinator: coordinator))
         references = ReferenceState(service: ReferenceService(coordinator: coordinator))
         photos = PhotoState(service: PhotoService(coordinator: coordinator))
         documents = DocumentState(service: DocumentService(coordinator: coordinator))
@@ -45,5 +45,6 @@ final class WorkshopSession {
     func prepareForRestore() {
         bench.stop()
         bench.clearForRestore()
+        notes.discardUndo()
     }
 }
