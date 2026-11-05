@@ -49,7 +49,8 @@ struct ChecklistStepTextView: NSViewRepresentable {
         }
         guard let focus, isEditable else { return }
         if view.currentEditor() != nil {
-            editor.focusTaken(id)
+            // The line already has the cursor. The request clears after this update.
+            Task { @MainActor [editor, id] in editor.focusTaken(id) }
         } else {
             view.requestFocus(placing: focus) { [editor, id] in editor.focusTaken(id) }
         }
