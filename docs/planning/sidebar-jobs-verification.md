@@ -20,7 +20,7 @@ The sidebar, the toolbar, the Jobs list and the picker were built from the JSX v
 - The sidebar uses the native sidebar selection and counts. The selected row's label draws black in the offscreen render, as it did in W033 to W037.
 - Tiles show the watch's cover photo, or a photo symbol when it has none, as the Watches list does. The artboards' tiles are illustrations.
 - The picker does not set the typed letters in bold, as "6 New job" does in "**Ham**ilton".
-- A job without a watch keeps the job page's sections in W037's order and wording: Parts before Checklist, "Opened today" and "Add photos, PDFs or links". The artboard's Checklist, Parts and Material rows come with W039 and W040.
+- A job without a watch keeps the job page's sections in their current order and wording: Parts before Checklist, "Opened today" and "Add photos, PDFs or links". "6 New job" puts Checklist first and says "Opened just now" and "Add intake photos". W040 rebuilds the Parts section.
 - The job page's pin and reference buttons stay in the toolbar while a job is open, as W012 needs. The artboards leave them out.
 - In Jobs the toolbar has no Back to Watch button, because the list holds the job. A job opened from its watch's page still has it.
 - Search Library is no longer a toolbar button, because every window artboard has only the New button and the search field. It stays in the Edit menu with ⇧⌘F.
