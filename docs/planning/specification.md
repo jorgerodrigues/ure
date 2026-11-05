@@ -10,7 +10,7 @@ Build a native Mac app that keeps a watch's identity, repair work, and supportin
 
 - Store watch names, calibers, and other specifications.
 - Store technical sheet links, research, and photos.
-- Plan work with tasks and visible progress.
+- Plan work with a checklist and visible progress.
 - Record the watch's state.
 - Track required parts with descriptions, reference numbers, one or more optional saved links, and purchase states. Links can point to product listings, suppliers, or identification references.
 - Support overview, active bench work, and records that can help a customer.
@@ -39,7 +39,7 @@ These choices make the draft concrete. They are recommendations, not user approv
 | Persistence | Approved: SQLite through GRDB; photos and PDFs in app-managed files |
 | Minimum system | Approved: macOS 27 on Apple silicon; no older-system compatibility layer |
 | Distribution | Run locally from Xcode first; store distribution and automatic updates are later work |
-| Editing | Approved on 4 November 2026: the Rework moves every record to edit in place with autosave and Undo. W033 starts with notes, W035 does the caliber page, W036 the watch page, and W037 the job page. The task and part editors keep Save and Cancel, Cmd-S, and unsaved-draft protection until W039 and W040 replace them |
+| Editing | Approved on 4 November 2026: the Rework moves every record to edit in place with autosave and Undo. W033 starts with notes, W035 does the caliber page, W036 the watch page, W037 the job page, and W039 the checklist. The part editor keeps Save and Cancel, Cmd-S, and unsaved-draft protection until W040 replaces it |
 | Notes | Approved on 4 November 2026: one plain-text notes text per watch, caliber, and job that saves as you type; no rich text, Markdown rendering, or note history. Clickable links within text remain proposed |
 | Measurements | Written notes and attached instrument photos in version 1; structured measurement forms later |
 | Parts cost | Not tracked. Supplier price and currency were removed on 24 October 2026; no job accounting or invoice totals |
@@ -57,7 +57,7 @@ PDF report creation and export, accounts, cloud services, device sync, mobile cl
 flowchart TD
   C[Caliber knowledge] --> W[Watch identity]
   W --> J[Repair or restoration job]
-  J --> T[Tasks and progress]
+  J --> T[Checklist and progress]
   J --> P[Parts and saved links]
   J --> N[Notes and findings]
   J --> A[Photos and reference files]
@@ -71,9 +71,9 @@ Separate three meanings of state:
 | --- | --- | --- |
 | Job stage | Where is this repair in the workflow? | Waiting |
 | Watch notes | What is the watch like now? Written in its notes since W036 | Disassembled |
-| Task progress | How many planned tasks are done? | 6 of 10 done |
+| Checklist progress | How many steps are ticked? | 6 of 10 done |
 
-Changing one does not change the others. A task count is not an estimate of remaining effort.
+Changing one does not change the others. A step count is not an estimate of remaining effort.
 
 ## 3 Main user journeys
 
@@ -85,19 +85,19 @@ Work comes first, so a job can also start before its watch is in the library. Cm
 
 ### Plan and source
 
-Add tasks in the order they will be done. Group them under optional stage labels such as Inspection, Disassembly, Cleaning, Assembly, and Testing. These are user-entered labels. Add required parts and save links to listings or references. Mark uncertain compatibility explicitly. Link a task to a required part when that part holds up the task.
+Type the checklist in the order the work will be done, with headings such as Inspection, Disassembly, Cleaning, Assembly, and Testing where they help. These are the user's own words. Add required parts and save links to listings or references. Mark uncertain compatibility explicitly.
 
 ### Work at the bench
 
-Open a job. Keep the task list visible beside a pinned photo or technical PDF. Zoom and pan a photo. Move between photos with the keyboard. Read a PDF without leaving the app. Add dated notes and record findings as the work develops. Save partial knowledge without inventing missing specifications.
+Open a job. Keep the checklist visible beside a pinned photo or technical PDF. Zoom and pan a photo. Move between photos with the keyboard. Read a PDF without leaving the app. Add dated notes and record findings as the work develops. Save partial knowledge without inventing missing specifications.
 
 ### Pause and resume
 
-Set a job to Waiting and say what it waits for. The Jobs list shows that text under Waiting, and each job in progress shows its task count and its parts still to buy. Return later and open the same job and reference item. Restarting the app retains saved content and the last selected job. Window size and reference selection are preferences, not repair history.
+Set a job to Waiting and say what it waits for. The Jobs list shows that text under Waiting, and each job in progress shows how many of its steps are ticked and its parts still to buy. Return later and open the same job and reference item. Restarting the app retains saved content and the last selected job. Window size and reference selection are preferences, not repair history.
 
 ### Finish and retain history
 
-Write the outcome, the work performed, and recommendations in the job's notes, and set the job to Done. Unfinished tasks and unresolved parts keep their status. Keep these records available for later customer questions. A later repair creates a new job for the same watch. A Done job stays editable. Report creation can be added in a later release.
+Write the outcome, the work performed, and recommendations in the job's notes, and set the job to Done. Unticked steps and unresolved parts stay as they are. Keep these records available for later customer questions. A later repair creates a new job for the same watch. A Done job stays editable. Report creation can be added in a later release.
 
 ## 4 Screens and interaction
 
@@ -109,23 +109,23 @@ The sidebar has two groups, laid out as on every window artboard: Workshop with 
 
 The toolbar shows the section's title with a subtitle, such as "Jobs" and "4 open · 1 waiting", the section's New button, such as "New Job", and a search field with the prompt "Search". The search field filters the current section, and Cmd-F puts the cursor in it from every section. Search Library, Shift-Cmd-F in the Edit menu, returns grouped results from the whole library. Every toolbar button is also a menu command with the same name, such as New Job with Cmd-N.
 
-At a proposed minimum window size of 1000 by 650 points, show the list and detail without clipped controls. The optional reference pane can collapse. At larger widths it can sit beside tasks or notes. The app has one main editing window in version 1. A reference window may be opened read-only.
+At a proposed minimum window size of 1000 by 650 points, show the list and detail without clipped controls. The optional reference pane can collapse. At larger widths it can sit beside the checklist or notes. The app has one main editing window in version 1. A reference window may be opened read-only.
 
 ### Jobs
 
-Jobs replaces the workshop overview, laid out as the "6 New job" artboard. It groups jobs under In progress, Waiting, and Done recently, and shows each open job once. Done recently holds the jobs done on any day from 30 days ago to today. Older Done jobs stay on their watch's page and in search. A row shows the watch's cover, the watch's name, and a line such as "Full service · 6 of 10 · 1 to buy": the job's title, its done and counted tasks, and its parts still to buy. A waiting job's line says what it waits for, such as "Waiting for a mainspring", and a done job's line when it was done, such as "New crystal · Done 2 Oct". Open jobs list the latest change to the job, its tasks, or its parts first, and done jobs the latest done first. The search matches the watch's name, brand, model, and owner, the job's title, and what it waits for. An open job stays here when its watch is archived.
+Jobs replaces the workshop overview, laid out as the "6 New job" artboard. It groups jobs under In progress, Waiting, and Done recently, and shows each open job once. Done recently holds the jobs done on any day from 30 days ago to today. Older Done jobs stay on their watch's page and in search. A row shows the watch's cover, the watch's name, and a line such as "Full service · 6 of 10 · 1 to buy": the job's title, its ticked and counted checklist steps, and its parts still to buy. A waiting job's line says what it waits for, such as "Waiting for a mainspring", and a done job's line when it was done, such as "New crystal · Done 2 Oct". Open jobs list the latest change to the job, its steps, or its parts first, and done jobs the latest done first. The search matches the watch's name, brand, model, and owner, the job's title, and what it waits for. An open job stays here when its watch is archived.
 
-Cmd-N in Jobs and the New Job toolbar button make a job named "New Job", In progress, without a watch. They select it and put the cursor in its title with the title selected, so typing replaces it. Return moves to the watch picker, as on "6 New job". A job without a watch has no cover, and its row shows its title with "No watch yet". Its page shows the Watch fact as a search field, and the caliber, owner, and contact say "Comes from the watch". The picker finds watches that are not archived by name, brand, or caliber, at most six, with the watches free for a job first. Each shows its brand, year, and caliber, such as "Hamilton · 1940s · Hamilton 992B". Return takes the highlighted watch, and the arrows move the highlight. The last row makes a new watch with the typed name, such as "New watch named “ham”". Picking a watch gives the job that watch, and Cmd-Z puts back "No watch yet". A watch has one open job at a time, so a watch that already has an open job says so, such as "Hamilton · 1958 · already has an open job", and picking it opens that job. The job being set up goes away then only when nothing is in it yet: no watch, the title "New Job", and no problem, notes, tasks, parts, or material.
+Cmd-N in Jobs and the New Job toolbar button make a job named "New Job", In progress, without a watch. They select it and put the cursor in its title with the title selected, so typing replaces it. Return moves to the watch picker, as on "6 New job". A job without a watch has no cover, and its row shows its title with "No watch yet". Its page shows the Watch fact as a search field, and the caliber, owner, and contact say "Comes from the watch". The picker finds watches that are not archived by name, brand, or caliber, at most six, with the watches free for a job first. Each shows its brand, year, and caliber, such as "Hamilton · 1940s · Hamilton 992B". Return takes the highlighted watch, and the arrows move the highlight. The last row makes a new watch with the typed name, such as "New watch named “ham”". Picking a watch gives the job that watch, and Cmd-Z puts back "No watch yet". A watch has one open job at a time, so a watch that already has an open job says so, such as "Hamilton · 1958 · already has an open job", and picking it opens that job. The job being set up goes away then only when nothing is in it yet: no watch, the title "New Job", and no problem, notes, checklist steps, parts, or material.
 
 ### Watch detail
 
-The watch page is a page you write on, laid out as the "4 Watch" artboard. It has no editor, Save, or Cancel. The header shows the watch's cover, its name as the title, and its open job, which opens the job. Clicking the cover chooses a photo from the watch or its jobs. The name in the title is written in place. Then come the facts in three columns: brand, model, and reference; serial, year, and caliber; case, diameter, and lug width; owner and contact. Each fact is written in place and saves on its own. The caliber is a pop-up of the calibers that are not archived, and its arrow opens the caliber's page. As you type a brand, the brands in the library show under the field. Then come the jobs, newest first, with their stage, task progress, and date, then the material with the caliber's material as chips, and the notes with the date the watch was last edited. A watch with no open job offers Start Job under its jobs. The app does not automatically create a second open job. Cmd-N in Watches makes a watch named "New Watch", selects it, and puts the cursor in its name with the name selected, so typing replaces it.
+The watch page is a page you write on, laid out as the "4 Watch" artboard. It has no editor, Save, or Cancel. The header shows the watch's cover, its name as the title, and its open job, which opens the job. Clicking the cover chooses a photo from the watch or its jobs. The name in the title is written in place. Then come the facts in three columns: brand, model, and reference; serial, year, and caliber; case, diameter, and lug width; owner and contact. Each fact is written in place and saves on its own. The caliber is a pop-up of the calibers that are not archived, and its arrow opens the caliber's page. As you type a brand, the brands in the library show under the field. Then come the jobs, newest first, with their stage, checklist progress, and date, then the material with the caliber's material as chips, and the notes with the date the watch was last edited. A watch with no open job offers Start Job under its jobs. The app does not automatically create a second open job. Cmd-N in Watches makes a watch named "New Watch", selects it, and puts the cursor in its name with the name selected, so typing replaces it.
 
 The list shows each watch's cover, name, and its brand, year, and open job, such as "Omega · 1958 · In progress", in order of name. The toolbar's subtitle counts the watches and the archived ones, such as "12 watches · 3 archived". Archived watches fold away in a collapsed Archived section at the end of the list, with their count and a trailing chevron. An archived row reads quieter and says when it was archived, such as "Smiths · archived 3 Nov". Selecting an archived watch, also from search, opens the section. An archived watch's page reads as "4b Archived watch": it says "Archived 3 November" under the name, its facts and notes are read-only, and the toolbar offers Unarchive.
 
 ### Job detail
 
-The job page is a page you write on, laid out as the "2 Job" artboard. It has no editor, Save, or Cancel. The header shows the cover of the job's watch, or the job's first photo when the watch has none. Beside it are the state as a pop-up with the date the job opened and how long ago, such as "Opened 12 October · 23 days", the title, and a line with links to the watch and its caliber and the owner and contact from the watch, such as "Grandfather's Seamaster › · Omega 552 › · Ana Ribeiro, +351 912 480 117". A Done job's line says when it was done, such as "Opened 12 October · Done 2 November". The title is written in place. A waiting job shows **Waiting for** under the header, written in place. Then come the problem in the job's own words, the parts, the checklist with its task progress, the material, and the notes with the date the job was last edited. The parts and the checklist keep their current rows until W039 and W040. Start Job under a watch's jobs makes a job named "New Job", In progress, and puts the cursor in its title with the title selected, so typing replaces it. The reference pane can display a job, watch, or caliber item while another section remains open.
+The job page is a page you write on, laid out as the "2 Job" artboard. It has no editor, Save, or Cancel. The header shows the cover of the job's watch, or the job's first photo when the watch has none. Beside it are the state as a pop-up with the date the job opened and how long ago, such as "Opened 12 October · 23 days", the title, and a line with links to the watch and its caliber and the owner and contact from the watch, such as "Grandfather's Seamaster › · Omega 552 › · Ana Ribeiro, +351 912 480 117". A Done job's line says when it was done, such as "Opened 12 October · Done 2 November". The title is written in place. A waiting job shows **Waiting for** under the header, written in place. Then come the problem in the job's own words, the parts, the checklist, the material, and the notes with the date the job was last edited. The parts keep their current rows until W040. The checklist is laid out as on "2 Job": the heading says how many steps are done, such as "6 of 10 done", over a thin bar that fills in the same proportion, then the steps with their tick boxes and the headings between them, then a row that says "Add a step". You type it like a note, as on the "Steps and parts" card of "7 Typing". Typing in the last row makes a step there. Return starts the next step, and Return on a step without text moves on, like Tab. Backspace on a step without text removes it and puts the cursor at the end of the step before. A line that starts with "#" and a space becomes a heading, and Backspace on an empty heading makes it a step again. The Up and Down arrows move between the lines. Shift-Cmd-U ticks or unticks the step, and Ctrl-Cmd-Up and Ctrl-Cmd-Down move it. A click on a tick box ticks or unticks its step. The step you type in has a soft accent fill, and the keys show under the checklist while you type. Each step's right-click menu and the Checklist menu offer Tick Step or Untick Step, Make Heading or Make Step, Move Step Up, Move Step Down, and Delete Step. Start Job under a watch's jobs makes a job named "New Job", In progress, and puts the cursor in its title with the title selected, so typing replaces it. The reference pane can display a job, watch, or caliber item while another section remains open.
 
 ### Parts overview
 
@@ -141,7 +141,9 @@ Notes save as you type. A change saves half a second after typing stops, again w
 
 A fact on a record page, such as a caliber's beat rate, a watch's owner, or a job's title, problem, or waiting text, saves the same way: half a second after typing stops, when focus leaves the fact, and before the window closes or the app quits. Cmd-Z undoes a fact change after it saved, and Shift-Cmd-Z redoes it. Esc puts back the fact as it was when focus entered it. Tab and Shift-Tab move between facts in reading order, and Return in a one-line fact moves to the next one. Validation runs when focus leaves a fact. A value the fact does not take stays on screen and shows as not valid yet, with a message that says what to enter, such as "Enter a beat rate above 0 vph." As you type a maker, the makers in the library show under the field, and Tab or Return takes the first. The record keeps its last good value until the fact is corrected, and Undo never brings back a value that is not valid. Quitting while a fact is not valid or did not save asks before it quits. Leaving the record asks nothing.
 
-Forms that the Rework has not replaced yet show Save and Cancel. Cmd-S saves the active editor. Navigation, window closure, and app termination with an unsaved draft offer Save, Discard, or Stay. A failed save keeps the draft and shows a useful error. Buttons become disabled during their own pending operation. A success state appears only after persistence succeeds. W013 task changes follow the existing Save and Cancel editor pattern. Immediate task-row status actions remain proposed. Failure keeps the draft and the prior saved task state.
+Forms that the Rework has not replaced yet show Save and Cancel. Cmd-S saves the active editor. Navigation, window closure, and app termination with an unsaved draft offer Save, Discard, or Stay. A failed save keeps the draft and shows a useful error. Buttons become disabled during their own pending operation. A success state appears only after persistence succeeds.
+
+A checklist saves the same way as a fact: a step's text half a second after typing stops and when focus leaves it, and a tick, a heading, a move, or a removal at once, also before the window closes or the app quits. Cmd-Z undoes each burst of typing in a step and each other change, even after it saved, and Shift-Cmd-Z redoes it. Esc puts back the step's text as it was when focus entered it. A failed save keeps the steps on screen, says that the checklist did not save, and offers Try Again. Quitting while a checklist has not saved asks before it quits. Leaving the job asks nothing.
 
 ## 5 Records and validation
 
@@ -173,11 +175,11 @@ The state is In progress, Waiting, or Done. Only one job that is not Done can ex
 
 Libraries before W037 had six stages and kept an intake snapshot, an agreed scope, an intake condition, an outcome, recommendations, a cancellation reason, explanations for unfinished tasks and unresolved parts, and started, completed, and cancelled times, with activity records beside them. The W037 migration makes Planned, In progress, and Ready jobs In progress, keeps Waiting jobs Waiting with their waiting reason as their waiting text, and makes Completed and Cancelled jobs Done, with the time they completed or were cancelled as the done date. It writes the removed values into the job's notes under "From the old record", one line each, such as "Agreed scope: Full service" and "Outcome: Serviced, +3 s/d". A cancelled job's line reads "Cancelled: Owner declined the quote". An intake snapshot value is written only when the watch no longer holds it, such as "Serial at intake: 0012", and a snapshot of another version is written as it was saved. When the notes already have that heading, the values go under it. Then those fields go. The migration does not change any record's updated time.
 
-### Task
+### Checklist step
 
-Required: job ID, title, status, and ordering position. Optional: detail, group label, waiting reason, skipped reason. Status is To do, Doing, Waiting, Done, or Skipped. Waiting requires a reason or an unresolved linked part. Skipped requires a reason. Several tasks may be Doing. Reorder tasks within the job. No nested subtasks or time estimates are required.
+A job's checklist is a list of steps in order. Required: job ID, text, and position. A step is ticked or not, or it is a heading, which has no tick. The text is saved without the spaces around it, and a step without text is not saved. A checklist starts empty, and nothing creates or ticks steps for you. Steps and parts are independent, so a fitted part never ticks a step. No nested steps, checklist templates, copying steps from another job, time estimates, or links between steps and parts. The user decided on 4 November 2026 that checklists are typed by hand at first.
 
-TaskPart links tasks to parts from the same job. Foreign keys protect existence. The service validates that both belong to the same job. A task can link to several parts.
+Libraries before W039 kept tasks with a title, a detail, a group label, one of five statuses (To do, Doing, Waiting, Done, or Skipped), a waiting reason, a skipped reason, and links to the job's parts. The W039 migration makes each task a step with the same ID, in the same order. Done and Skipped tasks become ticked steps. A group label becomes a heading where the group changes from the task before, so a group that comes back gets its heading again, and a task without a group gets none. Each task's detail, waiting reason, and skipped reason go into the job's notes under "From the old record", after a line with the step's text, such as "Step · Let down the mainspring" and "Skipped reason: Already let down". When the notes already have that heading, the values go under it. Then the statuses, details, reasons, and links between tasks and parts go. The parts keep their own status. The migration does not change any record's updated time.
 
 ### Part requirement and links
 
@@ -213,17 +215,17 @@ Libraries before W037 kept activity records for job stage, watch condition, task
 
 ### Job states
 
-A job can move between In progress, Waiting, and Done in any order, from a pop-up on its page. A change saves at once. Cmd-Z puts back the state before, with its waiting text and done date, and Shift-Cmd-Z puts back the state it was given. Choosing Waiting puts the cursor in the waiting text, which is optional. Leaving Waiting clears the waiting text. Choosing Done records the day, and leaving Done clears it. The opened date never changes. No task or part action changes the state, and setting a job to Done keeps every task's and part's status, so a Done job can show less than 100 percent task progress.
+A job can move between In progress, Waiting, and Done in any order, from a pop-up on its page. A change saves at once. Cmd-Z puts back the state before, with its waiting text and done date, and Shift-Cmd-Z puts back the state it was given. Choosing Waiting puts the cursor in the waiting text, which is optional. Leaving Waiting clears the waiting text. Choosing Done records the day, and leaving Done clears it. The opened date never changes. No checklist or part action changes the state, and setting a job to Done keeps every step's tick and every part's status, so a Done job can show fewer steps done than it has.
 
-A Done job stays editable: its title, problem, tasks, parts, material, and notes can change. A job can leave Done only while its watch has no other open job. A job of an archived watch can change, also its state. Starting a job on a watch, or picking a watch for a job, needs a watch that is not archived.
+A Done job stays editable: its title, problem, checklist, parts, material, and notes can change. A job can leave Done only while its watch has no other open job. A job of an archived watch can change, also its state. Starting a job on a watch, or picking a watch for a job, needs a watch that is not archived.
 
-### Task progress
+### Checklist progress
 
-Count Done tasks divided by all tasks except Skipped. Show both counts and the percentage. A job with no counted tasks shows No tasks planned rather than 0 or 100 percent. Show skipped tasks separately. Waiting and Doing stay in the denominator. Adding a task can reduce the percentage. Reopening a done task reduces it immediately after the save succeeds.
+Count the ticked steps out of all steps, such as "6 of 10 done". Headings and steps without text do not count. The bar under the Checklist heading fills in the same proportion. A checklist without steps shows "No steps yet". Adding a step lowers the share done, and unticking one lowers it at once.
 
-### Parts and task waiting
+### Parts and steps
 
-A linked part is unresolved for a task while Needed or Ordered. Arrived and Installed satisfy availability. Cancelled does not satisfy the link; show that the task needs review. Changing a part status updates the task's availability indicators. It never changes the task status. Show Parts available on a waiting task once every linked part is available. The user chooses when to resume.
+Parts and steps are independent. A part's status never ticks or unticks a step, and a step never changes a part. The parts say on their own what still has to be bought or fitted.
 
 Users can correct a part status. Moving backwards or cancelling requires a reason. Clear milestone dates that no longer apply to the current status. Installing directly from Needed is allowed only after a confirmation that the part is on hand. Write the resulting arrival and installation milestones together. Cancelling preserves prior procurement details for reference.
 
@@ -239,7 +241,7 @@ Opening a photo or PDF tile shows it in the photo viewer or PDF reader. Opening 
 
 A watch or job page also shows its caliber's material as chips, such as "From Omega 552:". The chips open the caliber's material in place. The material stays on the caliber and is not copied.
 
-The bench pane pins one reference at a time. Switching job sections keeps it visible. Switching jobs clears the pin unless it belongs to the new job's watch or caliber. A read-only reference window can remain open while tasks are edited in the main window.
+The bench pane pins one reference at a time. Switching job sections keeps it visible. Switching jobs clears the pin unless it belongs to the new job's watch or caliber. A read-only reference window can remain open while the checklist is typed in the main window.
 
 ## 8 Customer information
 
@@ -263,7 +265,7 @@ Views render state and forward actions. Feature models own loading, drafts, and 
 
 GRDB is the sole approved runtime package. It provides SQLite access, observation, migrations, and backup support. W002 pins version 7.11.1 and its resolved revision through Swift Package Manager. Use Apple's frameworks for files, image decoding, and PDF viewing. This is a design choice supported by the [GRDB documentation](https://github.com/groue/GRDB.swift/blob/master/README.md).
 
-Use Swift 6 language mode with complete concurrency checking and approachable concurrency. UI state uses Observation and defaults to the main actor. Immutable values can be nonisolated. An async function alone does not move CPU or blocking work off the main actor; use dedicated actors or @concurrent functions for that work. Keep I/O and thumbnail work off the main actor. Publish UI state on the main actor. Serialize domain mutations through one application boundary. Use SQL transactions for related rows and their events. Observe committed data to refresh all relevant views. A repeated click while a command is pending must not create a duplicate task or order event.
+Use Swift 6 language mode with complete concurrency checking and approachable concurrency. UI state uses Observation and defaults to the main actor. Immutable values can be nonisolated. An async function alone does not move CPU or blocking work off the main actor; use dedicated actors or @concurrent functions for that work. Keep I/O and thumbnail work off the main actor. Publish UI state on the main actor. Serialize domain mutations through one application boundary. Use SQL transactions for related rows and their events. Observe committed data to refresh all relevant views. A repeated click while a command is pending must not create a duplicate step or order event.
 
 ### Local library
 
@@ -287,7 +289,7 @@ Do not place the live SQLite library in an iCloud Drive or Dropbox folder. File 
 
 Archive is reversible and separate from job completion. Archiving has no rules, as approved on 4 November 2026: any watch can be archived, even one with an open job, and that job stays in Jobs and can still change. Archive Watch and Unarchive Watch are commands in the Record menu and when you right-click a watch in the list. An archived watch's page also offers Unarchive in the toolbar. Cmd-Z undoes an archive or an unarchive, and Shift-Cmd-Z redoes it. Its jobs do not change. Archived watches and calibers are hidden from their lists, fold away in the Archived sections at the end of those lists, and stay in search. An archived record reads normally and cannot change until it is unarchived. A caliber in use can be archived without breaking its existing watch links. Calibers archive the same way, from the Record menu or a right-click. There is no separate Archive section.
 
-Top-level watch and job deletion is outside version 1. Archive covers their removal from normal views. Child tasks and part links can be removed after confirmation. A task with parts links must list those links in the confirmation. Part requirements use Cancelled to preserve procurement history. Material is removed at once without confirmation, and Cmd-Z brings it back. Removing material clears its selections and cover references. Undo puts the cover back if no other cover was chosen since. Its original file is deleted only when Undo can no longer bring it back, which is the next time the library opens. Retry failed cleanup safely at startup.
+Top-level watch and job deletion is outside version 1. Archive covers their removal from normal views. A checklist step is removed at once, with Backspace on a step without text or with Delete Step, and Cmd-Z brings it back. Part links can be removed after confirmation. Part requirements use Cancelled to preserve procurement history. Material is removed at once without confirmation, and Cmd-Z brings it back. Removing material clears its selections and cover references. Undo puts the cover back if no other cover was chosen since. Its original file is deleted only when Undo can no longer bring it back, which is the next time the library opens. Retry failed cleanup safely at startup.
 
 ### Backup
 
@@ -309,7 +311,7 @@ Global search covers watch identity, the watch's owner and contact, caliber desi
 
 Use bound SQL parameters. Define a consistent case-insensitive Unicode search key in Swift and keep it updated in each affected transaction. Use simple indexed queries and contains matching first. Introduce FTS only if the measured library size requires it. Do not rely on SQLite's basic NOCASE behavior for all languages.
 
-All status colors have text labels. Keyboard actions cover search, save, cancel, task completion, and reference navigation. Cmd-F focuses the toolbar's search field from every section, and Cmd-1 to Cmd-4 select the sections. Drag reorder has Move up and Move down alternatives. VoiceOver identifies controls, task progress, file errors, and current selection. It reads each in-place fact's label and value, and the watch picker as "Watch". The sidebar reads each section's count. Respect increased contrast and reduced motion. A selected row and keyboard focus remain distinguishable in both appearances.
+All status colors have text labels. Keyboard actions cover search, save, cancel, ticking a step, and reference navigation. Cmd-F focuses the toolbar's search field from every section, and Cmd-1 to Cmd-4 select the sections. Steps move with Ctrl-Cmd-Up and Ctrl-Cmd-Down, also from the Checklist menu. VoiceOver identifies controls, checklist progress, file errors, and current selection. It reads each in-place fact's label and value, the watch picker as "Watch", and each step's text and whether it is ticked. The sidebar reads each section's count. Respect increased contrast and reduced motion. A selected row and keyboard focus remain distinguishable in both appearances.
 
 ## 12 Verification and release acceptance
 
@@ -320,16 +322,16 @@ During rapid implementation, run `make lint` and `make build` before a PR is rea
 The first release passes these journeys:
 
 1. Create a watch with unknown specifications; restart and recover the saved record.
-2. Create a job, notes, tasks, and parts. Save a part with a URL, add another link, restart, and reopen both URLs.
+2. Create a job, notes, a checklist, and parts. Save a part with a URL, add another link, restart, and reopen both URLs.
 3. Import local files, remove their source copies, disconnect networking, and use the photos and PDF in the bench pane.
-4. Move a job to Waiting. Mark a part Arrived. See task availability change while its status remains Waiting.
-5. Complete, skip, add, and reopen tasks. Verify the defined progress count, including the no-task case.
+4. Move a job to Waiting. Mark a part Arrived. See that no step is ticked for you.
+5. Type, tick, untick, move, and remove steps. Verify the progress count, including a checklist without steps.
 6. Set a job to Done with an unresolved item written in its notes. Start another job on the same watch. Preserve the first job's notes and state.
 7. Export a backup with photo and technical PDF originals. Restore into an isolated library. Compare records and asset hashes.
 8. Simulate cancellation, disk-full behavior, corrupt backup data, and an interrupted restore. Keep at least one complete usable library.
 9. Use the main workflow by keyboard and inspect VoiceOver labels in both appearances.
 
-For a synthetic library of 500 watches, 1,000 jobs, 10,000 tasks, and 5,000 photo items, target a warm list or search response under 300 ms and an initial usable window under 3 seconds on the development Mac. These are proposed performance targets, not measured results. Record hardware and build mode when checking them. Originals load only when viewed. Thumbnail decoding must not freeze task input.
+For a synthetic library of 500 watches, 1,000 jobs, 10,000 checklist steps, and 5,000 photo items, target a warm list or search response under 300 ms and an initial usable window under 3 seconds on the development Mac. These are proposed performance targets, not measured results. Record hardware and build mode when checking them. Originals load only when viewed. Thumbnail decoding must not freeze typing.
 
 Release acceptance requires running on a Mac with the proposed minimum OS as well as the development OS, or explicitly recording that the minimum-OS run is still pending. The W001 app shell, W002 recoverable library, W003 watch records, W004 shared caliber records, W005 job intake and history, W006 job stages and watch condition, W007 scoped notes, and W008 technical reference links exist. Native UI and device acceptance is deferred to the release stage. Later bench features follow in their own issues. Full release checks remain future acceptance criteria.
 

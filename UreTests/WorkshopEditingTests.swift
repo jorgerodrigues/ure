@@ -17,34 +17,34 @@ struct WorkshopEditingTests {
         let editing = session.editing
         let observations = [
             Task { await session.watches.observe() }, Task { await session.jobs.observe() },
-            Task { await session.tasks.observe() },
+            Task { await session.parts.observe() },
         ]
         defer { observations.forEach { $0.cancel() } }
         try await waitUntil {
-            !session.watches.isLoading && !session.jobs.isLoading && !session.tasks.isLoading
+            !session.watches.isLoading && !session.jobs.isLoading && !session.parts.isLoading
         }
         #expect(!editing.canCancelDraft)
         // Starting a job saves it at once, so there is no draft to cancel.
         session.jobs.open(job)
         #expect(!editing.hasUnsavedChanges && !editing.canCancelDraft)
-        session.tasks.create(for: job.id, jobs: session.jobs)
+        session.parts.create(for: job.id, jobs: session.jobs)
         #expect(!editing.hasUnsavedChanges && editing.canCancelDraft)
         editing.cancelDraft()
-        #expect(session.tasks.draft == nil)
-        session.tasks.create(for: job.id, jobs: session.jobs)
-        session.tasks.draft?.title = "Keep this draft"
+        #expect(session.parts.draft == nil)
+        session.parts.create(for: job.id, jobs: session.jobs)
+        session.parts.draft?.description = "Keep this draft"
         var navigated = false
         editing.requestNavigation { navigated = true }
         #expect(!editing.canCancelDraft)
         editing.cancelDraft()
         #expect(!navigated && editing.isNavigationPending)
-        #expect(editing.unsavedChangesTitle == "Save changes to this task?")
-        #expect(session.tasks.draft?.title == "Keep this draft")
+        #expect(editing.unsavedChangesTitle == "Save changes to this part?")
+        #expect(session.parts.draft?.description == "Keep this draft")
         editing.stay()
         #expect(editing.canCancelDraft)
         editing.cancelDraft()
-        #expect(session.tasks.draft == nil)
-        #expect(try await coordinator.read(JobTaskQueries.fetchAll).isEmpty)
+        #expect(session.parts.draft == nil)
+        #expect(try await coordinator.read(PartQueries.fetchAll).isEmpty)
         observations.forEach { $0.cancel() }
         for observation in observations { await observation.value }
         try await coordinator.close()
@@ -83,6 +83,40 @@ struct WorkshopEditingTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
+    func aChecklistSavesWhenLeavingOrQuittingWithoutTheDraftQuestion() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        let session = WorkshopSession(
+            coordinator: coordinator, configuration: AppConfiguration(libraryRoot: fixture.root))
+        let editing = session.editing
+        let observation = Task { await session.checklist.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { !session.checklist.isLoading }
+        let editor = session.checklist.editor(for: job.id)
+        let step = editor.addID
+        editor.beginEditing(step)
+        editor.change(step, to: "Clean all parts", undoManager: nil)
+        #expect(editing.hasUnsavedFields && !editing.hasUnsavedChanges)
+        var navigated = false
+        editing.requestNavigation { navigated = true }
+        #expect(navigated && !editing.showsUnsavedChanges)
+        try await waitUntil { !editor.hasUnsavedChanges }
+        editor.change(step, to: "Clean all parts twice", undoManager: nil)
+        #expect(await editing.saveAllFields())
+        #expect(!editing.hasUnsavedFields)
+        #expect(
+            try await coordinator.read(ChecklistQueries.fetchAll).map(\.text) == [
+                "Clean all parts twice"
+            ])
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
     func watchFactsSaveWhenLeavingOrQuittingWithoutTheDraftQuestion() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
@@ -98,7 +132,7 @@ struct WorkshopEditingTests {
             jobs: jobs,
             notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
             material: MaterialState(service: MaterialService(coordinator: coordinator)),
-            tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
+            checklist: ChecklistState(service: ChecklistService(coordinator: coordinator)),
             parts: PartState(service: PartService(coordinator: coordinator)))
         let observations = [Task { await watches.observe() }, Task { await jobs.observe() }]
         defer { observations.forEach { $0.cancel() } }

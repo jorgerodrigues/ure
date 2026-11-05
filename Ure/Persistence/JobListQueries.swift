@@ -1,14 +1,14 @@
 import Foundation
 import GRDB
 
-// One row of the Jobs list: the job, its watch when it has one, how many of its tasks are done,
-// and how many of its parts are still to buy.
+// One row of the Jobs list: the job, its watch when it has one, how many of its checklist steps
+// are ticked, and how many of its parts are still to buy.
 nonisolated struct JobListRow: Equatable, Identifiable, Sendable {
     let job: JobRecord
     let watch: WatchRecord?
-    let progress: JobTaskProgress
+    let progress: ChecklistProgress
     let partsToBuy: Int
-    // The last change to the job, its tasks or its parts. Open jobs list the newest first.
+    // The last change to the job, its steps or its parts. Open jobs list the newest first.
     let updatedAt: Date
 
     var id: UUID { job.id }
@@ -29,23 +29,25 @@ nonisolated enum JobListQueries {
             sql:
                 "SELECT * FROM watch WHERE id IN (SELECT watchID FROM job WHERE id IN (\(listed)))",
             arguments: arguments)
-        let tasks = try JobTaskRecord.fetchAll(
-            db, sql: "SELECT * FROM jobTask WHERE jobID IN (\(listed))", arguments: arguments)
+        let steps = try ChecklistStepRecord.fetchAll(
+            db,
+            sql: "SELECT * FROM checklistStep WHERE jobID IN (\(listed)) ORDER BY position, id",
+            arguments: arguments)
         let parts = try PartRecord.fetchAll(
             db, sql: "SELECT * FROM partRequirement WHERE jobID IN (\(listed))",
             arguments: arguments)
         let watchesByID = Dictionary(uniqueKeysWithValues: watches.map { ($0.id, $0) })
-        let tasksByJob = Dictionary(grouping: tasks, by: \.jobID)
+        let stepsByJob = Dictionary(grouping: steps, by: \.jobID)
         let partsByJob = Dictionary(grouping: parts, by: \.jobID)
         return jobs.map { job in
-            let jobTasks = tasksByJob[job.id] ?? []
+            let jobSteps = stepsByJob[job.id] ?? []
             let jobParts = partsByJob[job.id] ?? []
             let updatedAt =
-                (jobTasks.map(\.updatedAt) + jobParts.map(\.updatedAt) + [job.updatedAt]).max()
+                (jobSteps.map(\.updatedAt) + jobParts.map(\.updatedAt) + [job.updatedAt]).max()
                 ?? job.updatedAt
             return JobListRow(
                 job: job, watch: job.watchID.flatMap { watchesByID[$0] },
-                progress: JobTaskProgress(tasks: jobTasks),
+                progress: ChecklistProgress(records: jobSteps),
                 partsToBuy: jobParts.filter { $0.status == .needed }.count, updatedAt: updatedAt)
         }
     }

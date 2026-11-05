@@ -169,7 +169,7 @@ nonisolated struct JobServiceTests {
     }
 
     @Test
-    func aDoneJobTakesEditsWithItsTasksPartsNotesAndMaterial() async throws {
+    func aDoneJobTakesEditsWithItsChecklistPartsNotesAndMaterial() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -177,8 +177,9 @@ nonisolated struct JobServiceTests {
         let watch = try await makeWatch(coordinator)
         let service = JobService(coordinator: coordinator)
         let job = try await service.start(for: watch.id, title: "Full service")
-        let tasks = JobTaskService(coordinator: coordinator)
-        let first = try await tasks.save(JobTaskFixture.draft(.toDo), for: job.id, editing: nil)
+        let checklist = ChecklistService(coordinator: coordinator)
+        let first = ChecklistStep(id: UUID(), text: "Fit the crystal")
+        _ = try await checklist.save([first], for: job.id)
         let parts = PartService(coordinator: coordinator)
         let part = try await parts.save(PartFixture.draft(), for: job.id, editing: nil)
         let done = try await service.setStage(job.id, to: .done).job
@@ -187,12 +188,12 @@ nonisolated struct JobServiceTests {
         let renamed = try await service.update(job.id, .title("Full service and crystal"))
         #expect(renamed.stage == .done && renamed.doneAt == done.doneAt)
         _ = try await service.update(job.id, .problem("Crystal cracked at the bench."))
-        var task = JobTaskDraft(task: first)
-        task.status = .done
-        let ticked = try await tasks.save(task, for: job.id, editing: first.id)
-        #expect(ticked.status == .done)
-        let second = try await tasks.save(JobTaskFixture.draft(.doing), for: job.id, editing: nil)
-        _ = try await tasks.move(second.id, for: job.id, to: .up)
+        var ticked = first
+        ticked.isTicked = true
+        let second = ChecklistStep(id: UUID(), text: "Pressure test")
+        #expect(
+            try await checklist.save([second, ticked], for: job.id).map(\.isTicked)
+                == [false, true])
         var order = PartDraft(part: part)
         order.status = .ordered
         order.orderReference = "PO-12"
@@ -203,9 +204,7 @@ nonisolated struct JobServiceTests {
         let link = try await MaterialService(coordinator: coordinator).addLink(
             try #require(URL(string: "https://example.org/crystal")), for: .job(job.id))
         #expect(link.jobID == job.id)
-        let left = try await ChildRemovalService(coordinator: coordinator).removeTask(
-            ticked.id, for: job.id, confirmedPartIDs: [])
-        #expect(left.map(\.id) == [second.id])
+        #expect(try await checklist.save([second], for: job.id).map(\.id) == [second.id])
         let saved = try #require(
             try await coordinator.read { try JobQueries.fetch(job.id, in: $0) })
         #expect(saved.stage == .done && saved.problem == "Crystal cracked at the bench.")

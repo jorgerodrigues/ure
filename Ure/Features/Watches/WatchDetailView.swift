@@ -360,7 +360,7 @@ private struct WatchJobs: View {
 // A job on the watch page: its state, title, task progress and date. The row opens the job.
 private struct WatchJobRow: View {
     @Environment(JobState.self) private var jobs
-    @Environment(JobTaskState.self) private var tasks
+    @Environment(ChecklistState.self) private var checklist
     @Environment(WorkshopEditing.self) private var editing
     let job: JobRecord
 
@@ -399,11 +399,7 @@ private struct WatchJobRow: View {
     }
 
     // Such as "6 of 10 done".
-    private var progress: String {
-        let progress = tasks.progress(for: job.id)
-        guard progress.countedCount > 0 else { return "No tasks planned" }
-        return "\(progress.doneCount) of \(progress.countedCount) done"
-    }
+    private var progress: String { checklist.progress(for: job.id).summary }
 
     // An open job says since when, such as "Since 12 Oct". A done job says when it was done.
     private var date: String {

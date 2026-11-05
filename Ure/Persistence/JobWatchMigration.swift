@@ -1,6 +1,6 @@
 import GRDB
 
-// Before v24, every job belonged to a watch. A new job can now start without one, and it shows
+// Before v25, every job belonged to a watch. A new job can now start without one, and it shows
 // "No watch yet" until you pick its watch. SQLite can't drop a NOT NULL, so the job table is
 // rebuilt with an optional watch. Every row keeps every value, so nothing typed changes.
 nonisolated enum JobWatchMigration {

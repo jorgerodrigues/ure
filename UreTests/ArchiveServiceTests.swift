@@ -15,8 +15,8 @@ nonisolated struct ArchiveServiceTests {
         let coordinator = fixture.coordinator(dependencies: LibraryDependencies(now: { clock }))
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let task = try await JobTaskService(coordinator: coordinator).save(
-            JobTaskFixture.draft(.toDo), for: job.id, editing: nil)
+        let steps = try await ChecklistService(coordinator: coordinator).save(
+            [ChecklistStep(id: UUID(), text: "Clean all parts")], for: job.id)
         let watchID = try #require(job.watchID)
         let prior = try #require(
             try await coordinator.read { try WatchQueries.fetch(watchID, in: $0) })
@@ -56,7 +56,7 @@ nonisolated struct ArchiveServiceTests {
         #expect(restored == prior)
         #expect(try await reopened.read { try JobQueries.fetch(closed.id, in: $0) } == closed)
         #expect(closed.title == renamed.title && closed.stage == .done)
-        #expect(try await reopened.read { try JobTaskQueries.fetch(task.id, in: $0) } == task)
+        #expect(try await reopened.read(ChecklistQueries.fetchAll) == steps)
         _ = try await JobService(coordinator: reopened).setStage(job.id, to: .inProgress)
         try await reopened.close()
     }

@@ -12,7 +12,7 @@ final class WorkshopSession {
     let jobList: JobListState
     let partsOverview: PartsOverviewState
     let notes: RecordNotesState
-    let tasks: JobTaskState
+    let checklist: ChecklistState
     let parts: PartState
     let material: MaterialState
     let editing: WorkshopEditing
@@ -23,13 +23,13 @@ final class WorkshopSession {
         watches = WatchState(service: WatchService(coordinator: coordinator))
         calibers = CaliberState(service: CaliberService(coordinator: coordinator))
         jobs = JobState(service: JobService(coordinator: coordinator))
-        tasks = JobTaskState(service: JobTaskService(coordinator: coordinator))
+        checklist = ChecklistState(service: ChecklistService(coordinator: coordinator))
         parts = PartState(service: PartService(coordinator: coordinator))
         notes = RecordNotesState(service: RecordNotesService(coordinator: coordinator))
         material = MaterialState(service: MaterialService(coordinator: coordinator))
         editing = WorkshopEditing(
             watches: watches, calibers: calibers, jobs: jobs, notes: notes, material: material,
-            tasks: tasks, parts: parts)
+            checklist: checklist, parts: parts)
         search = SearchState(coordinator: coordinator)
         jobList = JobListState(coordinator: coordinator)
         partsOverview = PartsOverviewState(coordinator: coordinator)
@@ -46,5 +46,6 @@ final class WorkshopSession {
         calibers.discardUndo()
         watches.discardUndo()
         jobs.discardUndo()
+        checklist.discardUndo()
     }
 }

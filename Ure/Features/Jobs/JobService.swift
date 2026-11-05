@@ -102,14 +102,14 @@ nonisolated struct JobService: Sendable {
     }
 
     // Removes a job that has nothing in it yet: no watch, the title it started with, and no
-    // problem, notes, tasks, parts or material. Anything else stays. True when it went.
+    // problem, notes, checklist steps, parts or material. Anything else stays. True when it went.
     func discardIfBlank(_ id: UUID) async throws -> Bool {
         try await coordinator.mutate { db, _, _ in
             guard let job = try JobQueries.fetch(id, in: db), job.watchID == nil,
                 job.title == Self.newTitle, job.problem == nil, job.waitingFor == nil,
                 (try RecordNotesQueries.fetch(.job(id), in: db) ?? "").isEmpty
             else { return false }
-            for table in ["jobTask", "partRequirement", "libraryItem"] {
+            for table in ["checklistStep", "partRequirement", "libraryItem"] {
                 let count =
                     try Int.fetchOne(
                         db, sql: "SELECT count(*) FROM \(table) WHERE jobID = ?",

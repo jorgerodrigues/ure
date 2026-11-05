@@ -63,13 +63,13 @@ struct WorkshopCommands: Commands {
             Button(archiveTitle, action: toggleArchive)
                 .disabled(!canArchive)
         }
-        CommandMenu("Task") {
-            Button("Move up", action: moveTaskUp)
-                .keyboardShortcut(.upArrow, modifiers: [.command, .option])
-                .disabled(!canMoveTask(.up))
-            Button("Move down", action: moveTaskDown)
-                .keyboardShortcut(.downArrow, modifiers: [.command, .option])
-                .disabled(!canMoveTask(.down))
+        CommandMenu("Checklist") {
+            ForEach(StepCommand.allCases, id: \.self) { command in
+                if command == .delete { Divider() }
+                StepCommandButton(
+                    command: command, step: canUseStepCommands ? editing.checklist.focusedStep : nil
+                )
+            }
         }
         CommandGroup(after: .sidebar) {
             Divider()
@@ -144,22 +144,17 @@ struct WorkshopCommands: Commands {
         navigation.focusSearch()
     }
 
-    // Only the task and part editors still save with ⌘S.
+    // Only the part editor still saves with ⌘S.
     private var canSave: Bool {
-        guard allowsEditing == true else { return false }
-        if editing.isSaving { return false }
-        if editing.parts.draft != nil { return editing.parts.canSave(jobs: editing.jobs) }
-        if editing.tasks.draft != nil { return editing.tasks.canSave(jobs: editing.jobs) }
-        return false
+        guard allowsEditing == true, !editing.isSaving, editing.parts.draft != nil else {
+            return false
+        }
+        return editing.parts.canSave(jobs: editing.jobs)
     }
 
     private func save() {
         guard allowsEditing == true, canSave else { return }
-        if editing.parts.draft != nil {
-            editing.parts.saveCommand()
-        } else {
-            editing.tasks.saveCommand()
-        }
+        editing.parts.saveCommand()
     }
 
     private func createRecord() {
@@ -187,20 +182,37 @@ struct WorkshopCommands: Commands {
 
     private func openReference() { openWindow(id: "reference") }
 
-    private func canMoveTask(_ destination: JobTaskMove) -> Bool {
-        guard allowsEditing == true,
-            navigation.selectedSection != .calibers,
-            !editing.isSaving, !editing.hasUnsavedChanges,
-            let task = editing.tasks.selectedTask, editing.jobs.selectedID == task.jobID
-        else { return false }
-        return editing.tasks.canMove(task.id, for: task.jobID, to: destination, jobs: editing.jobs)
+    // The Checklist menu acts on the step that has the cursor.
+    private var canUseStepCommands: Bool {
+        allowsEditing == true && !editing.isSaving && !editing.isNavigationPending
+    }
+}
+
+// A command in the Checklist menu for the step that has the cursor, such as Tick Step with ⇧⌘U.
+private struct StepCommandButton: View {
+    let command: StepCommand
+    let step: (editor: ChecklistEditor, id: UUID)?
+
+    var body: some View {
+        if let key = command.key {
+            button.keyboardShortcut(key, modifiers: command.modifiers)
+        } else {
+            button
+        }
     }
 
-    private func moveTaskUp() { moveTask(.up) }
-    private func moveTaskDown() { moveTask(.down) }
+    private var button: some View {
+        Button(command.title(for: step.flatMap { $0.editor.step($0.id) }), action: perform)
+            .disabled(!canPerform)
+    }
 
-    private func moveTask(_ destination: JobTaskMove) {
-        guard canMoveTask(destination), let task = editing.tasks.selectedTask else { return }
-        editing.tasks.moveCommand(task.id, for: task.jobID, to: destination, jobs: editing.jobs)
+    private var canPerform: Bool {
+        guard let step else { return false }
+        return step.editor.canPerform(command, for: step.id)
+    }
+
+    private func perform() {
+        guard let step else { return }
+        step.editor.perform(command, for: step.id, undoManager: NSApp.keyWindow?.undoManager)
     }
 }

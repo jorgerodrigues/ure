@@ -69,8 +69,8 @@ nonisolated struct CaliberMigrationTests {
         let staged = try await coordinator.stageRestore(from: package)
         #expect(
             staged.summary.appliedMigrations == [
-                "v21-caliber-facts", "v22-watch-owner", "v23-job-states",
-                "v24-jobs-without-watch",
+                "v21-caliber-facts", "v22-watch-owner", "v23-job-states", "v24-checklist-steps",
+                "v25-jobs-without-watch",
             ])
         #expect(staged.summary.counts["caliber"] == LegacyCaliberFixture.calibers.count)
         let result = try await coordinator.activateRestore(staged)

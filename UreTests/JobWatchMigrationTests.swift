@@ -19,7 +19,7 @@ nonisolated struct JobWatchMigrationTests {
                 jobs: try Row.fetchAll(db, sql: "SELECT * FROM job ORDER BY id").map(
                     StoredJob.init),
                 watchColumn: try db.columns(in: "job").first { $0.name == "watchID" },
-                tasks: try Int.fetchOne(db, sql: "SELECT count(*) FROM jobTask"),
+                steps: try Int.fetchOne(db, sql: "SELECT count(*) FROM checklistStep"),
                 parts: try Int.fetchOne(db, sql: "SELECT count(*) FROM partRequirement"),
                 items: try Int.fetchOne(db, sql: "SELECT count(*) FROM libraryItem"),
                 indexes: try String.fetchAll(
@@ -36,7 +36,7 @@ nonisolated struct JobWatchMigrationTests {
                     db, sql: "SELECT identifier FROM grdb_migrations ORDER BY rowid")
             )
         }
-        #expect(stored.migrations.last == "v24-jobs-without-watch")
+        #expect(stored.migrations.last == "v25-jobs-without-watch")
         #expect(stored.watchColumn?.isNotNull == false)
         #expect(stored.jobs.count == LegacyJobWatchFixture.jobs.count)
         for (row, job) in zip(stored.jobs, LegacyJobWatchFixture.jobs.sorted { $0.id < $1.id }) {
@@ -48,7 +48,7 @@ nonisolated struct JobWatchMigrationTests {
             #expect(row.notes == job.notes)
             #expect(row.searchKey == SearchKey.make([job.title, job.notes]))
         }
-        #expect(stored.tasks == 2 && stored.parts == 1 && stored.items == 1)
+        #expect(stored.steps == 2 && stored.parts == 1 && stored.items == 1)
         #expect(
             stored.indexes == [
                 "job_archivedAt", "job_one_open_per_watch", "job_searchKey", "job_watchID",
@@ -76,7 +76,7 @@ nonisolated struct JobWatchMigrationTests {
         let package = fixture.directory.appending(path: "before-jobs-without-watch.watchbackup")
         try LegacyJobWatchFixture.package(at: package)
         let staged = try await coordinator.stageRestore(from: package)
-        #expect(staged.summary.appliedMigrations == ["v24-jobs-without-watch"])
+        #expect(staged.summary.appliedMigrations == ["v25-jobs-without-watch"])
         #expect(staged.summary.counts["job"] == LegacyJobWatchFixture.jobs.count)
         let result = try await coordinator.activateRestore(staged)
         #expect(result.outcome == .restored)
@@ -172,8 +172,10 @@ nonisolated struct StoredJob: Sendable {
     }
 }
 
-// Puts a current library back to the schema before v24, where every job has a watch. The job
-// table is rebuilt with a required watch, so v24 runs again on the next open.
+// Puts a current library back to the schema before v25, where every job has a watch. The job
+// table is made again with the same definitions v23 used, so the schema matches v23's exactly,
+// and v25 runs again on the next open. The rows go back in after the old table goes, which keeps
+// SQLite's deferred foreign key count balanced.
 nonisolated enum JobWatchMigrationFixture {
     static func requireWatch(in db: Database) throws {
         try db.execute(sql: "PRAGMA defer_foreign_keys = ON")
@@ -181,20 +183,24 @@ nonisolated enum JobWatchMigrationFixture {
         try db.execute(sql: "DROP TRIGGER watch_cover_insert")
         try db.execute(sql: "DROP TRIGGER watch_cover_update")
         try db.drop(table: "job")
-        try db.execute(
-            sql: """
-                CREATE TABLE job (
-                    id TEXT PRIMARY KEY,
-                    watchID TEXT NOT NULL REFERENCES watch(id) ON DELETE RESTRICT,
-                    title TEXT NOT NULL CHECK (length(trim(title)) > 0),
-                    stage TEXT NOT NULL CHECK (stage IN ('In progress', 'Waiting', 'Done')),
-                    problem TEXT, waitingFor TEXT,
-                    createdAt DOUBLE NOT NULL, updatedAt DOUBLE NOT NULL, doneAt DOUBLE,
-                    searchKey TEXT NOT NULL DEFAULT '', archivedAt DOUBLE,
-                    notes TEXT NOT NULL DEFAULT '',
-                    CHECK (stage = 'Waiting' OR waitingFor IS NULL),
-                    CHECK ((stage = 'Done') = (doneAt IS NOT NULL)))
-                """)
+        try db.create(table: "job") { table in
+            table.column("id", .text).primaryKey()
+            table.column("watchID", .text).notNull().references("watch", onDelete: .restrict)
+            table.column("title", .text).notNull().check(sql: "length(trim(title)) > 0")
+            table.column("stage", .text).notNull()
+                .check(sql: "stage IN ('In progress', 'Waiting', 'Done')")
+            table.column("problem", .text)
+            table.column("waitingFor", .text)
+            for column in ["createdAt", "updatedAt"] {
+                table.column(column, .double).notNull()
+            }
+            table.column("doneAt", .double)
+            table.column("searchKey", .text).notNull().defaults(to: "")
+            table.column("archivedAt", .double)
+            table.column("notes", .text).notNull().defaults(to: "")
+            table.check(sql: "stage = 'Waiting' OR waitingFor IS NULL")
+            table.check(sql: "(stage = 'Done') = (doneAt IS NOT NULL)")
+        }
         try db.execute(
             sql: """
                 INSERT INTO job
@@ -226,14 +232,14 @@ nonisolated enum JobWatchMigrationFixture {
                     """)
         }
         try db.execute(
-            sql: "DELETE FROM grdb_migrations WHERE identifier = 'v24-jobs-without-watch'")
+            sql: "DELETE FROM grdb_migrations WHERE identifier = 'v25-jobs-without-watch'")
     }
 }
 
-// A library and a backup package made by the schema before v24. Every job has a watch: one In
-// progress with tasks, a part and a link, one Waiting, one Done and one archived.
+// A library and a backup package made by the schema before v25. Every job has a watch: one In
+// progress with checklist steps, a part and a link, one Waiting, one Done and one archived.
 nonisolated enum LegacyJobWatchFixture {
-    private static let lastMigration = "v23-job-states"
+    private static let lastMigration = "v24-checklist-steps"
 
     struct Job {
         let id: String
@@ -338,9 +344,10 @@ nonisolated enum LegacyJobWatchFixture {
             }
             try db.execute(
                 sql: """
-                    INSERT INTO jobTask (id, jobID, title, status, createdAt, updatedAt, position)
-                    VALUES ('00000000-0000-4000-8000-000000002421', ?, 'Clean', 'Done', 12, 12, 0),
-                        ('00000000-0000-4000-8000-000000002422', ?, 'Oil', 'To do', 12, 12, 1)
+                    INSERT INTO checklistStep (id, jobID, position, text, isTicked, createdAt,
+                        updatedAt)
+                    VALUES ('00000000-0000-4000-8000-000000002421', ?, 0, 'Clean', 1, 12, 12),
+                        ('00000000-0000-4000-8000-000000002422', ?, 1, 'Oil', 0, 12, 12)
                     """, arguments: [jobs[0].id, jobs[0].id])
             try db.execute(
                 sql: """

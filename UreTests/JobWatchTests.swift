@@ -27,8 +27,10 @@ struct JobWatchTests {
         _ = try await service.update(id, .problem("The crystal is cracked."))
         try await RecordNotesService(coordinator: coordinator).save(
             "Ask for the box.", for: .job(id))
-        let task = try await JobTaskService(coordinator: coordinator).save(
-            JobTaskFixture.draft(.toDo), for: id, editing: nil)
+        let step = try #require(
+            try await ChecklistService(coordinator: coordinator).save(
+                [ChecklistStep(id: UUID(), text: "Fit the new crystal")], for: id
+            ).first)
         let part = try await PartService(coordinator: coordinator).save(
             PartFixture.draft(), for: id, editing: nil)
         let link = try await MaterialFixture.link(
@@ -48,7 +50,9 @@ struct JobWatchTests {
         #expect(
             try await RecordNotesService(coordinator: reopened).text(for: .job(id))
                 == "Ask for the box.")
-        #expect(try await reopened.read { try JobTaskQueries.fetch(task.id, in: $0) }?.jobID == id)
+        #expect(
+            try await reopened.read { try ChecklistQueries.ordered(for: id, in: $0) }.map(\.id)
+                == [step.id])
         #expect(
             try await reopened.read(PartsOverviewQueries.fetch).map(\.id) == [part.id])
         #expect(
@@ -325,8 +329,8 @@ struct JobWatchTests {
         let noted = try await service.start(for: nil)
         try await RecordNotesService(coordinator: coordinator).save("Box", for: .job(noted.id))
         let tasked = try await service.start(for: nil)
-        _ = try await JobTaskService(coordinator: coordinator).save(
-            JobTaskFixture.draft(.toDo), for: tasked.id, editing: nil)
+        _ = try await ChecklistService(coordinator: coordinator).save(
+            [ChecklistStep(id: UUID(), text: "Clean")], for: tasked.id)
         let watched = try await JobTaskFixture.job(coordinator)
         _ = try await service.update(watched.id, .title(JobService.newTitle))
         for job in [titled, problem, noted, tasked, watched] {

@@ -134,11 +134,12 @@ struct InPlaceTextView: NSViewRepresentable {
     }
 }
 
-final class InPlaceTextField: NSTextField {
+class InPlaceTextField: NSTextField {
     var onBeginEditing: () -> Void = {}
     private let suggestionView = SuggestionTextView()
-    private let textFont: NSFont
+    private var textFont: NSFont
     private var focusRequest: (() -> Void)?
+    private var focusCursor: StepCursor?
 
     init(prompt: String, style: InPlaceStyle) {
         textFont = style.font
@@ -161,6 +162,17 @@ final class InPlaceTextField: NSTextField {
     }
 
     required init?(coder: NSCoder) { return nil }
+
+    // A checklist line changes its font when it becomes a heading, and keeps the cursor.
+    func setStyle(_ style: InPlaceStyle) {
+        guard textFont != style.font else { return }
+        let prompt = placeholderAttributedString?.string ?? ""
+        textFont = style.font
+        font = textFont
+        suggestionView.font = textFont
+        placeholderAttributedString = NSAttributedString(
+            string: prompt, attributes: [.font: textFont, .foregroundColor: NSColor.clear])
+    }
 
     // Shows a value at rest, with its unit in the secondary colour, such as "19,800" and " vph".
     func show(_ text: String, unit: String?) {
@@ -205,10 +217,12 @@ final class InPlaceTextField: NSTextField {
         performFocusRequest()
     }
 
-    // Puts the cursor here with the text selected once the field is in a window.
-    func requestFocus(then didFocus: @escaping () -> Void) {
+    // Puts the cursor here once the field is in a window: with the text selected, or at the
+    // start or the end of the text.
+    func requestFocus(placing cursor: StepCursor? = nil, then didFocus: @escaping () -> Void) {
         guard focusRequest == nil, currentEditor() == nil else { return }
         focusRequest = didFocus
+        focusCursor = cursor
         performFocusRequest()
     }
 
@@ -277,12 +291,19 @@ final class InPlaceTextField: NSTextField {
 
     private func performFocusRequest() {
         guard let didFocus = focusRequest, window != nil else { return }
+        let cursor = focusCursor
         focusRequest = nil
+        focusCursor = nil
         Task { @MainActor [weak self] in
-            guard let self, let window = self.window, window.makeFirstResponder(self) else {
-                return
+            guard let self, let window = self.window, window.makeFirstResponder(self),
+                let editor = self.currentEditor()
+            else { return }
+            let length = (editor.string as NSString).length
+            switch cursor {
+            case .start: editor.selectedRange = NSRange(location: 0, length: 0)
+            case .end: editor.selectedRange = NSRange(location: length, length: 0)
+            case nil: editor.selectAll(nil)
             }
-            self.currentEditor()?.selectAll(nil)
             didFocus()
         }
     }
@@ -315,14 +336,17 @@ final class SuggestionTextView: NSView {
 }
 
 // The body style is a 15 pt fact. The title style is the 26 pt bold name in a page header.
+// A checklist heading is a 12 pt semibold line.
 enum InPlaceStyle {
     case body
     case title
+    case heading
 
     var font: NSFont {
         switch self {
         case .body: .systemFont(ofSize: InPlaceLayout.textSize)
         case .title: .systemFont(ofSize: InPlaceLayout.titleSize, weight: .bold)
+        case .heading: .systemFont(ofSize: ChecklistLayout.headingSize, weight: .semibold)
         }
     }
 
@@ -330,6 +354,7 @@ enum InPlaceStyle {
         switch self {
         case .body: InPlaceLayout.boxHeight
         case .title: InPlaceLayout.titleBoxHeight
+        case .heading: ChecklistLayout.headingLineHeight
         }
     }
 }

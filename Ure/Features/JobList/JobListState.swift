@@ -184,8 +184,8 @@ enum JobListWording {
             return "\(row.job.title) · Done \(ArchivedDate.short(doneAt, now: now))"
         case .inProgress:
             var parts = [row.job.title]
-            if row.progress.countedCount > 0 {
-                parts.append("\(row.progress.doneCount) of \(row.progress.countedCount)")
+            if row.progress.stepCount > 0 {
+                parts.append("\(row.progress.doneCount) of \(row.progress.stepCount)")
             }
             if row.partsToBuy > 0 { parts.append("\(row.partsToBuy) to buy") }
             return parts.joined(separator: " · ")

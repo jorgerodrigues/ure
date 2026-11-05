@@ -59,19 +59,17 @@ nonisolated enum PerformanceFixture {
                             open ? nil : date, date, date + Double(jobIndex),
                         ])
                     for position in 0..<10 {
-                        let status = ["To do", "Doing", "Waiting", "Done", "Skipped"][position % 5]
                         try db.execute(
                             sql: """
-                                INSERT INTO jobTask (id, jobID, position, title, detail, status,
-                                    waitingReason, skippedReason, createdAt, updatedAt)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                INSERT INTO checklistStep (id, jobID, position, text, isHeading,
+                                    isTicked, createdAt, updatedAt)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                                 """,
                             arguments: [
                                 try id(4, jobIndex * 10 + position).uuidString, jobID, position,
-                                "Inspect movement \(position)",
-                                String(repeating: "Saved bench detail. ", count: 30),
-                                status, status == "Waiting" ? "Await inspection" : nil,
-                                status == "Skipped" ? "Not required" : nil, date,
+                                position % 5 == 0
+                                    ? "Stage \(position / 5)" : "Inspect movement \(position)",
+                                position % 5 == 0, position % 5 >= 3, date,
                                 date + Double(jobIndex + position),
                             ])
                     }
@@ -131,7 +129,6 @@ nonisolated enum PerformanceFixture {
                 arguments: [
                     try id(9, index * 2 + position).uuidString, partID, position, date, date,
                 ])
-            try TaskPart(taskID: id(4, index * 10 + position), partID: id(8, index)).insert(db)
         }
     }
 

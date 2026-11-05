@@ -29,7 +29,7 @@ def expected_results():
     expected = {
         "watches": [record_id(2, i) for i in range(500)],
         "jobs": [record_id(3, i) for i in range(1000)],
-        "tasks": [record_id(4, i) for i in range(10000)],
+        "steps": [record_id(4, i) for i in range(10000)],
         "photos": [record_id(6, i) for i in range(5000)],
         "bench": [record_id(6, i) for i in range(5000)],
         "parts": [record_id(8, i * 2) for i in range(450)],
@@ -60,14 +60,14 @@ def inspect_fixture(case):
     with sqlite3.connect((generation / "library.sqlite").as_uri() + "?mode=ro", uri=True) as db:
         require(db.execute("PRAGMA integrity_check").fetchone() == ("ok",), "Database integrity")
         require(not db.execute("PRAGMA foreign_key_check").fetchall(), "Foreign keys")
-        tables = ["caliber", "watch", "job", "jobTask", "partRequirement", "partLink", "taskPart", "fileAsset", "libraryItem"]
+        tables = ["caliber", "watch", "job", "checklistStep", "partRequirement", "partLink", "fileAsset", "libraryItem"]
         for table in tables:
             rows = db.execute(f"SELECT * FROM {table} ORDER BY rowid").fetchall()
             counts[table] = len(rows)
             digest.update(json.dumps([table, rows], ensure_ascii=False).encode())
         assets = db.execute("SELECT storageKey, byteCount, sha256 FROM fileAsset ORDER BY id").fetchall()
-    require(counts == dict(caliber=50, watch=500, job=1000, jobTask=10000,
-                           partRequirement=1000, partLink=2000, taskPart=2000, fileAsset=5000, libraryItem=5000), "Fixture counts")
+    require(counts == dict(caliber=50, watch=500, job=1000, checklistStep=10000,
+                           partRequirement=1000, partLink=2000, fileAsset=5000, libraryItem=5000), "Fixture counts")
     require(len(list((generation / "originals").iterdir())) == 5000, "Original file count")
     for key, size, sha in assets:
         original = generation / "originals" / key

@@ -22,9 +22,9 @@ struct JobListStateTests {
         #expect(list.rows.isEmpty && list.subtitle == "No open jobs")
         let job = try await JobTaskFixture.job(coordinator)
         try await JobListFixture.waitUntil { list.rows.count == 1 }
-        #expect(list.rows.first?.progress.countedCount == 0)
-        let tasks = JobTaskService(coordinator: coordinator)
-        _ = try await tasks.save(JobTaskFixture.draft(.done), for: job.id, editing: nil)
+        #expect(list.rows.first?.progress.stepCount == 0)
+        _ = try await ChecklistService(coordinator: coordinator).save(
+            [ChecklistStep(id: UUID(), text: "Clean all parts", isTicked: true)], for: job.id)
         try await JobListFixture.waitUntil { list.rows.first?.progress.doneCount == 1 }
         let parts = PartService(coordinator: coordinator)
         let part = try await parts.save(PartFixture.draft(), for: job.id, editing: nil)
@@ -81,19 +81,19 @@ struct JobListStateTests {
         _ = try await jobs.setStage(second.id, to: .waiting)
         _ = try await jobs.update(second.id, .waitingFor("A mainspring"))
         let unwatched = try await jobs.start(for: nil, title: "New crystal")
-        let task = try await JobTaskService(coordinator: coordinator).save(
-            JobTaskFixture.draft(.toDo), for: first.id, editing: nil)
+        let part = try await PartService(coordinator: coordinator).save(
+            PartFixture.draft(), for: first.id, editing: nil)
         let editing = JobListFixture.editing(coordinator)
         let list = JobListState(
             coordinator: coordinator, now: { now }, calendar: JobListTests.calendar)
         let observations = [
             Task { await list.observe() }, Task { await editing.watches.observe() },
-            Task { await editing.jobs.observe() }, Task { await editing.tasks.observe() },
+            Task { await editing.jobs.observe() }, Task { await editing.parts.observe() },
         ]
         defer { observations.forEach { $0.cancel() } }
         try await JobListFixture.waitUntil {
             !list.isLoading && !editing.watches.isLoading && !editing.jobs.isLoading
-                && !editing.tasks.isLoading
+                && !editing.parts.isLoading
         }
         list.open(first.id, editing: editing)
         #expect(editing.jobs.selectedID == first.id && editing.watches.selectedID == first.watchID)
@@ -110,21 +110,22 @@ struct JobListStateTests {
         list.clearSearch()
         #expect(list.selectionMessage(for: editing.jobs.selectedJob) == nil)
 
-        // A task draft asks before another job opens.
-        editing.tasks.open(task, for: first.id)
-        editing.tasks.edit(jobs: editing.jobs)
-        editing.tasks.draft?.title = "Keep my draft"
+        // A part draft asks before another job opens.
+        let opened = try #require(editing.parts.records(for: first.id).first { $0.id == part.id })
+        editing.parts.open(opened, for: first.id)
+        editing.parts.edit(jobs: editing.jobs)
+        editing.parts.draft?.description = "Keep my draft"
         list.open(second.id, editing: editing)
         #expect(editing.showsUnsavedChanges && editing.jobs.selectedID == first.id)
         editing.stay()
-        #expect(editing.tasks.draft?.title == "Keep my draft")
+        #expect(editing.parts.draft?.description == "Keep my draft")
         list.open(second.id, editing: editing)
         await editing.saveAndContinue()
         #expect(
             editing.jobs.selectedID == second.id && editing.watches.selectedID == second.watchID)
-        #expect(editing.tasks.jobID == nil && editing.parts.jobID == nil)
-        let saved = try await coordinator.read { try JobTaskQueries.fetch(task.id, in: $0) }
-        #expect(saved?.title == "Keep my draft")
+        #expect(editing.parts.jobID == nil)
+        let saved = try await coordinator.read { try PartQueries.fetch(part.id, in: $0) }
+        #expect(saved?.record.description == "Keep my draft")
 
         // A job without a watch opens with no watch selected, and can still be written on.
         list.open(unwatched.id, editing: editing)
@@ -149,7 +150,7 @@ extension JobListFixture {
             jobs: JobState(service: JobService(coordinator: coordinator)),
             notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
             material: MaterialState(service: MaterialService(coordinator: coordinator)),
-            tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
+            checklist: ChecklistState(service: ChecklistService(coordinator: coordinator)),
             parts: PartState(service: PartService(coordinator: coordinator)))
     }
 }

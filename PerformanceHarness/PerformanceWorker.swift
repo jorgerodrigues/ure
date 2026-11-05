@@ -89,8 +89,8 @@ nonisolated struct PerformanceMeasurements: Sendable {
         try await measure("jobs", into: &report) { db in
             try JobQueries.fetchAll(db).map { $0.id.uuidString }
         }
-        try await measure("tasks", into: &report) { db in
-            try TaskPartQueries.snapshot(db).tasks.map { $0.id.uuidString }
+        try await measure("steps", into: &report) { db in
+            try ChecklistQueries.fetchAll(db).map { $0.id.uuidString }
         }
         try await measure("photos", into: &report) { db in
             try MaterialQueries.fetchAll(db).map { $0.id.uuidString }
@@ -107,8 +107,8 @@ nonisolated struct PerformanceMeasurements: Sendable {
             let rows = try JobListQueries.fetch(db, doneSince: cutoff)
             guard
                 rows.allSatisfy({ row in
-                    row.progress.doneCount == 2 && row.progress.countedCount == 8
-                        && row.progress.skippedCount == 2 && row.watch?.id == row.job.watchID
+                    row.progress.doneCount == 4 && row.progress.stepCount == 8
+                        && row.watch?.id == row.job.watchID
                 })
             else { throw PerformanceError.changedResults }
             return rows.map { $0.id.uuidString }

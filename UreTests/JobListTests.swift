@@ -95,10 +95,14 @@ struct JobListTests {
         _ = try await coordinator.open()
         let jobs = JobService(coordinator: coordinator)
         let service = try await JobTaskFixture.job(coordinator)
-        let tasks = JobTaskService(coordinator: coordinator)
-        for status in [JobTaskStatus.done, .done, .toDo, .skipped] {
-            _ = try await tasks.save(JobTaskFixture.draft(status), for: service.id, editing: nil)
-        }
+        // Two of three steps are ticked. The heading does not count.
+        _ = try await ChecklistService(coordinator: coordinator).save(
+            [
+                ChecklistStep(id: UUID(), text: "Cleaning", isHeading: true),
+                ChecklistStep(id: UUID(), text: "Clean all parts", isTicked: true),
+                ChecklistStep(id: UUID(), text: "Inspect pivots", isTicked: true),
+                ChecklistStep(id: UUID(), text: "Oil the movement"),
+            ], for: service.id)
         let parts = PartService(coordinator: coordinator)
         _ = try await parts.save(PartFixture.draft(), for: service.id, editing: nil)
         let ordered = try await parts.save(PartFixture.draft(), for: service.id, editing: nil)
@@ -160,15 +164,17 @@ struct JobListTests {
         _ = try await coordinator.open()
         let older = try await JobTaskFixture.job(coordinator)
         let newer = try await JobTaskFixture.job(coordinator)
-        let task = try await JobTaskService(coordinator: coordinator).save(
-            JobTaskFixture.draft(.toDo), for: older.id, editing: nil)
+        let step = try #require(
+            try await ChecklistService(coordinator: coordinator).save(
+                [ChecklistStep(id: UUID(), text: "Clean all parts")], for: older.id
+            ).first)
         let first = try await JobListFixture.done(coordinator, at: try Self.daysAgo(10))
         let second = try await JobListFixture.done(coordinator, at: try Self.daysAgo(2))
         try await coordinator.mutate { db, _, _ in
             try db.execute(sql: "UPDATE job SET updatedAt = 100")
             try db.execute(
-                sql: "UPDATE jobTask SET updatedAt = 300 WHERE id = ?",
-                arguments: [task.id.uuidString])
+                sql: "UPDATE checklistStep SET updatedAt = 300 WHERE id = ?",
+                arguments: [step.id.uuidString])
             try db.execute(
                 sql: "UPDATE job SET updatedAt = 200 WHERE id = ?",
                 arguments: [newer.id.uuidString])

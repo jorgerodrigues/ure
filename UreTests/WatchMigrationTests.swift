@@ -76,7 +76,8 @@ nonisolated struct WatchMigrationTests {
         let staged = try await coordinator.stageRestore(from: package)
         #expect(
             staged.summary.appliedMigrations == [
-                "v22-watch-owner", "v23-job-states", "v24-jobs-without-watch",
+                "v22-watch-owner", "v23-job-states", "v24-checklist-steps",
+                "v25-jobs-without-watch",
             ])
         #expect(staged.summary.counts["watch"] == LegacyWatchFixture.watches.count)
         #expect(staged.summary.counts["job"] == LegacyWatchFixture.jobs.count)
