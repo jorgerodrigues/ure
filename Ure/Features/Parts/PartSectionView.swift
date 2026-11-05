@@ -263,7 +263,7 @@ private struct PartEntryLine: View {
                 PartEntryBox(isTyping: entry.isEditingDescription) {
                     PartEntryTextView(
                         entry: entry, role: .description, isEditable: true,
-                        identifier: "addPartDescription-\(entry.jobID.uuidString)",
+                        identifier: "\(PartEntryWording.descriptionID)\(entry.jobID.uuidString)",
                         submit: submit
                     )
                     .overlay(alignment: .leading) {

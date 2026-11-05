@@ -113,10 +113,12 @@ struct PartEntryTextView: NSViewRepresentable {
             switch selector {
             case #selector(NSResponder.insertNewline(_:)):
                 if entry.isBlank {
-                    // Return on an empty line moves on, like Tab, so the checklist can follow.
-                    if !InPlaceTextField.moveFocus(from: control, forward: true) {
-                        control.window?.makeFirstResponder(nil)
+                    // Return on an empty line moves on past the line's own description, so the
+                    // checklist can follow.
+                    let moved = InPlaceTextField.moveFocus(from: control, forward: true) {
+                        $0.accessibilityIdentifier().hasPrefix(PartEntryWording.descriptionID)
                     }
+                    if !moved { control.window?.makeFirstResponder(nil) }
                 } else {
                     submit()
                     // The line empties at once, also before SwiftUI draws it again, and the
@@ -163,4 +165,6 @@ struct PartEntryTextView: NSViewRepresentable {
 enum PartEntryWording {
     static let prompt = "Add a part or use a spare"
     static let descriptionPrompt = "Description"
+    // The start of the add line's description field's identifier.
+    static let descriptionID = "addPartDescription-"
 }
