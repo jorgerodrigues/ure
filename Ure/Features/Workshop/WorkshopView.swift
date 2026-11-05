@@ -113,9 +113,11 @@ struct WorkshopView: View {
         if navigation.selectedSection == .jobs {
             Group {
                 if jobs.selectedID == nil {
+                    // A New Job that did not save says why here, since no job is selected.
                     ContentUnavailableView(
                         "Select a job", systemImage: WorkshopSection.jobs.symbol,
-                        description: Text("Choose a job, or start one with New Job."))
+                        description: Text(
+                            jobs.saveError ?? "Choose a job, or start one with New Job."))
                 } else {
                     JobDetailView()
                 }

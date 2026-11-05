@@ -49,10 +49,13 @@ final class WatchPickerModel {
         let watches = editing.watches
         switch item {
         case .watch(let choice) where choice.openJob != nil:
+            // The pick belongs to the job it started on. Choosing another job while the fields
+            // save stops it.
+            let jobID = jobs.selectedID
             let saved = await editing.saveAllFields()
-            guard
-                let job = await jobs.openOpenJob(
-                    of: choice.watch.id, discardingBlank: saved && !editing.hasUnsavedFields)
+            guard jobs.selectedID == jobID else { return false }
+            let blankID = saved && !editing.hasUnsavedFields ? jobID : nil
+            guard let job = await jobs.openOpenJob(of: choice.watch.id, discardingBlank: blankID)
             else { return false }
             watches.select(job.watchID)
         case .watch(let choice):

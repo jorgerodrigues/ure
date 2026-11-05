@@ -276,6 +276,39 @@ struct JobWatchTests {
         try await coordinator.close()
     }
 
+    @Test(.timeLimit(.minutes(1)))
+    func openingAWatchsJobDiscardsOnlyTheBlankJobItNamesAndAFailedNewJobSaysWhy() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let service = JobService(coordinator: coordinator)
+        let watch = try await WatchService(coordinator: coordinator).make("Ventura")
+        let open = try await service.start(for: watch.id)
+        let first = try await service.start(for: nil)
+        let second = try await service.start(for: nil)
+        let state = JobState(service: service)
+        let observation = Task { await state.observe() }
+        defer { observation.cancel() }
+        try await JobListFixture.waitUntil { state.jobs.count == 3 }
+        state.open(try #require(state.jobs.first { $0.id == second.id }))
+        #expect(await state.openOpenJob(of: watch.id, discardingBlank: nil)?.id == open.id)
+        #expect(try await stored(second.id, coordinator) != nil)
+        state.open(try #require(state.jobs.first { $0.id == second.id }))
+        #expect(await state.openOpenJob(of: watch.id, discardingBlank: first.id)?.id == open.id)
+        #expect(try await stored(first.id, coordinator) == nil)
+        #expect(try await stored(second.id, coordinator) != nil)
+
+        state.close()
+        try await JobTaskFixture.failWrites(coordinator, on: "job")
+        #expect(await !state.create())
+        #expect(state.selectedID == nil && state.saveError != nil)
+        try await JobTaskFixture.allowWrites(coordinator, on: "job")
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
     @Test
     func onlyAJobWithNothingInItIsDiscarded() async throws {
         let fixture = WatchFixture()
