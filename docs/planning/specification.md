@@ -81,6 +81,8 @@ Changing one does not change the others. A task count is not an estimate of rema
 
 Create a watch with a name only. All other specifications can remain unknown. Add the brand, model, case reference, serial number, caliber, owner, and contact when they are known. Start a job and write its title and what is wrong with the watch. Add initial photos. Anything else goes in the job's notes.
 
+Work comes first, so a job can also start before its watch is in the library. Cmd-N in Jobs makes a job, and the watch picker comes after its title. The picker finds the watch by name, brand, or caliber, or makes a new watch with the name you typed. Until you pick one, the job shows "No watch yet" and keeps everything you write on it.
+
 ### Plan and source
 
 Add tasks in the order they will be done. Group them under optional stage labels such as Inspection, Disassembly, Cleaning, Assembly, and Testing. These are user-entered labels. Add required parts and save links to listings or references. Mark uncertain compatibility explicitly. Link a task to a required part when that part holds up the task.
@@ -91,7 +93,7 @@ Open a job. Keep the task list visible beside a pinned photo or technical PDF. Z
 
 ### Pause and resume
 
-Set a job to Waiting and say what it waits for. The workshop overview shows that text, unfinished tasks, and parts still required. Return later and open the same job and reference item. Restarting the app retains saved content and the last selected job. Window size and reference selection are preferences, not repair history.
+Set a job to Waiting and say what it waits for. The Jobs list shows that text under Waiting, and each job in progress shows its task count and its parts still to buy. Return later and open the same job and reference item. Restarting the app retains saved content and the last selected job. Window size and reference selection are preferences, not repair history.
 
 ### Finish and retain history
 
@@ -103,13 +105,17 @@ Use standard macOS controls, system typography, native menus, keyboard focus, an
 
 ### Main window
 
-The sidebar contains Workshop, Watches, Calibers, and Parts. Settings is in the app menu. A middle list shows the selected section's records. The detail area shows the selected record. A search field filters the current section. A separate global search action returns grouped results.
+The sidebar has two groups, laid out as on every window artboard: Workshop with Jobs and Parts, and Library with Watches and Calibers. Each section shows a plain count. Jobs counts the jobs its list shows, Parts the parts still to buy, and Watches and Calibers the records that are not archived. Cmd-1 to Cmd-4 select Jobs, Parts, Watches, and Calibers. Settings is in the app menu. A middle list shows the selected section's records. The detail area shows the selected record.
+
+The toolbar shows the section's title with a subtitle, such as "Jobs" and "4 open · 1 waiting", the section's New button, such as "New Job", and a search field with the prompt "Search". The search field filters the current section, and Cmd-F puts the cursor in it from every section. Search Library, Shift-Cmd-F in the Edit menu, returns grouped results from the whole library. Every toolbar button is also a menu command with the same name, such as New Job with Cmd-N.
 
 At a proposed minimum window size of 1000 by 650 points, show the list and detail without clipped controls. The optional reference pane can collapse. At larger widths it can sit beside tasks or notes. The app has one main editing window in version 1. A reference window may be opened read-only.
 
-### Workshop
+### Jobs
 
-Show open jobs grouped by In progress and Waiting. Each row has a watch thumbnail, watch and job names, state, task count, what a waiting job waits for, and unresolved part count. Filters support stage and text. Default order is most recently updated. An open job stays here when its watch is archived. Done jobs are available on their watch's page and in search.
+Jobs replaces the workshop overview, laid out as the "6 New job" artboard. It groups jobs under In progress, Waiting, and Done recently, and shows each open job once. Done recently holds the jobs done on any day from 30 days ago to today. Older Done jobs stay on their watch's page and in search. A row shows the watch's cover, the watch's name, and a line such as "Full service · 6 of 10 · 1 to buy": the job's title, its done and counted tasks, and its parts still to buy. A waiting job's line says what it waits for, such as "Waiting for a mainspring", and a done job's line when it was done, such as "New crystal · Done 2 Oct". Open jobs list the latest change to the job, its tasks, or its parts first, and done jobs the latest done first. The search matches the watch's name, brand, model, and owner, the job's title, and what it waits for. An open job stays here when its watch is archived.
+
+Cmd-N in Jobs and the New Job toolbar button make a job named "New Job", In progress, without a watch. They select it and put the cursor in its title with the title selected, so typing replaces it. Return moves to the watch picker, as on "6 New job". A job without a watch has no cover, and its row shows its title with "No watch yet". Its page shows the Watch fact as a search field, and the caliber, owner, and contact say "Comes from the watch". The picker finds watches that are not archived by name, brand, or caliber, at most six, with the watches free for a job first. Each shows its brand, year, and caliber, such as "Hamilton · 1940s · Hamilton 992B". Return takes the highlighted watch, and the arrows move the highlight. The last row makes a new watch with the typed name, such as "New watch named “ham”". Picking a watch gives the job that watch, and Cmd-Z puts back "No watch yet". A watch has one open job at a time, so a watch that already has an open job says so, such as "Hamilton · 1958 · already has an open job", and picking it opens that job. The job being set up goes away then only when nothing is in it yet: no watch, the title "New Job", and no problem, notes, tasks, parts, or material.
 
 ### Watch detail
 
@@ -161,9 +167,9 @@ Libraries before W035 also kept a variant, a movement type that could be Unknown
 
 ### Job
 
-Required: watch ID, title, and state. Optional: the problem, what a waiting job waits for, and the date it was done. The owner and contact are on the watch since W036. The opened date is when the job was created. A blank title is not valid, and any other blank text is no value.
+Required: title and state. Optional: the watch, the problem, what a waiting job waits for, and the date it was done. A job without a watch shows "No watch yet" until you pick one. Since W038 a migration rebuilds the job table so the watch can be empty, and every row keeps every value. The owner and contact are on the watch since W036. The opened date is when the job was created. A blank title is not valid, and any other blank text is no value.
 
-The state is In progress, Waiting, or Done. Only one job that is not Done can exist for a watch. Enforce this rule in both the service and database. Only a waiting job has a waiting text, and only a done job has a done date. The database enforces both.
+The state is In progress, Waiting, or Done. Only one job that is not Done can exist for a watch. Enforce this rule in both the service and database. Jobs without a watch do not count against each other. Only a waiting job has a waiting text, and only a done job has a done date. The database enforces both.
 
 Libraries before W037 had six stages and kept an intake snapshot, an agreed scope, an intake condition, an outcome, recommendations, a cancellation reason, explanations for unfinished tasks and unresolved parts, and started, completed, and cancelled times, with activity records beside them. The W037 migration makes Planned, In progress, and Ready jobs In progress, keeps Waiting jobs Waiting with their waiting reason as their waiting text, and makes Completed and Cancelled jobs Done, with the time they completed or were cancelled as the done date. It writes the removed values into the job's notes under "From the old record", one line each, such as "Agreed scope: Full service" and "Outcome: Serviced, +3 s/d". A cancelled job's line reads "Cancelled: Owner declined the quote". An intake snapshot value is written only when the watch no longer holds it, such as "Serial at intake: 0012", and a snapshot of another version is written as it was saved. When the notes already have that heading, the values go under it. Then those fields go. The migration does not change any record's updated time.
 
@@ -209,7 +215,7 @@ Libraries before W037 kept activity records for job stage, watch condition, task
 
 A job can move between In progress, Waiting, and Done in any order, from a pop-up on its page. A change saves at once. Cmd-Z puts back the state before, with its waiting text and done date, and Shift-Cmd-Z puts back the state it was given. Choosing Waiting puts the cursor in the waiting text, which is optional. Leaving Waiting clears the waiting text. Choosing Done records the day, and leaving Done clears it. The opened date never changes. No task or part action changes the state, and setting a job to Done keeps every task's and part's status, so a Done job can show less than 100 percent task progress.
 
-A Done job stays editable: its title, problem, tasks, parts, material, and notes can change. A job can leave Done only while its watch has no other open job. A job of an archived watch can change, also its state. Starting a job needs a watch that is not archived.
+A Done job stays editable: its title, problem, tasks, parts, material, and notes can change. A job can leave Done only while its watch has no other open job. A job of an archived watch can change, also its state. Starting a job on a watch, or picking a watch for a job, needs a watch that is not archived.
 
 ### Task progress
 
@@ -279,7 +285,7 @@ Do not place the live SQLite library in an iCloud Drive or Dropbox folder. File 
 
 ### Archive and removal
 
-Archive is reversible and separate from job completion. Archiving has no rules, as approved on 4 November 2026: any watch can be archived, even one with an open job, and that job stays in Workshop and can still change. Archive Watch and Unarchive Watch are commands in the Record menu and when you right-click a watch in the list. An archived watch's page also offers Unarchive in the toolbar. Cmd-Z undoes an archive or an unarchive, and Shift-Cmd-Z redoes it. Its jobs do not change. Archived watches and calibers are hidden from their lists, fold away in the Archived sections at the end of those lists, and stay in search. An archived record reads normally and cannot change until it is unarchived. A caliber in use can be archived without breaking its existing watch links. Calibers archive the same way, from the Record menu or a right-click. There is no separate Archive section.
+Archive is reversible and separate from job completion. Archiving has no rules, as approved on 4 November 2026: any watch can be archived, even one with an open job, and that job stays in Jobs and can still change. Archive Watch and Unarchive Watch are commands in the Record menu and when you right-click a watch in the list. An archived watch's page also offers Unarchive in the toolbar. Cmd-Z undoes an archive or an unarchive, and Shift-Cmd-Z redoes it. Its jobs do not change. Archived watches and calibers are hidden from their lists, fold away in the Archived sections at the end of those lists, and stay in search. An archived record reads normally and cannot change until it is unarchived. A caliber in use can be archived without breaking its existing watch links. Calibers archive the same way, from the Record menu or a right-click. There is no separate Archive section.
 
 Top-level watch and job deletion is outside version 1. Archive covers their removal from normal views. Child tasks and part links can be removed after confirmation. A task with parts links must list those links in the confirmation. Part requirements use Cancelled to preserve procurement history. Material is removed at once without confirmation, and Cmd-Z brings it back. Removing material clears its selections and cover references. Undo puts the cover back if no other cover was chosen since. Its original file is deleted only when Undo can no longer bring it back, which is the next time the library opens. Retry failed cleanup safely at startup.
 
@@ -303,7 +309,7 @@ Global search covers watch identity, the watch's owner and contact, caliber desi
 
 Use bound SQL parameters. Define a consistent case-insensitive Unicode search key in Swift and keep it updated in each affected transaction. Use simple indexed queries and contains matching first. Introduce FTS only if the measured library size requires it. Do not rely on SQLite's basic NOCASE behavior for all languages.
 
-All status colors have text labels. Keyboard actions cover search, save, cancel, task completion, and reference navigation. Drag reorder has Move up and Move down alternatives. VoiceOver identifies controls, task progress, file errors, and current selection. It reads each in-place fact's label and value. Respect increased contrast and reduced motion. A selected row and keyboard focus remain distinguishable in both appearances.
+All status colors have text labels. Keyboard actions cover search, save, cancel, task completion, and reference navigation. Cmd-F focuses the toolbar's search field from every section, and Cmd-1 to Cmd-4 select the sections. Drag reorder has Move up and Move down alternatives. VoiceOver identifies controls, task progress, file errors, and current selection. It reads each in-place fact's label and value, and the watch picker as "Watch". The sidebar reads each section's count. Respect increased contrast and reduced motion. A selected row and keyboard focus remain distinguishable in both appearances.
 
 ## 12 Verification and release acceptance
 
