@@ -116,13 +116,15 @@ final class JobState {
         Task { await setStage(stage, undoManager: undoManager) }
     }
 
-    // Moves the selected job to another state. Undo puts back the state it had, with its done
-    // date and what it waited for, and Redo the state it was given. Choosing Waiting puts the
-    // cursor in what it waits for.
+    // Moves the selected job to another state. Typing still saving on the job saves first, so
+    // the change and its Undo see it. Undo puts back the state the job had, with its done date
+    // and what it waited for, and Redo the state it was given. Choosing Waiting puts the cursor
+    // in what it waits for.
     @discardableResult
     func setStage(_ stage: JobStage, undoManager: UndoManager? = nil) async -> Bool {
         guard !isSaving, let job = selectedJob, job.stage != stage else { return false }
         let id = job.id
+        guard await saveTyping(on: id) else { return false }
         return await stages.perform(JobStageValue(stage: stage)) { [weak self] _ in
             await self?.changeStage(id, to: stage, undoManager: undoManager) ?? false
         }
@@ -154,10 +156,12 @@ final class JobState {
         facts.values.flatMap(\.editors).filter(\.hasUnsavedChanges)
     }
 
+    // A state change never waits for a field, because a waiting text waits for state changes.
     private func changeStage(_ id: UUID, to stage: JobStage, undoManager: UndoManager?) async
         -> Bool
     {
-        guard await prepareStageChange(id) else { return false }
+        isSaving = true
+        saveError = nil
         defer { isSaving = false }
         do {
             let change = try await service.setStage(id, to: stage)
@@ -178,8 +182,11 @@ final class JobState {
         }
     }
 
+    // Undo and Redo reach a state change only after the typing made since, so nothing typed on
+    // the job is waiting to save.
     private func restoreStage(_ id: UUID, to value: JobStageValue) async -> Bool {
-        guard await prepareStageChange(id) else { return false }
+        isSaving = true
+        saveError = nil
         defer { isSaving = false }
         do {
             adopt(try await service.restoreStage(id, to: value))
@@ -190,19 +197,24 @@ final class JobState {
         }
     }
 
-    // Typing still saving on the job finishes first, so the change sees it. A fact that does
-    // not save stops the change.
-    private func prepareStageChange(_ id: UUID) async -> Bool {
+    // A field that does not save stops the state change.
+    private func saveTyping(on id: UUID) async -> Bool {
         isSaving = true
         saveError = nil
+        defer { isSaving = false }
         for editor in facts[id]?.editors ?? [] where editor.hasUnsavedChanges {
             guard await editor.flush() else {
                 saveError = "A field on this job did not save. Correct it or undo it first."
-                isSaving = false
                 return false
             }
         }
         return true
+    }
+
+    // Waits for state changes still saving, then says whether the job still waits.
+    private func stillWaits(_ id: UUID) async -> Bool {
+        await stages.wait()
+        return jobs.first { $0.id == id }?.stage == .waiting
     }
 
     private func fail(_ error: any Error) {
@@ -228,7 +240,11 @@ final class JobState {
             if let existing = facts[record.id] {
                 existing.refresh(record)
             } else {
-                facts[record.id] = JobFacts(job: record, service: service, pause: pause)
+                let id = record.id
+                facts[id] = JobFacts(
+                    job: record, service: service,
+                    stillWaits: { [weak self] in await self?.stillWaits(id) ?? false },
+                    pause: pause)
             }
         }
     }

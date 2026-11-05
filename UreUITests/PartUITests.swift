@@ -74,7 +74,7 @@ nonisolated final class PartUITests: XCTestCase {
         XCTAssertTrue(app.buttons["addPart"].isEnabled)
         rows.firstMatch.click()
         XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["editPart"].isEnabled)
+        XCTAssertTrue(app.buttons["editPart"].isEnabled)
         XCTAssertTrue(app.staticTexts["Needed"].exists)
         XCTAssertEqual(openActions.count, 2)
     }

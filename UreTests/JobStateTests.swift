@@ -145,6 +145,54 @@ struct JobStateTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
+    func undoingAStateAndTheWaitingTextBeforeItAtOncePutsBackBothInOrder() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let watch = try await makeWatch(coordinator)
+        let job = try await JobService(coordinator: coordinator).start(for: watch.id)
+        let (state, observation) = try await makeState(coordinator, pause: PauseGate().pause)
+        defer { observation.cancel() }
+        try await waitUntil { state.jobs == [job] }
+        state.open(job)
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        try await change(state, to: .waiting, undo: undo)
+        let field = try #require(state.facts(for: job.id)?.waitingFor)
+        for text in ["a crystal", "a crystal and a gasket"] {
+            field.beginEditing()
+            undo.beginUndoGrouping()
+            field.change(to: text, undoManager: undo)
+            undo.endUndoGrouping()
+            field.endEditing()
+            try await waitUntil { !field.hasUnsavedChanges }
+        }
+        try await change(state, to: .done, undo: undo)
+        #expect(try await stored(job.id, coordinator)?.waitingFor == nil)
+
+        // Both steps run before either save reaches the library.
+        undo.undo()
+        undo.undo()
+        await state.waitForStageChanges()
+        try await waitUntil { !field.hasUnsavedChanges && !state.isSaving }
+        var saved = try #require(try await stored(job.id, coordinator))
+        #expect(saved.stage == .waiting && saved.waitingFor == "a crystal")
+        #expect(field.saveError == nil && state.saveError == nil)
+        undo.redo()
+        undo.redo()
+        await state.waitForStageChanges()
+        try await waitUntil { !field.hasUnsavedChanges && !state.isSaving }
+        saved = try #require(try await stored(job.id, coordinator))
+        #expect(saved.stage == .done && saved.waitingFor == nil)
+        #expect(field.saveError == nil && state.saveError == nil)
+        #expect(await state.setStage(.inProgress, undoManager: nil))
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
     func aStateChangeWaitsForTypingAndStopsAtATitleThatIsNotValid() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
