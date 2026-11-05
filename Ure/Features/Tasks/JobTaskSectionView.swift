@@ -22,12 +22,9 @@ struct JobTaskSectionView: View {
         }
     }
 
-    // Such as "6 of 10 done".
     private var progress: String? {
         guard !tasks.isLoading, tasks.loadError == nil else { return nil }
-        let progress = tasks.progress(for: jobID)
-        guard progress.countedCount > 0 else { return "No tasks planned" }
-        return "\(progress.doneCount) of \(progress.countedCount) done"
+        return tasks.progress(for: jobID).summary
     }
 
     @ViewBuilder private var content: some View {
