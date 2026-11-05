@@ -133,13 +133,16 @@ struct WorkshopView: View {
                 }
             }
         } else if navigation.selectedSection == .parts {
+            // A part opens on its job's page, and Back to Watch shows the watch's page here.
             Group {
-                if jobs.selectedID == nil {
+                if jobs.selectedID != nil {
+                    JobDetailView()
+                } else if watches.selectedID != nil {
+                    WatchDetailView()
+                } else {
                     ContentUnavailableView(
                         "Select a part", systemImage: WorkshopSection.parts.symbol,
                         description: Text("Choose a part to view it in its job."))
-                } else {
-                    JobDetailView()
                 }
             }
             .safeAreaInset(edge: .top) {

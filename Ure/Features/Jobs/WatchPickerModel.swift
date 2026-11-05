@@ -38,16 +38,22 @@ final class WatchPickerModel {
     }
 
     // Gives the selected job the picked watch and selects that watch. A watch with an open job
-    // opens that job instead, because a watch has one open job at a time. True when the job
-    // page now shows a job with a watch.
+    // opens that job instead, because a watch has one open job at a time. The job being set up
+    // goes then only once every field has saved and it holds nothing. True when the job page
+    // now shows a job with a watch.
     @discardableResult
     func pick(
-        _ item: WatchPickerItem, jobs: JobState, watches: WatchState,
-        undoManager: UndoManager?
+        _ item: WatchPickerItem, editing: WorkshopEditing, undoManager: UndoManager?
     ) async -> Bool {
+        let jobs = editing.jobs
+        let watches = editing.watches
         switch item {
         case .watch(let choice) where choice.openJob != nil:
-            guard let job = await jobs.openOpenJob(of: choice.watch.id) else { return false }
+            let saved = await editing.saveAllFields()
+            guard
+                let job = await jobs.openOpenJob(
+                    of: choice.watch.id, discardingBlank: saved && !editing.hasUnsavedFields)
+            else { return false }
             watches.select(job.watchID)
         case .watch(let choice):
             guard await jobs.chooseWatch(choice.watch.id, undoManager: undoManager) else {

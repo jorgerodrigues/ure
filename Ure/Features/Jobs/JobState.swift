@@ -164,11 +164,14 @@ final class JobState {
     }
 
     // Picking a watch that already has an open job opens that job, because a watch has one
-    // open job at a time. The job being set up goes when nothing is in it yet.
+    // open job at a time. The job being set up goes when nothing is in it yet. The caller says
+    // whether every field has saved, because a save still on its way could hold typing.
     @discardableResult
-    func openOpenJob(of watchID: UUID) async -> JobRecord? {
+    func openOpenJob(of watchID: UUID, discardingBlank: Bool) async -> JobRecord? {
         guard !isSaving, let existing = openJob(for: watchID) else { return nil }
-        if let blank = selectedJob, blank.id != existing.id, blank.watchID == nil {
+        if discardingBlank, let blank = selectedJob, blank.id != existing.id,
+            blank.watchID == nil, facts[blank.id]?.hasUnsavedChanges != true
+        {
             isSaving = true
             defer { isSaving = false }
             if (try? await service.discardIfBlank(blank.id)) == true {

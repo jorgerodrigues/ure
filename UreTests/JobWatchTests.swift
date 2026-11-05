@@ -69,8 +69,9 @@ struct JobWatchTests {
         _ = try await coordinator.open()
         let watch = try await WatchService(coordinator: coordinator).make(
             "Railroad pocket watch", brand: "Hamilton")
-        let state = JobState(service: JobService(coordinator: coordinator))
-        let watches = WatchState(service: WatchService(coordinator: coordinator))
+        let editing = JobListFixture.editing(coordinator)
+        let state = editing.jobs
+        let watches = editing.watches
         let observations = [Task { await state.observe() }, Task { await watches.observe() }]
         defer { observations.forEach { $0.cancel() } }
         try await JobListFixture.waitUntil { !state.isLoading && !watches.isLoading }
@@ -84,7 +85,7 @@ struct JobWatchTests {
         let items = picker.items(watches: watches.watches, calibers: [], jobs: state.jobs)
         let item = try #require(picker.highlightedItem(in: items))
         undo.beginUndoGrouping()
-        #expect(await picker.pick(item, jobs: state, watches: watches, undoManager: undo))
+        #expect(await picker.pick(item, editing: editing, undoManager: undo))
         undo.endUndoGrouping()
         #expect(picker.query.isEmpty)
         #expect(try await stored(id, coordinator)?.watchID == watch.id)
@@ -146,8 +147,9 @@ struct JobWatchTests {
 
         // The picker shows the watch's open job, and picking it opens that job. The job being
         // set up goes when nothing is in it yet, and stays when you typed in it.
-        let state = JobState(service: service)
-        let watches = WatchState(service: WatchService(coordinator: coordinator))
+        let editing = JobListFixture.editing(coordinator)
+        let state = editing.jobs
+        let watches = editing.watches
         let observations = [Task { await state.observe() }, Task { await watches.observe() }]
         defer { observations.forEach { $0.cancel() } }
         try await JobListFixture.waitUntil { !state.isLoading && !watches.isLoading }
@@ -163,14 +165,25 @@ struct JobWatchTests {
 
         #expect(await state.create())
         let blank = try #require(state.selectedID)
-        #expect(await picker.pick(.watch(choice), jobs: state, watches: watches, undoManager: nil))
+        #expect(await picker.pick(.watch(choice), editing: editing, undoManager: nil))
         #expect(state.selectedID == open.id && watches.selectedID == ventura.id)
         #expect(try await stored(blank, coordinator) == nil)
         #expect(try await stored(open.id, coordinator)?.watchID == ventura.id)
 
+        // Typing that has not saved yet keeps the job: the pick waits for the save first.
+        #expect(await state.create())
+        let pending = try #require(state.selectedID)
+        let title = try #require(state.facts(for: pending)?.title)
+        title.beginEditing()
+        title.change(to: "Strap and buckle", undoManager: nil)
+        #expect(await picker.pick(.watch(choice), editing: editing, undoManager: nil))
+        #expect(state.selectedID == open.id)
+        #expect(try await stored(pending, coordinator)?.title == "Strap and buckle")
+        title.endEditing()
+
         let stays = try #require(state.jobs.first { $0.id == typed.id })
         state.open(stays)
-        #expect(await picker.pick(.watch(choice), jobs: state, watches: watches, undoManager: nil))
+        #expect(await picker.pick(.watch(choice), editing: editing, undoManager: nil))
         #expect(state.selectedID == open.id)
         #expect(try await stored(typed.id, coordinator)?.title == "New crystal")
         state.open(stays)
@@ -225,8 +238,9 @@ struct JobWatchTests {
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
-        let state = JobState(service: JobService(coordinator: coordinator))
-        let watches = WatchState(service: WatchService(coordinator: coordinator))
+        let editing = JobListFixture.editing(coordinator)
+        let state = editing.jobs
+        let watches = editing.watches
         let observations = [Task { await state.observe() }, Task { await watches.observe() }]
         defer { observations.forEach { $0.cancel() } }
         try await JobListFixture.waitUntil { !state.isLoading && !watches.isLoading }
@@ -240,7 +254,7 @@ struct JobWatchTests {
         undo.groupsByEvent = false
         undo.beginUndoGrouping()
         #expect(
-            await picker.pick(.newWatch("ham"), jobs: state, watches: watches, undoManager: undo))
+            await picker.pick(.newWatch("ham"), editing: editing, undoManager: undo))
         undo.endUndoGrouping()
         let watchID = try #require(try await stored(id, coordinator)?.watchID)
         let made = try #require(

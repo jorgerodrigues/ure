@@ -25,8 +25,8 @@ struct JobDetailView: View {
             }
         }
         .toolbar {
-            // In Jobs the list holds the job, so only a job opened from its watch goes back.
-            if navigation.selectedSection != .jobs {
+            // In Jobs the list holds the job, so only a job with a watch goes back to it.
+            if hasWatchToGoBackTo {
                 ToolbarItem(placement: .navigation) {
                     Button(RecordBack.watchTitle, systemImage: "chevron.left", action: backToWatch)
                         .accessibilityIdentifier("backToWatch")
@@ -36,8 +36,12 @@ struct JobDetailView: View {
         }
     }
 
+    private var hasWatchToGoBackTo: Bool {
+        navigation.selectedSection != .jobs && jobs.selectedJob?.watchID != nil
+    }
+
     private var backAction: RecordBack? {
-        guard !editing.isSaving, navigation.selectedSection != .jobs else { return nil }
+        guard !editing.isSaving, hasWatchToGoBackTo else { return nil }
         return RecordBack(title: RecordBack.watchTitle, action: backToWatch)
     }
 

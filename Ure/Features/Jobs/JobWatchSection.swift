@@ -145,13 +145,10 @@ private struct WatchPickerField: View {
 
     private func pick(_ item: WatchPickerItem) {
         let picker = picker
-        let jobs = jobs
-        let watches = watches
+        let editing = editing
         let undoManager = undoManager
         editing.requestNavigation {
-            Task {
-                await picker.pick(item, jobs: jobs, watches: watches, undoManager: undoManager)
-            }
+            Task { await picker.pick(item, editing: editing, undoManager: undoManager) }
         }
     }
 }
