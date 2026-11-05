@@ -62,7 +62,9 @@ private struct PartRow: View {
                 Spacer()
                 Text(part.record.status.rawValue).foregroundStyle(.secondary)
             }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .disabled(editing.isSaving)
         .accessibilityIdentifier("part-\(part.id.uuidString)")
     }

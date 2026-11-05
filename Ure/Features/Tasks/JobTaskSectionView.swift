@@ -94,7 +94,9 @@ private struct JobTaskRow: View {
                 Text(task.status.rawValue).foregroundStyle(.secondary)
                     .frame(width: 80, alignment: .trailing)
             }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .disabled(editing.isSaving)
         .accessibilityIdentifier("task-\(task.id.uuidString)")
         .contextMenu {
