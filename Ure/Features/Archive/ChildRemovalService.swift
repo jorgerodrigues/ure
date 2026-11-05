@@ -22,7 +22,7 @@ nonisolated struct ChildRemovalService: Sendable {
         -> [JobTaskRecord]
     {
         try await coordinator.mutate { db, _, _ in
-            _ = try JobService.requireOpenJob(jobID, in: db)
+            _ = try JobService.requireJob(jobID, in: db)
             guard let task = try JobTaskQueries.fetch(id, in: db) else {
                 throw RemovalError.missingRecord
             }

@@ -1,12 +1,14 @@
 import AppKit
 import SwiftUI
 
-// A plain-text editor for a record's notes. The text view leaves Undo to the autosave field, so
-// ⌘Z and ⇧⌘Z work the same before and after a change saves.
+// A plain-text editor for a record's notes, and for a job's problem. The text view leaves Undo
+// to the autosave field, so ⌘Z and ⇧⌘Z work the same before and after a change saves.
 struct NotesTextView: NSViewRepresentable {
     let field: AutosaveField
     let text: String
     let isEditable: Bool
+    var label = "Notes"
+    var identifier = "recordNotes"
 
     func makeCoordinator() -> Coordinator { Coordinator(field: field) }
 
@@ -17,6 +19,8 @@ struct NotesTextView: NSViewRepresentable {
         view.onEndEditing = context.coordinator.endEditing
         view.isEditable = isEditable
         view.setText(text)
+        view.setAccessibilityLabel(label)
+        view.setAccessibilityIdentifier(identifier)
         return view
     }
 
@@ -105,8 +109,6 @@ final class NotesEditingView: NSTextView {
         textColor = .labelColor
         defaultParagraphStyle = Self.paragraphStyle
         typingAttributes = Self.attributes
-        setAccessibilityLabel("Notes")
-        setAccessibilityIdentifier("recordNotes")
     }
 
     required init?(coder: NSCoder) { return nil }

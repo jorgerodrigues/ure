@@ -41,20 +41,20 @@ nonisolated struct JobTaskDraft: Equatable, Sendable {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         var fields: [JobTaskField: String] = [:]
         if title.isEmpty { fields[.title] = "Enter a task title." }
-        if status == .waiting && JobDraft.optional(waitingReason) == nil && !allowsLinkedWaiting {
+        if status == .waiting && DraftText.optional(waitingReason) == nil && !allowsLinkedWaiting {
             fields[.waitingReason] =
                 "Enter a waiting reason, link a Needed or Ordered part, or choose another status."
         }
-        if status == .skipped && JobDraft.optional(skippedReason) == nil {
+        if status == .skipped && DraftText.optional(skippedReason) == nil {
             fields[.skippedReason] = "Enter a skipped reason."
         }
         guard fields.isEmpty else { throw JobTaskValidationError(fields: fields) }
         return JobTaskRecord(
             id: id, jobID: jobID, position: position, title: title,
-            detail: JobDraft.optional(detail),
-            groupLabel: JobDraft.optional(groupLabel), status: status,
-            waitingReason: status == .waiting ? JobDraft.optional(waitingReason) : nil,
-            skippedReason: status == .skipped ? JobDraft.optional(skippedReason) : nil,
+            detail: DraftText.optional(detail),
+            groupLabel: DraftText.optional(groupLabel), status: status,
+            waitingReason: status == .waiting ? DraftText.optional(waitingReason) : nil,
+            skippedReason: status == .skipped ? DraftText.optional(skippedReason) : nil,
             createdAt: createdAt, updatedAt: updatedAt)
     }
 }

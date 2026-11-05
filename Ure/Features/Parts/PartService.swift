@@ -28,7 +28,7 @@ nonisolated struct PartService: Sendable {
         -> PartRequirement
     {
         try await coordinator.mutate { db, _, dependencies in
-            _ = try JobService.requireOpenJob(jobID, in: db)
+            _ = try JobService.requireJob(jobID, in: db)
             var existing: PartRequirement?
             if let id {
                 guard let part = try PartQueries.fetch(id, in: db) else {
@@ -71,23 +71,6 @@ nonisolated struct PartService: Sendable {
             }
             for link in links { try link.save(db) }
             try SearchKey.refresh(record.id, table: .partRequirement, in: db)
-            if let existing {
-                if existing.record.status != record.status
-                    || existing.record.orderReference != record.orderReference
-                {
-                    try ActivityQueries.insert(
-                        jobID: jobID, kind: .partStatusChanged,
-                        prior: .part(PartProcurementValue(part: existing.record)),
-                        next: .part(PartProcurementValue(part: record)),
-                        in: db, dependencies: dependencies)
-                }
-            } else if record.status == .arrived {
-                try ActivityQueries.insert(
-                    jobID: jobID, kind: .partStatusChanged,
-                    prior: .part(PartProcurementValue(part: record, isNew: true)),
-                    next: .part(PartProcurementValue(part: record)),
-                    in: db, dependencies: dependencies)
-            }
             return result
         }
     }
@@ -96,12 +79,12 @@ nonisolated struct PartService: Sendable {
         _ draft: PartDraft, to record: inout PartRecord, existing: PartRecord?, now: Date
     ) {
         if draft.status == .ordered {
-            record.orderReference = JobDraft.optional(draft.orderReference)
+            record.orderReference = DraftText.optional(draft.orderReference)
         }
         guard existing?.status != draft.status else { return }
         record.status = draft.status
         record.statusReason = nil
-        if draft.needsReason { record.statusReason = JobDraft.optional(draft.statusReason) }
+        if draft.needsReason { record.statusReason = DraftText.optional(draft.statusReason) }
         record.cancelledAt = nil
         switch draft.status {
         case .needed:

@@ -29,10 +29,12 @@ struct PageSectionHeading: View {
 }
 
 // The square tile at the start of a page header: the record's photo, or a symbol when it has
-// none.
+// none. A job's tile is smaller than a watch's or a caliber's.
 struct PageTile: View {
     let photoID: UUID?
     let symbol: String
+    var size = PageLayout.tileSize
+    var radius = PageLayout.tileRadius
 
     var body: some View {
         ZStack {
@@ -45,10 +47,10 @@ struct PageTile: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .frame(width: PageLayout.tileSize, height: PageLayout.tileSize)
-        .clipShape(RoundedRectangle(cornerRadius: PageLayout.tileRadius))
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: radius))
         .overlay(
-            RoundedRectangle(cornerRadius: PageLayout.tileRadius)
+            RoundedRectangle(cornerRadius: radius)
                 .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5)
         )
     }

@@ -33,7 +33,7 @@ final class PartsOverviewState {
         guard !isLoading, loadError == nil, let part, let job, part.record.jobID == job.id else {
             return nil
         }
-        if !job.stage.isOpen { return "This job is closed. Its parts remain in watch history." }
+        if !job.stage.isOpen { return "This job is done. Its parts stay on its page." }
         if !filteredRows.contains(where: { $0.id == part.id }) {
             return "The selected part is outside the current filters. Its details remain open."
         }

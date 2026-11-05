@@ -45,5 +45,6 @@ final class WorkshopSession {
         material.discardUndo()
         calibers.discardUndo()
         watches.discardUndo()
+        jobs.discardUndo()
     }
 }

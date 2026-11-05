@@ -32,7 +32,7 @@ nonisolated enum RecordAccess {
         switch owner {
         case .watch(let id): try requireWatch(id, in: db)
         case .caliber(let id): try requireCaliber(id, in: db)
-        case .job(let id): _ = try JobService.requireOpenJob(id, in: db)
+        case .job(let id): _ = try JobService.requireJob(id, in: db)
         }
     }
 }

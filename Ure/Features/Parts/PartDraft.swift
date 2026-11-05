@@ -75,7 +75,7 @@ nonisolated struct PartDraft: Equatable, Sendable {
             fields[.status] =
                 "Start at Needed or Arrived. Save the part before ordering or installing."
         }
-        if needsReason && JobDraft.optional(statusReason) == nil {
+        if needsReason && DraftText.optional(statusReason) == nil {
             fields[.statusReason] = "Enter a reason for this correction or cancellation."
         }
         if needsOnHandConfirmation && !confirmsOnHand {
@@ -90,7 +90,7 @@ nonisolated struct PartDraft: Equatable, Sendable {
         {
             fields[.quantity] = "Enter a positive whole-number quantity."
         }
-        if compatibility == .confirmed && JobDraft.optional(compatibilityNote) == nil {
+        if compatibility == .confirmed && DraftText.optional(compatibilityNote) == nil {
             fields[.compatibilityNote] = "Enter evidence for confirmed compatibility."
         }
         for link in links where WebLink.url(from: link.url) == nil {
@@ -99,8 +99,8 @@ nonisolated struct PartDraft: Equatable, Sendable {
         guard fields.isEmpty, let quantity else { throw PartValidationError(fields: fields) }
         return PartRecord(
             id: id, jobID: jobID, description: description, quantity: quantity,
-            manufacturerReference: JobDraft.optional(manufacturerReference),
-            compatibility: compatibility, compatibilityNote: JobDraft.optional(compatibilityNote),
+            manufacturerReference: DraftText.optional(manufacturerReference),
+            compatibility: compatibility, compatibilityNote: DraftText.optional(compatibilityNote),
             status: existing?.status ?? .needed, orderedAt: existing?.orderedAt,
             arrivedAt: existing?.arrivedAt, installedAt: existing?.installedAt,
             cancelledAt: existing?.cancelledAt, orderReference: existing?.orderReference,

@@ -25,7 +25,7 @@ final class WorkshopOverviewState {
             return SearchKey.matches(
                 [
                     row.watch.name, row.watch.brand, row.watch.model, row.watch.caseReference,
-                    row.watch.serial, row.job.title, row.job.waitingReason,
+                    row.watch.serial, row.job.title, row.job.waitingFor,
                 ], query: query)
         }
     }
@@ -36,7 +36,7 @@ final class WorkshopOverviewState {
 
     func selectionMessage(for job: JobRecord?) -> String? {
         guard !isLoading, loadError == nil, let job else { return nil }
-        if !job.stage.isOpen { return "This job is closed. It remains in watch history." }
+        if !job.stage.isOpen { return "This job is done. It stays on its watch’s page." }
         if !filteredRows.contains(where: { $0.id == job.id }) {
             return "The selected job is outside the current filters. Its details remain open."
         }

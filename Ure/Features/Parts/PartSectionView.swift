@@ -1,5 +1,7 @@
 import SwiftUI
 
+// The job's parts under the Parts heading, in their current rows until W040 makes parts their
+// own records.
 struct PartSectionView: View {
     @State private var searchText = ""
     @Environment(PartState.self) private var parts
@@ -8,29 +10,38 @@ struct PartSectionView: View {
     let jobID: UUID
 
     var body: some View {
-        Section("Parts") {
-            if parts.isLoading {
-                ProgressView("Loading parts…")
-            } else if let error = parts.loadError {
-                Label(error, systemImage: "exclamationmark.triangle")
-                Button("Retry", action: retry)
+        VStack(alignment: .leading, spacing: JobSectionLayout.spacing) {
+            PageSectionHeading(title: "Parts")
+                .padding(.bottom, JobSectionLayout.headingBottom)
+            content
+                .buttonStyle(.borderless)
+                .textFieldStyle(.roundedBorder)
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        if parts.isLoading {
+            ProgressView("Loading parts…")
+        } else if let error = parts.loadError {
+            Label(error, systemImage: "exclamationmark.triangle")
+            Button("Retry", action: retry)
+        } else {
+            Button("Add Part", systemImage: "plus", action: create)
+                .disabled(editing.isSaving || !parts.canWrite(jobID, jobs: jobs))
+                .accessibilityIdentifier("addPart")
+            TextField("Filter parts", text: $searchText)
+                .accessibilityIdentifier("partsLocalSearch")
+            if parts.records(for: jobID, matching: searchText).isEmpty {
+                Text(searchText.isEmpty ? "No parts required." : "No matching parts.")
+                    .foregroundStyle(.secondary)
             } else {
-                Button("Add Part", systemImage: "plus", action: create)
-                    .disabled(editing.isSaving || !parts.canWrite(jobID, jobs: jobs))
-                    .accessibilityIdentifier("addPart")
-                TextField("Filter parts", text: $searchText)
-                    .accessibilityIdentifier("partsLocalSearch")
-                if parts.records(for: jobID, matching: searchText).isEmpty {
-                    Text(searchText.isEmpty ? "No parts required." : "No matching parts.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(parts.records(for: jobID, matching: searchText)) { part in
-                        PartRow(part: part)
-                    }
+                ForEach(parts.records(for: jobID, matching: searchText)) { part in
+                    PartRow(part: part)
                 }
             }
         }
     }
+
     private func create() { editing.requestNavigation { parts.create(for: jobID, jobs: jobs) } }
     private func retry() { Task { await parts.observe() } }
 }

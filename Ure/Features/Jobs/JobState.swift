@@ -2,35 +2,42 @@ import Foundation
 import GRDB
 import Observation
 
+// The jobs in the library and the page you write each one on. A job page has no draft: the
+// title, the problem and what a waiting job waits for save on their own as you type. Changing
+// the state saves at once, and Undo puts back the state the job had, with its dates.
 @Observable
 final class JobState {
+    static let stageActionName = "Change State"
+
     private let service: JobService
-    private var originalDraft: JobDraft?
-    private var originalActionDraft: JobActionDraft?
-    private var pendingNavigation: (() -> Void)?
-    private var cancelNavigation: (() -> Void)?
+    @ObservationIgnored private let pause: (Duration) async throws -> Void
+    @ObservationIgnored private let stages = ChangeUndo<JobStageValue>()
     private(set) var jobs: [JobRecord] = []
     private(set) var selectedID: UUID?
     private(set) var watchID: UUID?
-    private(set) var conflictingJobID: UUID?
     private(set) var isLoading = true
     private(set) var isSaving = false
     private(set) var loadError: String?
     private(set) var saveError: String?
-    private(set) var fieldErrors: [JobField: String] = [:]
-    var draft: JobDraft?
-    var actionDraft: JobActionDraft?
-    var showsUnsavedChanges = false
+    private(set) var facts: [UUID: JobFacts] = [:]
+    // A job just started. Its page puts the cursor in its title.
+    private(set) var titleToFocus: UUID?
+    // A job just set to Waiting. Its page puts the cursor in what it waits for.
+    private(set) var waitingToFocus: UUID?
 
-    init(service: JobService) {
+    init(
+        service: JobService,
+        pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    ) {
         self.service = service
+        self.pause = pause
     }
 
     var selectedJob: JobRecord? { jobs.first { $0.id == selectedID } }
-    var hasUnsavedChanges: Bool { draft != originalDraft || actionDraft != originalActionDraft }
-    var canSave: Bool { (draft != nil || actionDraft != nil) && !isSaving }
-    var isEditing: Bool { draft != nil || actionDraft != nil }
-    var isNavigationPending: Bool { pendingNavigation != nil }
+
+    func facts(for id: UUID) -> JobFacts? { facts[id] }
+
+    var hasUnsavedFacts: Bool { facts.values.contains { $0.hasUnsavedChanges } }
 
     func history(for watchID: UUID) -> [JobRecord] {
         jobs.filter { $0.watchID == watchID }
@@ -50,7 +57,7 @@ final class JobState {
         do {
             let values = try await service.coordinator.jobValues()
             for try await records in values {
-                jobs = records
+                apply(records)
                 isLoading = false
             }
         } catch {
@@ -61,172 +68,168 @@ final class JobState {
     }
 
     func open(_ job: JobRecord) {
-        requestNavigation {
-            self.watchID = job.watchID
-            self.selectedID = job.id
-            self.clearErrors()
-        }
-    }
-
-    func start(for watchID: UUID) {
-        guard !isLoading, loadError == nil else { return }
-        requestNavigation {
-            self.watchID = watchID
-            self.clearErrors()
-            if let existing = self.openJob(for: watchID) {
-                self.selectedID = existing.id
-            } else {
-                self.selectedID = nil
-                self.draft = JobDraft()
-                self.originalDraft = self.draft
-            }
-        }
+        watchID = job.watchID
+        selectedID = job.id
+        saveError = nil
     }
 
     func close() {
-        requestNavigation {
-            self.selectedID = nil
-            self.watchID = nil
-        }
+        selectedID = nil
+        watchID = nil
+        saveError = nil
     }
 
-    func edit() {
-        guard !isSaving, !isEditing, let selectedJob, selectedJob.stage.isOpen,
-            selectedJob.intakeSnapshot.version == 1
-        else { return }
-        draft = JobDraft(job: selectedJob)
-        originalDraft = draft
-        clearErrors()
-    }
+    func startCommand(for watchID: UUID) { Task { await start(for: watchID) } }
 
-    func beginAction(_ action: JobAction) {
-        guard !isSaving, !isEditing, let job = selectedJob else { return }
-        if action == .reopen {
-            guard !job.stage.isOpen else { return }
-        } else {
-            guard job.stage.isOpen else { return }
-        }
-        actionDraft = JobActionDraft(action: action, job: job)
-        originalActionDraft = actionDraft
-        clearErrors()
-    }
-
-    func openConflictingJob() {
-        guard let id = conflictingJobID, let job = jobs.first(where: { $0.id == id }) else {
-            return
-        }
-        open(job)
-    }
-
-    func cancel() {
-        guard !isSaving else { return }
-        draft = nil
-        originalDraft = nil
-        actionDraft = nil
-        originalActionDraft = nil
-        clearErrors()
-    }
-
+    // Opens the watch's open job, or starts one named "New Job" and puts the cursor in its
+    // title, with the title selected, so typing replaces it.
     @discardableResult
-    func save() async -> Bool {
-        guard !isSaving, let watchID, isEditing else { return false }
+    func start(for watchID: UUID) async -> Bool {
+        guard !isSaving, !isLoading, loadError == nil else { return false }
+        if let existing = openJob(for: watchID) {
+            open(existing)
+            return true
+        }
         isSaving = true
-        clearErrors()
+        saveError = nil
         defer { isSaving = false }
         do {
-            let saved: JobRecord
-            if let actionDraft, let selectedID {
-                switch actionDraft.action {
-                case .transition:
-                    saved = try await service.transition(selectedID, using: actionDraft.transition)
-                case .reopen:
-                    saved = try await service.reopen(selectedID, using: actionDraft.transition)
-                }
-            } else if let draft {
-                saved = try await service.save(draft, for: watchID, editing: selectedID)
-            } else {
-                return false
-            }
-            if let index = jobs.firstIndex(where: { $0.id == saved.id }) {
-                jobs[index] = saved
-            } else {
-                jobs.append(saved)
-            }
-            selectedID = saved.id
-            self.draft = nil
-            originalDraft = nil
-            self.actionDraft = nil
-            originalActionDraft = nil
+            let record = try await service.start(for: watchID)
+            adopt(record)
+            open(record)
+            titleToFocus = record.id
+            return true
+        } catch JobError.openJobExists(let existing) {
+            adopt(existing)
+            open(existing)
             return true
         } catch {
             saveError = error.localizedDescription
-            if let conflict = error as? JobError, case .openJobExists(let existing) = conflict {
-                conflictingJobID = existing.id
-                if let index = jobs.firstIndex(where: { $0.id == existing.id }) {
-                    jobs[index] = existing
-                } else {
-                    jobs.append(existing)
-                }
-            }
-            if let validation = error as? JobValidationError {
-                fieldErrors = validation.fields
-            }
             return false
         }
     }
 
-    func saveCommand() {
-        Task { await save() }
+    func titleFocused() { titleToFocus = nil }
+    func waitingFocused() { waitingToFocus = nil }
+
+    func setStageCommand(_ stage: JobStage, undoManager: UndoManager?) {
+        Task { await setStage(stage, undoManager: undoManager) }
     }
 
-    func requestNavigation(_ action: @escaping () -> Void, onCancel: (() -> Void)? = nil) {
-        guard !isSaving, pendingNavigation == nil else {
-            onCancel?()
-            return
-        }
-        if !hasUnsavedChanges {
-            cancel()
-            action()
-            return
-        }
-        pendingNavigation = action
-        cancelNavigation = onCancel
-        showsUnsavedChanges = true
-    }
-
-    func stay() {
-        let cancel = cancelNavigation
-        clearNavigation()
-        cancel?()
-    }
-
-    func discardAndContinue() {
-        let action = pendingNavigation
-        clearNavigation()
-        cancel()
-        action?()
-    }
-
-    func saveAndContinue() async {
-        guard !isSaving else { return }
-        if await save() {
-            let action = pendingNavigation
-            clearNavigation()
-            action?()
-        } else {
-            stay()
+    // Moves the selected job to another state. Undo puts back the state it had, with its done
+    // date and what it waited for, and Redo the state it was given. Choosing Waiting puts the
+    // cursor in what it waits for.
+    @discardableResult
+    func setStage(_ stage: JobStage, undoManager: UndoManager? = nil) async -> Bool {
+        guard !isSaving, let job = selectedJob, job.stage != stage else { return false }
+        let id = job.id
+        return await stages.perform(JobStageValue(stage: stage)) { [weak self] _ in
+            await self?.changeStage(id, to: stage, undoManager: undoManager) ?? false
         }
     }
 
-    private func clearErrors() {
+    // Waits for a state change that Undo or Redo started.
+    func waitForStageChanges() async { await stages.wait() }
+
+    func saveFactsNow() {
+        for editor in unsavedEditors { editor.saveNow() }
+    }
+
+    func saveAllFacts() async -> Bool {
+        var succeeded = true
+        for editor in unsavedEditors {
+            if await !editor.flush() { succeeded = false }
+        }
+        return succeeded
+    }
+
+    func discardUndo() {
+        for facts in facts.values {
+            for editor in facts.editors { editor.discardUndo() }
+        }
+        stages.discardUndo()
+    }
+
+    private var unsavedEditors: [AutosaveField] {
+        facts.values.flatMap(\.editors).filter(\.hasUnsavedChanges)
+    }
+
+    private func changeStage(_ id: UUID, to stage: JobStage, undoManager: UndoManager?) async
+        -> Bool
+    {
+        guard await prepareStageChange(id) else { return false }
+        defer { isSaving = false }
+        do {
+            let change = try await service.setStage(id, to: stage)
+            adopt(change.job)
+            let next = JobStageValue(job: change.job)
+            guard next != change.prior else { return true }
+            let restore: ChangeUndo<JobStageValue>.Write = { [weak self] value in
+                await self?.restoreStage(id, to: value) ?? false
+            }
+            stages.registerUndo(
+                setting: change.prior, redoing: next, actionName: Self.stageActionName,
+                undoManager: undoManager, write: restore)
+            if stage == .waiting, id == selectedID { waitingToFocus = id }
+            return true
+        } catch {
+            fail(error)
+            return false
+        }
+    }
+
+    private func restoreStage(_ id: UUID, to value: JobStageValue) async -> Bool {
+        guard await prepareStageChange(id) else { return false }
+        defer { isSaving = false }
+        do {
+            adopt(try await service.restoreStage(id, to: value))
+            return true
+        } catch {
+            fail(error)
+            return false
+        }
+    }
+
+    // Typing still saving on the job finishes first, so the change sees it. A fact that does
+    // not save stops the change.
+    private func prepareStageChange(_ id: UUID) async -> Bool {
+        isSaving = true
         saveError = nil
-        conflictingJobID = nil
-        fieldErrors = [:]
+        for editor in facts[id]?.editors ?? [] where editor.hasUnsavedChanges {
+            guard await editor.flush() else {
+                saveError = "A field on this job did not save. Correct it or undo it first."
+                isSaving = false
+                return false
+            }
+        }
+        return true
     }
 
-    private func clearNavigation() {
-        showsUnsavedChanges = false
-        pendingNavigation = nil
-        cancelNavigation = nil
+    private func fail(_ error: any Error) {
+        saveError = error.localizedDescription
+        if let conflict = error as? JobError, case .openJobExists(let existing) = conflict {
+            adopt(existing)
+        }
+    }
+
+    private func adopt(_ record: JobRecord) {
+        var records = jobs
+        if let index = records.firstIndex(where: { $0.id == record.id }) {
+            records[index] = record
+        } else {
+            records.append(record)
+        }
+        apply(records)
+    }
+
+    private func apply(_ records: [JobRecord]) {
+        jobs = records
+        for record in records {
+            if let existing = facts[record.id] {
+                existing.refresh(record)
+            } else {
+                facts[record.id] = JobFacts(job: record, service: service, pause: pause)
+            }
+        }
     }
 }
