@@ -38,19 +38,32 @@ final class CaliberState {
 
     func facts(for id: UUID) -> CaliberFacts? { facts[id] }
 
+    // Active calibers by maker and name, as the list shows them, such as "ETA 2824-2".
     var filteredCalibers: [CaliberRecord] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let active = calibers.filter { $0.archivedAt == nil }
+        let active = calibers.filter { $0.archivedAt == nil }.sorted(by: Self.isInListOrder)
         if query.isEmpty { return active }
         return active.filter { caliber in
             SearchKey.matches([caliber.designation, caliber.manufacturer], query: query)
         }
     }
 
-    // Makers already in the library, offered as you type a maker.
-    var makers: [String] {
-        Set(calibers.compactMap(\.manufacturer)).sorted {
-            $0.localizedStandardCompare($1) == .orderedAscending
+    private static func isInListOrder(_ lhs: CaliberRecord, _ rhs: CaliberRecord) -> Bool {
+        let order = lhs.title.localizedStandardCompare(rhs.title)
+        if order != .orderedSame { return order == .orderedAscending }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    // Makers already in the library, offered as you type a maker, with how many calibers each
+    // has.
+    var makers: [FactSuggestion] {
+        let counts = Dictionary(grouping: calibers.compactMap(\.manufacturer)) { $0 }
+            .mapValues(\.count)
+        return counts.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }.map {
+            maker in
+            let count = counts[maker] ?? 0
+            return FactSuggestion(
+                text: maker, detail: count == 1 ? "1 caliber" : "\(count) calibers")
         }
     }
 

@@ -4,19 +4,35 @@ struct NotesSectionView: View {
     @Environment(RecordNotesState.self) private var notes
     @Environment(WorkshopEditing.self) private var editing
     let owner: LibraryItemOwner
+    var style = RecordSectionStyle.form
+    // When the record was last edited, shown beside the heading on a page you write on.
+    var edited: Date?
 
     var body: some View {
-        Section("Notes") {
-            if let field = notes.field(for: owner) {
-                NotesEditor(field: field, isEditable: editing.canWrite(owner)).id(owner)
-            } else if let error = notes.loadErrors[owner] {
-                Label(error, systemImage: "exclamationmark.triangle")
-                Button("Retry", action: retry)
-            } else {
-                ProgressView("Loading notes…")
+        Group {
+            switch style {
+            case .form:
+                Section("Notes") { content }
+            case .page:
+                VStack(alignment: .leading, spacing: PageLayout.headingSpacing) {
+                    PageSectionHeading(
+                        title: "Notes", detail: edited.map { "Edited \(PageLayout.day($0))" })
+                    content
+                }
             }
         }
         .task(id: owner, load)
+    }
+
+    @ViewBuilder private var content: some View {
+        if let field = notes.field(for: owner) {
+            NotesEditor(field: field, isEditable: editing.canWrite(owner)).id(owner)
+        } else if let error = notes.loadErrors[owner] {
+            Label(error, systemImage: "exclamationmark.triangle")
+            Button("Retry", action: retry)
+        } else {
+            ProgressView("Loading notes…")
+        }
     }
 
     private func load() async { await notes.load(owner) }

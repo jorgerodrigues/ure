@@ -84,7 +84,9 @@ struct CaliberStateTests {
         #expect(saved.winding == .automatic && saved.beatRate == 19_800)
         #expect(saved.jewelCount == 24 && saved.powerReserve == 50 && saved.liftAngle == 52.5)
         try await waitUntil { state.selectedCaliber == saved }
-        #expect(state.makers == ["Omega"] && !state.hasUnsavedFacts)
+        #expect(
+            state.makers == [FactSuggestion(text: "Omega", detail: "1 caliber")]
+                && !state.hasUnsavedFacts)
 
         facts.jewels.beginEditing()
         facts.jewels.change(to: "2", undoManager: nil)
@@ -118,7 +120,7 @@ struct CaliberStateTests {
         field.beginEditing()
         field.change(to: "19,80", undoManager: nil)
         field.endEditing()
-        #expect(field.problem?.hasSuffix("The saved value stays “19,800 vph”.") == true)
+        #expect(field.problem == "Enter a number, such as 28,800 vph.")
         #expect(field.text == "19,80" && state.hasUnsavedFacts)
         #expect(await !state.saveAllFacts())
         #expect(try await coordinator.read(CaliberQueries.fetchAll) == [caliber])

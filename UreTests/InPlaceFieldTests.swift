@@ -117,19 +117,19 @@ nonisolated struct NumberEntryTests {
     func problemsSayWhatToWriteInTheRegionFormat() {
         #expect(
             CaliberNumbers.beatRate.problem(in: "fast", locale: portugal)
-                == "Write a number, such as 28\u{a0}800 vph.")
+                == "Enter a number, such as 28\u{a0}800 vph.")
         #expect(
             CaliberNumbers.beatRate.problem(in: "28800 Hz", locale: unitedStates)
-                == "Write the number in vph, such as 28,800 vph.")
+                == "Enter the beat rate in vph, such as 28,800 vph.")
         #expect(
             CaliberNumbers.jewels.problem(in: "17 rubies", locale: unitedStates)
-                == "Write only the number, such as 17.")
+                == "Enter only the number, such as 17.")
         #expect(
             CaliberNumbers.liftAngle.problem(in: "0", locale: unitedStates)
-                == "Write a number above zero, or leave this empty.")
+                == "Enter a lift angle above 0°.")
         #expect(
             CaliberNumbers.powerReserve.problem(in: "-2 h", locale: unitedStates)
-                == "Write zero or more, or leave this empty.")
+                == "Enter a power reserve of 0 h or more.")
         #expect(CaliberNumbers.powerReserve.problem(in: "", locale: unitedStates) == nil)
     }
 }
@@ -150,9 +150,7 @@ struct FactFieldTests {
         #expect(field.problem == nil && store.texts.isEmpty)
 
         field.endEditing()
-        #expect(
-            field.problem
-                == "Write a number, such as 28,800 vph. The saved value stays “19,800 vph”.")
+        #expect(field.problem == "Enter a number, such as 28,800 vph.")
         #expect(field.text == "19,8x" && field.editor.savedText == "19,800 vph")
         #expect(await !field.flush())
         field.refresh("21,600 vph")
@@ -201,35 +199,63 @@ struct FactFieldTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func aSuggestionFinishesTheTypingAndTakingItPutsItAllInTheField() async throws {
+    func matchesFromTheLibraryFinishTheTypingAndTakingOnePutsItAllInTheField() async throws {
         let store = SavedTexts()
+        let makers = [
+            FactSuggestion(text: "Omega", detail: "4 calibers"),
+            FactSuggestion(text: "Orient", detail: "1 caliber"), FactSuggestion(text: "Oris"),
+            FactSuggestion(text: "Zénith"),
+        ]
         let field = FactField(
-            label: "Winding", prompt: "Manual, Automatic or Quartz", actionName: "Winding",
-            text: "", rule: .anyText, suggestions: { ["Manual", "Automatic", "Quartz"] },
-            save: store.save, pause: PauseGate().pause)
+            label: "Maker", prompt: "Add maker", actionName: "Maker", text: "", rule: .anyText,
+            suggestions: { makers }, save: store.save, pause: PauseGate().pause)
         field.beginEditing()
-        field.change(to: "a", undoManager: nil)
-        #expect(field.suggestion == "Automatic")
-        field.change(to: "au", undoManager: nil)
-        #expect(field.suggestion == "Automatic")
-        field.change(to: "a", undoManager: nil)
-        #expect(field.suggestion == nil)
-        field.change(to: "ax", undoManager: nil)
-        #expect(field.suggestion == nil)
-        field.change(to: "Q", undoManager: nil)
-        #expect(field.suggestion == nil)
-        field.change(to: "Qu", undoManager: nil)
-        #expect(field.suggestion == "Quartz")
+        field.change(to: "o", undoManager: nil)
+        #expect(field.matches.map(\.text) == ["Omega", "Orient", "Oris"])
+        #expect(field.suggestion == "Omega" && field.matches.first?.detail == "4 calibers")
+        field.change(to: "or", undoManager: nil)
+        #expect(field.matches.map(\.text) == ["Orient", "Oris"])
+        field.change(to: "o", undoManager: nil)
+        #expect(field.matches.isEmpty && field.suggestion == nil)
+        field.change(to: "ox", undoManager: nil)
+        #expect(field.matches.isEmpty)
+        field.change(to: "Z", undoManager: nil)
+        #expect(field.matches.isEmpty)
+        field.change(to: "Ze", undoManager: nil)
+        #expect(field.suggestion == "Zénith")
         #expect(field.acceptSuggestion(undoManager: nil))
-        #expect(field.text == "Quartz" && field.suggestion == nil)
+        #expect(field.text == "Zénith" && field.matches.isEmpty)
         #expect(!field.acceptSuggestion(undoManager: nil))
-        field.change(to: "Quartzz", undoManager: nil)
-        #expect(field.suggestion == nil)
+        field.change(to: "O", undoManager: nil)
+        field.change(to: "Or", undoManager: nil)
+        #expect(!field.acceptSuggestion(makers[0], undoManager: nil))
+        #expect(field.acceptSuggestion(makers[2], undoManager: nil))
+        #expect(field.text == "Oris")
+        field.change(to: "Orisx", undoManager: nil)
+        #expect(field.matches.isEmpty)
         field.change(to: "M", undoManager: nil)
         field.endEditing()
-        #expect(field.suggestion == nil)
+        #expect(field.matches.isEmpty)
         try await waitUntil { !field.hasUnsavedChanges }
         #expect(store.texts == ["M"])
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aChoiceFromAPopUpSavesAtOnceAndUndoesInOneStep() async throws {
+        let store = SavedTexts()
+        let field = FactField(
+            label: "Winding", prompt: "Add winding", actionName: "Winding", text: "Manual",
+            rule: .anyText, save: store.save, pause: PauseGate().pause)
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        undo.beginUndoGrouping()
+        field.choose("Quartz", undoManager: undo)
+        undo.endUndoGrouping()
+        try await waitUntil { !field.hasUnsavedChanges }
+        #expect(store.texts == ["Quartz"] && !field.isEditing && undo.undoActionName == "Winding")
+        undo.undo()
+        try await waitUntil { field.text == "Manual" && !field.hasUnsavedChanges }
+        #expect(store.texts == ["Quartz", "Manual"])
     }
 
     @Test(.timeLimit(.minutes(1)))
@@ -237,7 +263,7 @@ struct FactFieldTests {
         let store = SavedTexts()
         let field = FactField(
             label: "Winding", prompt: "Manual, Automatic or Quartz", actionName: "Winding",
-            text: "", rule: .anyText, suggestions: { ["Manual", "Automatic", "Quartz"] },
+            text: "", rule: .anyText, suggestions: { Self.windings },
             save: store.save, pause: PauseGate().pause)
         let undo = UndoManager()
         undo.groupsByEvent = false
@@ -261,13 +287,12 @@ struct FactFieldTests {
         let store = SavedTexts()
         let field = FactField(
             label: "Name", prompt: "Name", actionName: "Name", text: "552",
-            rule: .required("Write a name for this caliber."), save: store.save,
+            rule: .required("Enter a name."), save: store.save,
             pause: PauseGate().pause)
         field.beginEditing()
         field.change(to: "  ", undoManager: nil)
         field.endEditing()
-        #expect(
-            field.problem == "Write a name for this caliber. The saved value stays “552”.")
+        #expect(field.problem == "Enter a name.")
         #expect(await !field.flush())
         field.beginEditing()
         field.change(to: " 552 Elaboré ", undoManager: nil)
@@ -275,6 +300,8 @@ struct FactFieldTests {
         try await waitUntil { field.text == "552 Elaboré" && !field.hasUnsavedChanges }
         #expect(store.texts == [" 552 Elaboré "])
     }
+
+    private static let windings = ["Manual", "Automatic", "Quartz"].map { FactSuggestion(text: $0) }
 
     private func beatRate(store: SavedTexts, gate: PauseGate) -> FactField {
         FactField(

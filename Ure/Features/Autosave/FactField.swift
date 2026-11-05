@@ -1,12 +1,13 @@
 import Foundation
 import Observation
 
-// What a fact field takes. The problem says what to write instead, or is nil when the field
+// What a fact field takes. The problem says what to enter instead, or is nil when the field
 // takes the text. The normalized text is how the field shows a saved text, such as "28,800 vph"
-// for "28800vph".
+// for "28800vph". The unit is the end of a shown value that reads quieter, such as " vph".
 nonisolated struct FactRule: Sendable {
     let problem: @Sendable (String) -> String?
     let normalized: @Sendable (String) -> String
+    var unit: String? = nil
 
     static let anyText = FactRule(problem: { _ in nil }, normalized: trimmed)
 
@@ -18,7 +19,7 @@ nonisolated struct FactRule: Sendable {
     static func number(_ entry: NumberEntry, locale: Locale) -> FactRule {
         FactRule(
             problem: { entry.problem(in: $0, locale: locale) },
-            normalized: { entry.normalized($0, locale: locale) })
+            normalized: { entry.normalized($0, locale: locale) }, unit: entry.shownUnit)
     }
 
     private static func trimmed(_ text: String) -> String {
@@ -26,26 +27,35 @@ nonisolated struct FactRule: Sendable {
     }
 }
 
+// A value the library already holds that a field offers as you type, such as a maker, with a
+// count such as "2 calibers".
+nonisolated struct FactSuggestion: Equatable, Sendable {
+    let text: String
+    var detail: String? = nil
+}
+
 // One fact on a record page, such as a caliber's beat rate, written in place. The text saves as
 // you type through AutosaveField. A text the rule does not take stays on screen and never
 // saves, so the record keeps its last good value. The field says so once focus leaves it, and
-// keeps saying so while you correct it. As you type, a suggestion can finish the text, and
-// accepting it puts the whole suggestion in the field.
+// keeps saying so while you correct it. As you type, the library's matching values show under
+// the field, and taking one puts it all in the field.
 @Observable
 final class FactField {
+    static let maximumMatches = 5
+
     let label: String
     let prompt: String
     let editor: AutosaveField
-    // A suggestion holds only for the text it was made for, so Undo or any other change of
-    // the text drops it.
+    // Matches hold only for the text they were made for, so Undo or any other change of the
+    // text drops them.
     private var offer: Offer?
     @ObservationIgnored private let rule: FactRule
-    @ObservationIgnored private let suggestions: () -> [String]
+    @ObservationIgnored private let suggestions: () -> [FactSuggestion]
     private var flagsWhileEditing = false
 
     init(
         label: String, prompt: String, actionName: String, text: String, rule: FactRule,
-        suggestions: @escaping () -> [String] = { [] },
+        suggestions: @escaping () -> [FactSuggestion] = { [] },
         save: @escaping (String) async throws -> Void,
         pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
@@ -62,21 +72,24 @@ final class FactField {
     var isEditing: Bool { editor.isEditing }
     var saveError: String? { editor.saveError }
     var hasUnsavedChanges: Bool { editor.hasUnsavedChanges }
+    var unit: String? { rule.unit }
 
-    var suggestion: String? {
-        guard let offer, offer.typed == editor.text else { return nil }
-        return offer.suggestion
+    // The library's values that start with what you typed. Tab or Return takes the first.
+    var matches: [FactSuggestion] {
+        guard let offer, offer.typed == editor.text, editor.isEditing else { return [] }
+        return offer.matches
     }
 
-    // Why the text does not save yet, and the value the record keeps meanwhile. It shows once
-    // focus has left the field, so a half-typed number is never called wrong.
+    var suggestion: String? { matches.first?.text }
+
+    // What to enter instead. It shows once focus has left the field, so a half-typed number
+    // is never called wrong.
     var problem: String? {
         guard editor.text != editor.savedText, let message = rule.problem(editor.text) else {
             return nil
         }
         if editor.isEditing, !flagsWhileEditing { return nil }
-        let saved = editor.savedText.isEmpty ? "empty" : "“\(editor.savedText)”"
-        return "\(message) The saved value stays \(saved)."
+        return message
     }
 
     func beginEditing() {
@@ -88,19 +101,28 @@ final class FactField {
     func change(to newText: String, undoManager: UndoManager?) {
         let isTypingOn = newText.count > editor.text.count && newText.hasPrefix(editor.text)
         editor.change(to: newText, undoManager: undoManager)
-        offer = isTypingOn ? match(for: newText).map { Offer(typed: newText, suggestion: $0) } : nil
+        let found = isTypingOn ? matches(for: newText) : []
+        offer = found.isEmpty ? nil : Offer(typed: newText, matches: found)
     }
 
-    // Puts the whole suggestion in the field. False when there is none.
+    // Puts a match in the field, the first one unless another is given. False when there is
+    // none.
     @discardableResult
-    func acceptSuggestion(undoManager: UndoManager?) -> Bool {
-        guard let suggestion else { return false }
+    func acceptSuggestion(_ chosen: FactSuggestion? = nil, undoManager: UndoManager?) -> Bool {
+        guard let taken = chosen ?? matches.first, matches.contains(taken) else { return false }
         offer = nil
-        editor.change(to: suggestion, undoManager: undoManager)
+        editor.change(to: taken.text, undoManager: undoManager)
         return true
     }
 
     func dismissSuggestion() { offer = nil }
+
+    // A choice from a pop-up, such as a winding: one Undo step, saved at once.
+    func choose(_ text: String, undoManager: UndoManager?) {
+        beginEditing()
+        change(to: text, undoManager: undoManager)
+        endEditing()
+    }
 
     // Saves at once. Once saved, the field shows the text the way it shows a saved value.
     func endEditing() {
@@ -130,17 +152,18 @@ final class FactField {
         editor.refresh(rule.normalized(editor.text))
     }
 
-    private func match(for text: String) -> String? {
-        guard !text.isEmpty else { return nil }
-        return suggestions().first { candidate in
-            candidate.count > text.count
-                && candidate.range(
+    private func matches(for text: String) -> [FactSuggestion] {
+        guard !text.isEmpty else { return [] }
+        let found = suggestions().filter { candidate in
+            candidate.text.count > text.count
+                && candidate.text.range(
                     of: text, options: [.anchored, .caseInsensitive, .diacriticInsensitive]) != nil
         }
+        return Array(found.prefix(Self.maximumMatches))
     }
 }
 
 private struct Offer {
     let typed: String
-    let suggestion: String
+    let matches: [FactSuggestion]
 }

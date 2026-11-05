@@ -3,18 +3,21 @@ import Foundation
 // How the caliber page reads and shows its numbers.
 nonisolated enum CaliberNumbers {
     static let beatRate = NumberEntry(
-        unit: "vph", units: ["vph", "bph", "a/h"], minimum: .aboveZero, example: 28_800)
+        name: "beat rate", unit: "vph", units: ["vph", "bph", "a/h"], minimum: .aboveZero,
+        example: 28_800)
     static let jewels = NumberEntry(
-        unit: nil, units: ["jewels", "jewel", "j"], minimum: .zero, example: 17)
+        name: "jewel count", unit: nil, units: ["jewels", "jewel", "j"], minimum: .zero,
+        example: 17)
     static let powerReserve = NumberEntry(
-        unit: "h", units: ["h", "hr", "hrs", "hour", "hours"], minimum: .zero, example: 42)
+        name: "power reserve", unit: "h", units: ["h", "hr", "hrs", "hour", "hours"],
+        minimum: .zero, example: 42)
     static let liftAngle = NumberEntry(
-        unit: "°", joinsUnit: true, units: ["°", "deg", "degree", "degrees"],
+        name: "lift angle", unit: "°", joinsUnit: true, units: ["°", "deg", "degree", "degrees"],
         minimum: .aboveZero, example: 52)
 }
 
-// The facts on one caliber's page, in reading order. Each one is written in place and saves on
-// its own.
+// The facts on one caliber's page, in reading order. The name is the page's title. Each one is
+// written in place and saves on its own.
 struct CaliberFacts {
     let name: FactField
     let maker: FactField
@@ -29,23 +32,22 @@ struct CaliberFacts {
 
     init(
         caliber: CaliberRecord, service: CaliberService, locale: Locale,
-        makers: @escaping () -> [String],
+        makers: @escaping () -> [FactSuggestion],
         pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         let id = caliber.id
         let values = Self.texts(of: caliber, locale: locale)
         name = FactField(
             label: "Name", prompt: "Name", actionName: "Name", text: values.name,
-            rule: .required("Write a name for this caliber."),
+            rule: .required("Enter a name."),
             save: { text in _ = try await service.update(id, .name(text)) }, pause: pause)
         maker = FactField(
             label: "Maker", prompt: "Add maker", actionName: "Maker", text: values.maker,
             rule: .anyText, suggestions: makers,
             save: { text in _ = try await service.update(id, .maker(text)) }, pause: pause)
         winding = FactField(
-            label: "Winding", prompt: "Manual, Automatic or Quartz", actionName: "Winding",
+            label: "Winding", prompt: "Add winding", actionName: "Winding",
             text: values.winding, rule: Self.windingRule,
-            suggestions: { Winding.allCases.map(\.rawValue) },
             save: { text in _ = try await service.update(id, .winding(Winding(written: text))) },
             pause: pause)
         beatRate = Self.number(
@@ -83,7 +85,7 @@ struct CaliberFacts {
         problem: { text in
             let typed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !typed.isEmpty, Winding(written: typed) == nil else { return nil }
-            return "Write Manual, Automatic or Quartz, or leave this empty."
+            return "Choose Manual, Automatic or Quartz."
         },
         normalized: { text in Winding(written: text)?.rawValue ?? "" })
 

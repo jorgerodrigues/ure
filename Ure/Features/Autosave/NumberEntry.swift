@@ -12,6 +12,8 @@ nonisolated struct NumberEntry: Sendable {
         case aboveZero
     }
 
+    // What the number is, in a sentence, such as "beat rate".
+    let name: String
     // The unit written after a shown number, such as "vph". Nil shows the bare number.
     let unit: String?
     // Whether the unit follows the number without a space, as in "52°".
@@ -19,14 +21,19 @@ nonisolated struct NumberEntry: Sendable {
     // Units a typed number may end with, in lowercase.
     let units: Set<String>
     let minimum: Minimum
-    // A typical value, used in the message that explains what to write.
+    // A typical value, used in the message that says what to enter.
     let example: Double
 
     func text(for value: Double?, locale: Locale) -> String {
         guard let value else { return "" }
         let number = value.formatted(.number.locale(locale).precision(.fractionLength(0...6)))
-        guard let unit else { return number }
-        return joinsUnit ? number + unit : "\(number) \(unit)"
+        return number + (shownUnit ?? "")
+    }
+
+    // The unit as it follows a shown number, such as " vph" or "°".
+    var shownUnit: String? {
+        guard let unit else { return nil }
+        return joinsUnit ? unit : " \(unit)"
     }
 
     func value(from text: String, locale: Locale) throws(NumberEntryProblem) -> Double? {
@@ -75,24 +82,24 @@ nonisolated struct NumberEntry: Sendable {
 
     private func problem(_ kind: NumberEntryProblem.Kind, locale: Locale) -> NumberEntryProblem {
         let example = text(for: example, locale: locale)
+        let zero = text(for: 0, locale: locale)
         switch kind {
         case .notANumber:
-            return NumberEntryProblem(kind: kind, message: "Write a number, such as \(example).")
+            return NumberEntryProblem(kind: kind, message: "Enter a number, such as \(example).")
         case .unknownUnit:
             if let unit {
                 return NumberEntryProblem(
-                    kind: kind, message: "Write the number in \(unit), such as \(example).")
+                    kind: kind, message: "Enter the \(name) in \(unit), such as \(example).")
             }
             return NumberEntryProblem(
-                kind: kind, message: "Write only the number, such as \(example).")
+                kind: kind, message: "Enter only the number, such as \(example).")
         case .belowMinimum:
             switch minimum {
             case .zero:
                 return NumberEntryProblem(
-                    kind: kind, message: "Write zero or more, or leave this empty.")
+                    kind: kind, message: "Enter a \(name) of \(zero) or more.")
             case .aboveZero:
-                return NumberEntryProblem(
-                    kind: kind, message: "Write a number above zero, or leave this empty.")
+                return NumberEntryProblem(kind: kind, message: "Enter a \(name) above \(zero).")
             }
         }
     }

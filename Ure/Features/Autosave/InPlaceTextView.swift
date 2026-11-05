@@ -5,11 +5,12 @@ import SwiftUI
 // the autosave field. Tab and Shift-Tab move to the next and previous field in reading order.
 // Return takes a suggestion and moves on too. Esc puts back the text from when editing began.
 // A suggestion shows in grey after the typed text, and Tab, Return or the Right Arrow at the
-// end takes it.
+// end takes it. At rest, a value's unit reads quieter than its number.
 struct InPlaceTextView: NSViewRepresentable {
     let field: FactField
     let text: String
     let suggestion: String?
+    let style: InPlaceStyle
     let isEditable: Bool
     let identifier: String
     let requestsFocus: Bool
@@ -18,11 +19,11 @@ struct InPlaceTextView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(field: field) }
 
     func makeNSView(context: Context) -> InPlaceTextField {
-        let view = InPlaceTextField(prompt: field.prompt)
+        let view = InPlaceTextField(prompt: field.prompt, style: style)
         view.delegate = context.coordinator
         view.onBeginEditing = context.coordinator.beginEditing
         view.isEditable = isEditable
-        view.stringValue = text
+        view.show(text, unit: field.unit)
         view.setLabel(field.label)
         view.setAccessibilityIdentifier(identifier)
         return view
@@ -38,8 +39,8 @@ struct InPlaceTextView: NSViewRepresentable {
         if !isEditable, view.currentEditor() != nil { view.window?.makeFirstResponder(nil) }
         if let editor = view.currentEditor() as? NSTextView {
             if editor.string != text { editor.string = text }
-        } else if view.stringValue != text {
-            view.stringValue = text
+        } else {
+            view.show(text, unit: field.unit)
         }
         view.showSuggestion(remainder)
         if requestsFocus, isEditable { view.requestFocus(then: didFocus) }
@@ -136,15 +137,17 @@ struct InPlaceTextView: NSViewRepresentable {
 final class InPlaceTextField: NSTextField {
     var onBeginEditing: () -> Void = {}
     private let suggestionView = SuggestionTextView()
+    private let textFont: NSFont
     private var focusRequest: (() -> Void)?
 
-    init(prompt: String) {
+    init(prompt: String, style: InPlaceStyle) {
+        textFont = style.font
         super.init(frame: .zero)
         isBordered = false
         isBezeled = false
         drawsBackground = false
         focusRingType = .none
-        font = Self.textFont
+        font = textFont
         textColor = .labelColor
         lineBreakMode = .byTruncatingTail
         cell?.usesSingleLineMode = true
@@ -152,14 +155,28 @@ final class InPlaceTextField: NSTextField {
         cell?.isScrollable = true
         cell?.allowsUndo = false
         setPrompt(prompt)
-        suggestionView.font = Self.textFont
+        suggestionView.font = textFont
         suggestionView.isHidden = true
         addSubview(suggestionView)
     }
 
     required init?(coder: NSCoder) { return nil }
 
-    static let textFont = NSFont.systemFont(ofSize: InPlaceLayout.textSize)
+    // Shows a value at rest, with its unit in the secondary colour, such as "19,800" and " vph".
+    func show(_ text: String, unit: String?) {
+        guard let unit, text.hasSuffix(unit), text.count > unit.count else {
+            if stringValue != text { stringValue = text }
+            return
+        }
+        let shown = NSMutableAttributedString(
+            string: text, attributes: [.font: textFont, .foregroundColor: NSColor.labelColor])
+        let length = (text as NSString).length
+        let unitLength = (unit as NSString).length
+        shown.addAttribute(
+            .foregroundColor, value: NSColor.secondaryLabelColor,
+            range: NSRange(location: length - unitLength, length: unitLength))
+        if attributedStringValue != shown { attributedStringValue = shown }
+    }
 
     // VoiceOver reads the field's cell, so the label goes on the cell as well as the field.
     func setLabel(_ label: String) {
@@ -168,14 +185,16 @@ final class InPlaceTextField: NSTextField {
         cell?.setAccessibilityLabel(label)
     }
 
+    // The prompt stays the field's placeholder for VoiceOver. InPlaceField draws it.
     func setPrompt(_ prompt: String) {
         guard placeholderAttributedString?.string != prompt else { return }
         placeholderAttributedString = NSAttributedString(
-            string: prompt,
-            attributes: [.font: Self.textFont, .foregroundColor: NSColor.tertiaryLabelColor])
+            string: prompt, attributes: [.font: textFont, .foregroundColor: NSColor.clear])
     }
 
+    // While you type, the whole value is in the label colour.
     override func becomeFirstResponder() -> Bool {
+        if isEditable { stringValue = stringValue }
         guard super.becomeFirstResponder() else { return false }
         if isEditable { onBeginEditing() }
         return true
@@ -211,7 +230,7 @@ final class InPlaceTextField: NSTextField {
         let line = layout.lineFragmentRect(forGlyphAt: last.location, effectiveRange: nil)
         let end = layout.boundingRect(forGlyphRange: last, in: container).maxX
         let width = ceil(
-            NSAttributedString(string: remainder, attributes: [.font: Self.textFont]).size().width)
+            NSAttributedString(string: remainder, attributes: [.font: textFont]).size().width)
         let origin = editor.textContainerOrigin
         var frame = convert(
             NSRect(x: origin.x + end, y: origin.y + line.minY, width: width, height: line.height),
@@ -271,7 +290,7 @@ final class InPlaceTextField: NSTextField {
 
 // The grey rest of a suggestion. It never takes clicks, so they reach the field under it.
 final class SuggestionTextView: NSView {
-    var font = InPlaceTextField.textFont
+    var font = InPlaceStyle.body.font
     var text = "" {
         didSet { needsDisplay = true }
     }
@@ -295,16 +314,48 @@ final class SuggestionTextView: NSView {
     }
 }
 
+// The body style is a 15 pt fact. The title style is the 26 pt bold name in a page header.
+enum InPlaceStyle {
+    case body
+    case title
+
+    var font: NSFont {
+        switch self {
+        case .body: .systemFont(ofSize: InPlaceLayout.textSize)
+        case .title: .systemFont(ofSize: InPlaceLayout.titleSize, weight: .bold)
+        }
+    }
+
+    var boxHeight: CGFloat {
+        switch self {
+        case .body: InPlaceLayout.boxHeight
+        case .title: InPlaceLayout.titleBoxHeight
+        }
+    }
+}
+
+// Values from the "7 Typing" artboard on the Paper page "Rework · Simple".
 enum InPlaceLayout {
     static let textSize: CGFloat = 15
-    static let lineHeight: CGFloat = 24
-    static let inset: CGFloat = 6
-    static let cornerRadius: CGFloat = 6
+    static let titleSize: CGFloat = 26
+    static let boxHeight: CGFloat = 32
+    static let titleBoxHeight: CGFloat = 40
+    static let inset: CGFloat = 8
+    static let cornerRadius: CGFloat = 8
     static let minimumWidth: CGFloat = 120
-    static let focusWidth: CGFloat = 3
+    static let ringSpread: CGFloat = 4
+    static let ringOpacity: Double = 0.18
+    static let labelSize: CGFloat = 11
+    static let labelSpacing: CGFloat = 4
     static let messageSize: CGFloat = 12
+    static let messageTop: CGFloat = 8
     static let hintSize: CGFloat = 11
-    static let messageSpacing: CGFloat = 4
-    static let labelWidth: CGFloat = 120
-    static let columnSpacing: CGFloat = 12
+    static let hintTop: CGFloat = 6
+    static let listGap: CGFloat = 4
+    static let listPadding: CGFloat = 5
+    static let listRadius: CGFloat = 10
+    static let rowHeight: CGFloat = 28
+    static let rowRadius: CGFloat = 6
+    static let rowTextSize: CGFloat = 13
+    static let rowDetailSize: CGFloat = 12
 }
