@@ -517,18 +517,30 @@ final class PartEntry {
     var isTyping: Bool { isEditing || isEditingDescription }
     private(set) var isEditingDescription = false
 
-    func beginDescription() { isEditingDescription = true }
+    func beginDescription() {
+        isEditingDescription = true
+        isTypingBurst = false
+    }
     func endDescription() { isEditingDescription = false }
-    func changeDescription(to newText: String) { description = newText }
+    func changeDescription(to newText: String, undoManager: UndoManager? = nil) {
+        guard newText != description else { return }
+        registerTyping(undoManager)
+        description = newText
+    }
 
-    func beginEditing() { isEditing = true }
+    // Each time the cursor comes to the line, the typing that follows is a new Undo step.
+    func beginEditing() {
+        isEditing = true
+        isTypingBurst = false
+    }
 
     func endEditing() {
         isEditing = false
         highlightedID = nil
     }
 
-    func change(to newText: String) {
+    func change(to newText: String, undoManager: UndoManager? = nil) {
+        if newText != text { registerTyping(undoManager) }
         text = newText
         if let highlightedID, !spares.contains(where: { $0.id == highlightedID }) {
             self.highlightedID = nil
@@ -554,10 +566,46 @@ final class PartEntry {
     func highlight(_ id: UUID?) { highlightedID = id }
 
     // Empties the line for the next part.
+    // The typing on the line is gone, so its Undo goes too, and ⌘Z reaches the part it added.
     func clear() {
         text = ""
         description = ""
         highlightedID = nil
+        endTyping()
+    }
+
+    // Each burst of typing on the line is one Undo step, so ⌘Z undoes the typing before it
+    // reaches a part added earlier. Redo puts the typing back.
+    @ObservationIgnored private var isTypingBurst = false
+    @ObservationIgnored private weak var undoManager: UndoManager?
+
+    private func registerTyping(_ undoManager: UndoManager?) {
+        guard let undoManager, !isTypingBurst else { return }
+        isTypingBurst = true
+        registerRestore(PartEntryText(name: text, description: description), undoManager)
+    }
+
+    private func registerRestore(_ typed: PartEntryText, _ undoManager: UndoManager) {
+        self.undoManager = undoManager
+        undoManager.registerUndo(withTarget: self) { [weak undoManager] entry in
+            MainActor.assumeIsolated { entry.restore(typed, undoManager: undoManager) }
+        }
+        undoManager.setActionName(PartEntryWording.typingActionName)
+    }
+
+    private func restore(_ typed: PartEntryText, undoManager: UndoManager?) {
+        isTypingBurst = false
+        if let undoManager {
+            registerRestore(PartEntryText(name: text, description: description), undoManager)
+        }
+        text = typed.name
+        description = typed.description
+        highlightedID = nil
+    }
+
+    private func endTyping() {
+        isTypingBurst = false
+        undoManager?.removeAllActions(withTarget: self)
     }
 
     // The parts typed on this line that did not save, in the order they were typed.

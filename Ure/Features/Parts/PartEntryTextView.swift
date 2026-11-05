@@ -99,9 +99,11 @@ struct PartEntryTextView: NSViewRepresentable {
 
         func controlTextDidChange(_ notification: Notification) {
             guard let view = notification.object as? NSTextField else { return }
+            let undoManager = view.window?.undoManager
             switch role {
-            case .name: entry.change(to: view.stringValue)
-            case .description: entry.changeDescription(to: view.stringValue)
+            case .name: entry.change(to: view.stringValue, undoManager: undoManager)
+            case .description:
+                entry.changeDescription(to: view.stringValue, undoManager: undoManager)
             }
         }
 
@@ -165,6 +167,7 @@ struct PartEntryTextView: NSViewRepresentable {
 enum PartEntryWording {
     static let prompt = "Add a part or use a spare"
     static let descriptionPrompt = "Description"
+    static let typingActionName = "Typing"
     // The start of the add line's description field's identifier.
     static let descriptionID = "addPartDescription-"
 }

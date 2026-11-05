@@ -184,6 +184,54 @@ struct PartStateTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
+    func typingOnTheAddLineUndoesBeforeThePartAddedBeforeIt() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        let parts = PartState(service: PartService(coordinator: coordinator))
+        let observation = Task { await parts.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { !parts.isLoading }
+        let undoManager = UndoManager()
+        undoManager.groupsByEvent = false
+        let entry = parts.entry(for: job.id)
+        entry.beginEditing()
+
+        undoManager.beginUndoGrouping()
+        entry.change(to: "M", undoManager: undoManager)
+        entry.change(to: "Mainspring", undoManager: undoManager)
+        undoManager.endUndoGrouping()
+        #expect(undoManager.undoActionName == PartEntryWording.typingActionName)
+        undoManager.beginUndoGrouping()
+        let typed = PartEntryText(name: entry.text)
+        entry.clear()
+        #expect(await parts.submit(typed, spare: nil, on: entry, undoManager: undoManager))
+        undoManager.endUndoGrouping()
+        #expect(undoManager.undoActionName == PartState.addActionName)
+
+        // ⌘Z undoes the typing of the next part first, and only then the part added before it.
+        undoManager.beginUndoGrouping()
+        entry.change(to: "Cry", undoManager: undoManager)
+        entry.changeDescription(to: "30.0 mm", undoManager: undoManager)
+        undoManager.endUndoGrouping()
+        undoManager.undo()
+        #expect(entry.text.isEmpty && entry.description.isEmpty)
+        #expect(parts.parts(on: job.id).map(\.name) == ["Mainspring"])
+        undoManager.redo()
+        #expect(entry.text == "Cry" && entry.description == "30.0 mm")
+        undoManager.undo()
+        undoManager.undo()
+        await parts.waitForPresenceChanges()
+        #expect(parts.parts(on: job.id).isEmpty)
+        entry.endEditing()
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
     func aDeletionWaitsForTypingThatDidNotSave() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
