@@ -19,16 +19,10 @@ nonisolated struct BackupExportTests {
         for owner in owners {
             let photo = try fixture.source(type: .heic, name: "\(UUID())–時計.heic")
             let pdf = try fixture.source(type: .pdf)
-            _ = try #require(
-                await PhotoService(coordinator: coordinator).importFiles([photo], for: owner).first
-            )
-            .outcome.get()
-            _ = try #require(
-                await DocumentService(coordinator: coordinator).importFiles([pdf], for: owner).first
-            )
-            .outcome.get()
-            _ = try await ReferenceService(coordinator: coordinator).save(
-                ReferenceFixture.draft, for: owner, editing: nil)
+            _ = try await MaterialFixture.file(photo, for: owner, in: coordinator)
+            _ = try await MaterialFixture.file(pdf, for: owner, in: coordinator)
+            _ = try await MaterialFixture.link(
+                titled: "Technical sheet", for: owner, in: coordinator)
         }
         let generation = LibraryFiles.generation(info.generationID, in: fixture.root)
         try Data("untracked original".utf8).write(

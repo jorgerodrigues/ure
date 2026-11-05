@@ -113,11 +113,11 @@ Show open jobs grouped by Planned, In progress, Waiting, and Ready. Each row has
 
 ### Watch detail
 
-Show identity, specifications, current condition, watch-level notes and references, and job history. A primary action creates a job or opens the existing open job. The app does not automatically create a second open job.
+Show identity, specifications, current condition, watch-level notes and material, and job history. A primary action creates a job or opens the existing open job. The app does not automatically create a second open job.
 
 ### Job detail
 
-The header shows watch identity, job stage, watch condition, and task progress. Sections are Overview, Tasks, Parts, Notes, Photos, and References. Overview shows intake, outcome, owner details, and the activity timeline. The reference pane can display a job, watch, or caliber item while another section remains open.
+The header shows watch identity, job stage, watch condition, and task progress. Sections are Overview, Tasks, Parts, Notes, and Material. Overview shows intake, outcome, owner details, and the activity timeline. The reference pane can display a job, watch, or caliber item while another section remains open.
 
 ### Parts overview
 
@@ -125,11 +125,11 @@ Show parts from open jobs. Filter by Needed, Ordered, Arrived, Installed, or Can
 
 ### Caliber detail
 
-Show manufacturer, exact designation and variant, structured specifications, notes, and reference items. Watches that refer to the caliber are visible. Editing shared content affects future viewing from those watches. It does not rewrite job intake snapshots.
+Show manufacturer, exact designation and variant, structured specifications, notes, and material. Watches that refer to the caliber are visible. Editing shared content affects future viewing from those watches. It does not rewrite job intake snapshots.
 
 ### Save and failure behavior
 
-Notes save as you type. A change saves half a second after typing stops, again when focus leaves the notes, and before the window closes or the app quits. Cmd-Z undoes a notes change, even after it saved, and Shift-Cmd-Z redoes it. Esc puts back the notes as they were when focus entered them. A failed notes save keeps the text on screen, says that it did not save, and offers Try Again. Quitting while a notes save has failed asks before it quits. Leaving the notes asks nothing. The autosave lives in the feature state layer, so later Rework stories reuse it for other fields.
+Notes save as you type. A change saves half a second after typing stops, again when focus leaves the notes, and before the window closes or the app quits. Cmd-Z undoes a notes change, even after it saved, and Shift-Cmd-Z redoes it. Esc puts back the notes as they were when focus entered them. A failed notes save keeps the text on screen, says that it did not save, and offers Try Again. Quitting while a notes save has failed asks before it quits. Leaving the notes asks nothing. The autosave lives in the feature state layer, so later Rework stories reuse it for other fields. Material titles use it too.
 
 Forms that the Rework has not replaced yet show Save and Cancel. Cmd-S saves the active editor. Navigation, window closure, and app termination with an unsaved draft offer Save, Discard, or Stay. A failed save keeps the draft and shows a useful error. Buttons become disabled during their own pending operation. A success state appears only after persistence succeeds. W013 task changes follow the existing Save and Cancel editor pattern. Immediate task-row status actions remain proposed. Failure keeps the draft and the prior saved task state.
 
@@ -177,9 +177,13 @@ Each watch, caliber, and job has one plain-text notes text. It is empty by defau
 
 Libraries before W033 kept separate note records with a title, body, kind, and occurred date. The W033 migration joins each record's notes into its notes text, oldest first by occurred date and then created time. Each old note starts on its own line with its date, kind, and title, such as "14 October 2026 · Work log · Mainspring", followed by its body. A blank line separates old notes. Then the note table goes. Nothing typed is lost: when a later Rework story removes a field, its migration writes the value into the owning record's notes under "From the old record".
 
-### Library items and file assets
+### Material and file assets
 
-A library item belongs to exactly one watch, job, or caliber. Use three nullable foreign keys with a CHECK constraint requiring exactly one owner. Kind is Photo, Document, or Link. Required: title. Optional: caption or notes, source URL, and source description. Photos also have a stage label: Unclassified, Before, During, or After. A document is a PDF in version 1. Links require HTTP or HTTPS URLs. File items require a file asset ID. An imported PDF may also have a source URL.
+Material is a photo, a PDF, or a link. It is stored as a library item that belongs to exactly one watch, job, or caliber. Use three nullable foreign keys with a CHECK constraint requiring exactly one owner. Material keeps its kind, a title, its file or URL, and the date it was added. Kind is Photo, Document, or Link, and the app shows a document as PDF. A link has an HTTP or HTTPS URL and no file. A photo or PDF has a file asset ID and no URL. A new file is titled by its filename. A new link is titled by its host without "www.". The title is required. It is edited in place and saves with the W033 autosave. A blank title keeps the saved one.
+
+Libraries before W034 also kept a photo stage, a caption, a PDF source URL, a source description, and item notes. The W034 migration writes each item's values into its owner's notes under "From the old record", oldest item first. Each item starts on its own line with its kind and title, such as "Photo · Dial at intake", followed by one line per value, such as "Stage: Before". An Unclassified stage was the default, so it is not written. Then those fields go. The migration does not change any record's updated time, and no original file moves or changes.
+
+Removing material keeps its file asset and records it in a removed-file table, so that Undo can bring the material back with its original. When the library opens, no Undo from an earlier session is left. File assets recorded there that no material uses are then deleted, and startup recovery removes their originals.
 
 A file asset describes an immutable local original: ID, generated relative storage key, original filename, detected type, byte count, SHA-256 hash, and import time. Photo assets also store image dimensions and orientation metadata. Display thumbnails are disposable files outside the original store. Filenames supplied by the user never become storage paths. Do not store photo or PDF bytes in database rows.
 
@@ -209,13 +213,15 @@ Users can correct a part status. Moving backwards or cancelling requires a reaso
 
 ## 7 Files and reference use
 
-Import JPEG, PNG, HEIC, and PDF through the system file picker or file drag and drop. Detect the actual type. Do not trust the extension. The user approved 100 MB (100,000,000 bytes) per original and 200 files per batch on 2 October 2026. Report unsupported, corrupt, or oversized files individually. Valid files in the batch still import. Repeated imports create separate items in this release; content deduplication is later work.
+Add JPEG, PNG, HEIC, and PDF files to a record's Material section by dropping them on its strip or by clicking the strip to use the system file picker. Pasting an HTTP or HTTPS URL, or dropping a web link, adds a link. Other pasted text adds nothing and says why. Detect the actual type. Do not trust the extension. The user approved 100 MB (100,000,000 bytes) per original and 200 files per batch on 2 October 2026. Report unsupported, corrupt, or oversized files individually. Valid files in the batch still import. Repeated imports create separate items in this release; content deduplication is later work.
 
 Copy each selected original into app-controlled storage before reporting success. Moving or deleting the source later must not break the reference. Keep original bytes unchanged. Generate thumbnails away from the main thread. Do not decode full-size photos for list rows. Honor orientation. A failed thumbnail shows a placeholder and leaves the original available.
 
 The import sequence is staged copy, validation and hash, atomic move to the final generated filename, then database commit. No committed item may refer to an incomplete original. A failed database commit removes the unreferenced staged original when possible. Startup recovery removes abandoned imports only after confirming that no database record refers to them. File operations and SQLite are not assumed to form one transaction.
 
-The viewer supports fit, zoom, pan, next and previous photo, caption, and original filename. PDF viewing supports page navigation and zoom. W011 defines protected PDFs as unsupported in version 1, including owner-restricted PDFs that open without a password. Invalid or unavailable content shows an error with a retry or export-original option where possible. A missing asset never crashes navigation. Imported documents work offline. External links do not promise offline content. Version 1 does not fetch linked pages, thumbnails, or PDFs automatically.
+Opening a photo or PDF tile shows it in the photo viewer or PDF reader. Opening a link tile opens the default browser. The photo viewer supports fit, zoom, pan, next and previous photo, and original filename. PDF viewing supports page navigation and zoom. W011 defines protected PDFs as unsupported in version 1, including owner-restricted PDFs that open without a password. Invalid or unavailable content shows an error with a retry or export-original option where possible. A missing asset never crashes navigation. Imported documents work offline. External links do not promise offline content. Version 1 does not fetch linked pages, thumbnails, or PDFs automatically.
+
+A watch or job page also shows its caliber's material as chips, such as "From Omega 552:". The chips open the caliber's material in place. The material stays on the caliber and is not copied.
 
 The bench pane pins one reference at a time. Switching job sections keeps it visible. Switching jobs clears the pin unless it belongs to the new job's watch or caliber. A read-only reference window can remain open while tasks are edited in the main window.
 
@@ -265,7 +271,7 @@ Do not place the live SQLite library in an iCloud Drive or Dropbox folder. File 
 
 Archive is reversible and separate from job completion. A watch can be archived only when it has no open job. Archived watches, closed jobs, and unused archived calibers remain readable and can be restored to normal lists. A caliber in use can be archived from the caliber list without breaking its existing watch links.
 
-Top-level watch and job deletion is outside version 1. Archive covers their removal from normal views. Child tasks, part links, and library items can be removed after confirmation. A task with parts links must list those links in the confirmation. Part requirements use Cancelled to preserve procurement history. Removing a linked library item clears its selections and cover references. Remove unreferenced asset files only after the database operation succeeds. Retry failed cleanup safely at startup.
+Top-level watch and job deletion is outside version 1. Archive covers their removal from normal views. Child tasks and part links can be removed after confirmation. A task with parts links must list those links in the confirmation. Part requirements use Cancelled to preserve procurement history. Material is removed at once without confirmation, and Cmd-Z brings it back. Removing material clears its selections and cover references. Undo puts the cover back if no other cover was chosen since. Its original file is deleted only when Undo can no longer bring it back, which is the next time the library opens. Retry failed cleanup safely at startup.
 
 ### Backup
 
@@ -283,7 +289,7 @@ Local pre-migration and pre-restore recovery copies protect against app failures
 
 ## 11 Search and accessibility
 
-Global search covers watch identity, caliber designation, job titles, the notes text of watches, calibers, and jobs, part descriptions, manufacturer references, and library item titles and captions. It does not index PDF contents or text within images. Group results by record kind and include watch or job context. Opening a result selects the exact item. Archive inclusion is an explicit filter.
+Global search covers watch identity, caliber designation, job titles, the notes text of watches, calibers, and jobs, part descriptions, manufacturer references, and material titles. It does not index PDF contents or text within images. Group results by record kind and include watch or job context. Opening a result selects the exact item. Archive inclusion is an explicit filter.
 
 Use bound SQL parameters. Define a consistent case-insensitive Unicode search key in Swift and keep it updated in each affected transaction. Use simple indexed queries and contains matching first. Introduce FTS only if the measured library size requires it. Do not rely on SQLite's basic NOCASE behavior for all languages.
 

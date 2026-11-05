@@ -196,11 +196,11 @@ struct PartStateTests {
         #expect(browser.opened.map(\.absoluteString) == [link.url])
         browser.isAvailable = false
         state.openLink(link)
-        #expect(state.openError == ReferenceError.browserUnavailable.localizedDescription)
+        #expect(state.openError == LinkError.browserUnavailable.localizedDescription)
         let invalid = PartLink(
             id: UUID(), partID: part.id, position: 0, url: "file:///tmp/part",
             createdAt: Date(), updatedAt: Date())
-        #expect(throws: ReferenceError.invalidURL) { try service.open(invalid) }
+        #expect(throws: LinkError.invalidURL) { try service.open(invalid) }
         #expect(browser.opened.count == 2)
         for observation in observations { observation.cancel(); await observation.value }
         try await coordinator.close()
@@ -298,9 +298,7 @@ struct PartStateTests {
             watches: WatchState(service: WatchService(coordinator: coordinator)),
             calibers: CaliberState(service: CaliberService(coordinator: coordinator)), jobs: jobs,
             notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
-            references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
-            photos: PhotoState(service: PhotoService(coordinator: coordinator)),
-            documents: DocumentState(service: DocumentService(coordinator: coordinator)),
+            material: MaterialState(service: MaterialService(coordinator: coordinator)),
             tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)), parts: parts)
     }
 

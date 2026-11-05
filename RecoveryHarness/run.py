@@ -19,7 +19,7 @@ WORKER = Path(sys.argv[1]).resolve()
 RUN = REPO / ".build/recovery-runs" / str(uuid.uuid4())
 GENERATION = "00000000-0000-4000-8000-000000000001"
 VERSIONS = ("v10-documents", "v15-part-procurement")
-CURRENT_MIGRATION = "v19-record-notes"
+CURRENT_MIGRATION = "v20-material"
 # Columns that a later migration removes on purpose.
 REMOVED_COLUMNS = {
     "partLink": {
@@ -27,7 +27,13 @@ REMOVED_COLUMNS = {
         "searchKey",
     },
     "partRequirement": {"supplierSnapshot"},
+    "libraryItem": {"sourceURL", "sourceDescription", "notes", "photoStage", "caption"},
 }
+# Library item fields that v20 writes into the owner's notes, with the label before each value.
+MOVED_INTO_NOTES = (
+    ("photoStage", "Stage: "), ("caption", "Caption: "), ("sourceDescription", "Source description: "),
+    ("notes", "Notes: "),
+)
 # Tables that a later migration joins into the notes text of the record that owns each row.
 JOINED_INTO_NOTES = {"note"}
 NOTE_OWNERS = (("watchID", "watch"), ("jobID", "job"), ("caliberID", "caliber"))
@@ -125,9 +131,37 @@ def inspect(generation):
     return dict(tables=tables, originals=originals, migrations=migrations)
 
 
+def owner_notes(row, after):
+    column, owner_table = next(pair for pair in NOTE_OWNERS if row[pair[0]])
+    return next(owner for owner in after["tables"][owner_table] if owner["id"] == row[column])["notes"]
+
+
+def material_preserved(rows, after):
+    material = {row["id"]: row for row in after["tables"]["libraryItem"]}
+    for row in rows:
+        kept = material[row["id"]]
+        kind_title = {"Photo": "Photo", "Document": "PDF", "Link": "Link"}[row["kind"]]
+        notes = owner_notes(row, after)
+        if row["kind"] == "Link":
+            require(kept["url"] == row["sourceURL"], "libraryItem: link URL kept")
+        elif row["sourceURL"].strip():
+            require("Source URL: " + row["sourceURL"].rstrip() in notes, "libraryItem: source URL in notes")
+        moved = False
+        for column, label in MOVED_INTO_NOTES:
+            value = row[column] or ""
+            if not value.strip() or (column == "photoStage" and value == "Unclassified"):
+                continue
+            moved = True
+            require(label + value.rstrip() in notes, f"libraryItem: {column} in owner notes")
+        if moved:
+            require(kind_title + " · " + row["title"] in notes, "libraryItem: title in owner notes")
+
+
 def preserved(before, after):
     require(before["originals"] == after["originals"], "Original and technical PDF bytes preserved")
     for table, rows in before["tables"].items():
+        if table == "libraryItem" and rows and "sourceURL" in rows[0]:
+            material_preserved(rows, after)
         if table in JOINED_INTO_NOTES:
             require(table not in after["tables"], f"{table}: joined into record notes")
             for note in rows:

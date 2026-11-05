@@ -430,23 +430,9 @@ actor LibraryCoordinator {
         return ValueObservation.tracking(PartQueries.fetchAll).values(in: database)
     }
 
-    func referenceValues() throws -> AsyncValueObservation<[LibraryItem]> {
+    func materialValues() throws -> AsyncValueObservation<[MaterialRecord]> {
         guard let database else { throw LibraryError.notOpen }
-        return ValueObservation.tracking { db in
-            try LibraryItem.fetchAll(
-                db, sql: "SELECT * FROM libraryItem WHERE kind = 'Link' ORDER BY createdAt DESC, id"
-            )
-        }.values(in: database)
-    }
-
-    func photoValues() throws -> AsyncValueObservation<[PhotoRecord]> {
-        guard let database else { throw LibraryError.notOpen }
-        return ValueObservation.tracking(PhotoQueries.fetchAll).values(in: database)
-    }
-
-    func documentValues() throws -> AsyncValueObservation<[DocumentRecord]> {
-        guard let database else { throw LibraryError.notOpen }
-        return ValueObservation.tracking(DocumentQueries.fetchAll).values(in: database)
+        return ValueObservation.tracking(MaterialQueries.fetchAll).values(in: database)
     }
 
     func benchValues() throws -> AsyncValueObservation<BenchSnapshot> {
@@ -508,6 +494,7 @@ actor LibraryCoordinator {
                 try migrator.migrate(writer)
                 try dependencies.upgradeCheckpoint(.afterMigration)
                 try validateDatabase(writer, manifest: manifest)
+                try writer.write(MaterialQueries.deleteRemovedAssets)
                 try recoverImports(writer, generationID: generationID)
                 try Task.checkCancellation()
                 try reader.close()
@@ -548,6 +535,7 @@ actor LibraryCoordinator {
         let writer = try openDatabase(
             in: LibraryFiles.generation(generationID, in: root), readonly: false)
         do {
+            try writer.write(MaterialQueries.deleteRemovedAssets)
             try recoverImports(writer, generationID: generationID)
         } catch {
             try? writer.close()

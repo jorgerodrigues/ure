@@ -558,6 +558,82 @@ nonisolated enum LibrarySchema {
                 try SearchKey.backfill(table, fields: fields, in: db)
             }
         }
+        migrator.registerMigration("v20-material", foreignKeyChecks: .deferred) { db in
+            // Deferred checks preserve watch covers while replacing the referenced table.
+            try MaterialMigration.preserveRemovedFields(in: db)
+            try db.execute(sql: "DROP TRIGGER watch_cover_insert")
+            try db.execute(sql: "DROP TRIGGER watch_cover_update")
+            try db.create(table: "libraryItem_new") { table in
+                table.column("id", .text).primaryKey()
+                table.column("watchID", .text).references("watch", onDelete: .restrict)
+                table.column("jobID", .text).references("job", onDelete: .restrict)
+                table.column("caliberID", .text).references("caliber", onDelete: .restrict)
+                table.check(
+                    sql: "(watchID IS NOT NULL) + (jobID IS NOT NULL) + (caliberID IS NOT NULL) = 1"
+                )
+                table.column("kind", .text).notNull().check(
+                    sql: "kind IN ('Link', 'Photo', 'Document')")
+                table.column("title", .text).notNull().check(sql: "length(trim(title)) > 0")
+                table.column("url", .text)
+                table.column("fileAssetID", .text).references("fileAsset", onDelete: .restrict)
+                for column in ["createdAt", "updatedAt"] {
+                    table.column(column, .double).notNull()
+                }
+                table.column("searchKey", .text).notNull().defaults(to: "")
+                table.check(
+                    sql: """
+                        (kind = 'Link' AND fileAssetID IS NULL AND url IS NOT NULL)
+                        OR (kind IN ('Photo', 'Document') AND fileAssetID IS NOT NULL AND url IS NULL)
+                        """)
+            }
+            try db.execute(
+                sql: """
+                    INSERT INTO libraryItem_new
+                        (id, watchID, jobID, caliberID, kind, title, url, fileAssetID, createdAt,
+                         updatedAt)
+                    SELECT id, watchID, jobID, caliberID, kind, title,
+                        CASE WHEN kind = 'Link' THEN sourceURL END, fileAssetID, createdAt,
+                        updatedAt
+                    FROM libraryItem
+                    """)
+            try db.drop(table: "libraryItem")
+            try db.rename(table: "libraryItem_new", to: "libraryItem")
+            for owner in ["watchID", "jobID", "caliberID"] {
+                try db.create(
+                    index: "libraryItem_\(owner)_createdAt", on: "libraryItem",
+                    columns: [owner, "createdAt"])
+            }
+            try db.create(index: "libraryItem_searchKey", on: "libraryItem", columns: ["searchKey"])
+            // Originals of removed material wait here until Undo can no longer bring it back.
+            try db.create(table: "removedFileAsset") { table in
+                table.column("fileAssetID", .text).primaryKey()
+                    .references("fileAsset", onDelete: .cascade)
+                table.column("removedAt", .double).notNull()
+            }
+            for operation in ["INSERT", "UPDATE"] {
+                try db.execute(
+                    sql: """
+                        CREATE TRIGGER watch_cover_\(operation.lowercased()) BEFORE \(operation) ON watch
+                        WHEN NEW.coverPhotoID IS NOT NULL AND NOT EXISTS (
+                            SELECT 1 FROM libraryItem AS item
+                            LEFT JOIN job ON job.id = item.jobID
+                            WHERE item.id = NEW.coverPhotoID AND item.kind = 'Photo'
+                              AND (item.watchID = NEW.id OR job.watchID = NEW.id))
+                        BEGIN SELECT RAISE(ABORT, 'Invalid watch cover'); END
+                        """)
+            }
+            let searchFields = [
+                "watch": [
+                    "name", "brand", "model", "caseReference", "serial", "approximateYear", "notes",
+                ],
+                "caliber": ["designation", "manufacturer", "variant", "notes"],
+                "job": ["title", "notes"],
+                "libraryItem": ["title"],
+            ]
+            for (table, fields) in searchFields {
+                try SearchKey.backfill(table, fields: fields, in: db)
+            }
+        }
         return migrator
     }
 }

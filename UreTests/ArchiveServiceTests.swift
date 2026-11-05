@@ -90,8 +90,9 @@ nonisolated struct ArchiveServiceTests {
                 "Shared finding", for: .caliber(caliber.id))
         }
         await #expect(throws: ArchiveError.archived) {
-            try await ReferenceService(coordinator: coordinator).save(
-                ReferenceFixture.draft, for: .caliber(caliber.id), editing: nil)
+            try await MaterialService(coordinator: coordinator).addLink(
+                try #require(URL(string: "https://example.org/manual.pdf")),
+                for: .caliber(caliber.id))
         }
         #expect(
             try await coordinator.read { try JobQueries.fetch(job.id, in: $0)?.intakeSnapshot }

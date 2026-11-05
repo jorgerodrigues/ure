@@ -22,6 +22,20 @@ nonisolated struct ReleaseJourneyTests {
                 for: .job(jobID))
             #expect(joined.contains("Research · Observation – æøå\nMeasured 0.12 mm"))
             #expect(joined.contains("Keep Unicode: 時計 and æøå."))
+            let watchID = try #require(UUID(uuidString: "00000000-0000-4000-8000-000000000003"))
+            let watchNotes = try await RecordNotesService(coordinator: coordinator).text(
+                for: .watch(watchID))
+            #expect(
+                watchNotes.hasSuffix(
+                    "From the old record\n\n"
+                        + "Photo · photo.png\nStage: Before\nSource description: Non-sensitive fixture"
+                        + "\n\nPDF · technical.pdf\nSource description: Non-sensitive fixture"))
+            let material = try await coordinator.read(MaterialQueries.fetchAll)
+            #expect(
+                material.map(\.item.kind).sorted { $0.rawValue < $1.rawValue } == [
+                    .document, .link, .photo,
+                ])
+            #expect(material.allSatisfy { $0.item.kind == .link || $0.asset != nil })
         }
         let retainedAssets = try await coordinator.read(FileAssetQueries.fetchAll)
         var watchDraft = WatchDraft()
@@ -73,10 +87,11 @@ nonisolated struct ReleaseJourneyTests {
         #expect(try await progress(job.id, coordinator).percentage == 0)
         let photoSource = try fixture.source(type: .jpeg, name: "bench.jpg")
         let pdfSource = try DocumentFixture.source(in: fixture)
-        let photo = try await PhotoService(coordinator: coordinator).importFiles(
-            [photoSource], for: .job(job.id))[0].outcome.get()
-        let pdf = try await DocumentService(coordinator: coordinator).importFiles(
-            [pdfSource], for: .job(job.id))[0].outcome.get()
+        let added = try await MaterialService(coordinator: coordinator).importFiles(
+            [photoSource, pdfSource], for: .job(job.id)
+        ).map { try $0.outcome.get() }
+        let photo = try #require(added.first?.asset)
+        let pdf = try #require(added.last?.asset)
         try FileManager.default.removeItem(at: fixture.sources)
         var completion = JobTransitionDraft(stage: .completed)
         completion.outcome = "Inspected; unresolved work documented"
@@ -90,11 +105,11 @@ nonisolated struct ReleaseJourneyTests {
         _ = try await coordinator.open()
         #expect(
             try await coordinator.read { try JobQueries.fetch(completed.id, in: $0) } == completed)
-        let image = try await PhotoService(coordinator: coordinator).image(
-            for: photo.asset.id, thumbnail: false)
+        let image = try await MaterialService(coordinator: coordinator).image(
+            for: photo.id, thumbnail: false)
         #expect(image.width == 12 && image.height == 16)
-        let document = try await DocumentService(coordinator: coordinator).document(
-            for: pdf.asset.id)
+        let document = try await MaterialService(coordinator: coordinator).document(
+            for: pdf.id)
         #expect(document.pageCount == 3)
         let expected = try await records(coordinator)
         for (table, rows) in retained {

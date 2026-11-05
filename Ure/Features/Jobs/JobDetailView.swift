@@ -7,9 +7,8 @@ struct JobDetailView: View {
     @Environment(WorkshopNavigation.self) private var navigation
     @Environment(WorkshopEditing.self) private var editing
     @Environment(WatchState.self) private var watches
-    @Environment(DocumentState.self) private var documents
-    @Environment(PhotoState.self) private var photos
-    @Environment(ReferenceState.self) private var references
+    @Environment(MaterialState.self) private var material
+    @Environment(CaliberState.self) private var calibers
     @Environment(JobTaskState.self) private var tasks
     @Environment(PartState.self) private var parts
 
@@ -25,12 +24,8 @@ struct JobDetailView: View {
                 PartDetailView(jobID: job.id)
             } else if let job = jobs.selectedJob, tasks.isPresenting(for: job.id) {
                 JobTaskDetailView(jobID: job.id)
-            } else if let job = jobs.selectedJob, documents.isPresenting(for: .job(job.id)) {
-                DocumentDetailView(owner: .job(job.id))
-            } else if let job = jobs.selectedJob, photos.isPresenting(for: .job(job.id)) {
-                PhotoDetailView(owner: .job(job.id))
-            } else if let job = jobs.selectedJob, references.isPresenting(for: .job(job.id)) {
-                ReferenceDetailView(owner: .job(job.id))
+            } else if let job = jobs.selectedJob, material.isPresenting(on: .job(job.id)) {
+                MaterialViewerView(page: .job(job.id))
             } else if let job = jobs.selectedJob {
                 Form {
                     RecordHeading(title: job.title, subtitle: job.stage.rawValue)
@@ -96,8 +91,7 @@ struct JobDetailView: View {
                     }
                     PartSectionView(jobID: job.id)
                     NotesSectionView(owner: .job(job.id))
-                    PhotoSectionView(owner: .job(job.id))
-                    ReferenceSectionView(owner: .job(job.id))
+                    MaterialSectionView(owner: .job(job.id), caliber: caliber(for: job))
                 }
                 .formStyle(.grouped)
                 .textSelection(.enabled)
@@ -157,6 +151,10 @@ struct JobDetailView: View {
     private var backAction: (() -> Void)? {
         guard !editing.isSaving else { return nil }
         return backToWatch
+    }
+
+    private func caliber(for job: JobRecord) -> CaliberRecord? {
+        calibers.caliber(watches.watches.first { $0.id == job.watchID }?.caliberID)
     }
 
     private func backToWatch() { editing.requestNavigation(jobs.close) }

@@ -38,30 +38,14 @@ nonisolated struct SearchQueriesTests {
         partDraft.links = [PartLinkDraft(url: "https://example.org/part")]
         let part = try await PartService(coordinator: coordinator).save(
             partDraft, for: job.id, editing: nil)
-        var referenceDraft = ReferenceFixture.draft
-        referenceDraft.title = "Sheet link"
-        let reference = try await ReferenceService(coordinator: coordinator).save(
-            referenceDraft, for: .caliber(caliber.id), editing: nil)
+        let reference = try await MaterialFixture.link(
+            titled: "Sheet link", for: .caliber(caliber.id), in: coordinator)
         let source = try fixture.source(type: .png)
-        let photo = try #require(
-            await PhotoService(coordinator: coordinator).importFiles(
-                [source], for: .watch(watch.id)
-            ).first
-        ).outcome.get()
-        var photoDraft = PhotoDraft(item: photo.item)
-        photoDraft.title = "Dial photo"
-        photoDraft.caption = "LÉGENDE"
-        _ = try await PhotoService(coordinator: coordinator).save(
-            photoDraft, for: .watch(watch.id), editing: photo.id)
+        let photo = try await MaterialFixture.file(
+            source, titled: "Dial photo · LÉGENDE", for: .watch(watch.id), in: coordinator)
         let pdf = try DocumentFixture.source(in: fixture)
-        let document = try #require(
-            await DocumentService(coordinator: coordinator).importFiles([pdf], for: .job(job.id))
-                .first
-        ).outcome.get()
-        var documentDraft = DocumentDraft(item: document.item)
-        documentDraft.title = "Technical PDF"
-        _ = try await DocumentService(coordinator: coordinator).save(
-            documentDraft, for: .job(job.id), editing: document.id)
+        let document = try await MaterialFixture.file(
+            pdf, titled: "Technical PDF", for: .job(job.id), in: coordinator)
         let cases: [(String, UUID)] = [
             ("STRASSE", watch.id), ("時計", watch.id), ("μάρκα", watch.id), ("модель", watch.id),
             ("0012–å/04", watch.id), ("000042.7-a", watch.id), ("éта 0012/å", caliber.id),
@@ -100,10 +84,11 @@ nonisolated struct SearchQueriesTests {
                     == [id])
         }
         #expect(
-            try Data(contentsOf: try await restarted.originalURL(for: photo.asset.id)) == photoBytes
-        )
+            try Data(contentsOf: try await restarted.originalURL(for: try #require(photo.asset).id))
+                == photoBytes)
         #expect(
-            try Data(contentsOf: try await restarted.originalURL(for: document.asset.id))
+            try Data(
+                contentsOf: try await restarted.originalURL(for: try #require(document.asset).id))
                 == pdfBytes)
         var editedWatch = WatchDraft(watch: watch)
         editedWatch.name = "Corrected watch"
@@ -117,15 +102,10 @@ nonisolated struct SearchQueriesTests {
         editedJob.title = "Corrected repair"
         _ = try await JobService(coordinator: restarted).save(
             editedJob, for: watch.id, editing: job.id)
-        referenceDraft.title = "Corrected link"
-        _ = try await ReferenceService(coordinator: restarted).save(
-            referenceDraft, for: .caliber(caliber.id), editing: reference.id)
-        photoDraft.caption = "Corrected caption"
-        _ = try await PhotoService(coordinator: restarted).save(
-            photoDraft, for: .watch(watch.id), editing: photo.id)
-        documentDraft.title = "Corrected PDF"
-        _ = try await DocumentService(coordinator: restarted).save(
-            documentDraft, for: .job(job.id), editing: document.id)
+        let material = MaterialService(coordinator: restarted)
+        try await material.rename(reference.id, to: "Corrected link", for: .caliber(caliber.id))
+        try await material.rename(photo.id, to: "Corrected caption", for: .watch(watch.id))
+        try await material.rename(document.id, to: "Corrected PDF", for: .job(job.id))
         for query in [
             "STRASSE", "000042.7-a", "éта 0012/å", "RÉPARATION", "sheet link", "légende",
             "technical pdf",
@@ -244,10 +224,8 @@ nonisolated struct SearchQueriesTests {
             labels[caliber.id] = caliber.label
             try await RecordNotesService(coordinator: coordinator).save(
                 "Service interval", for: .caliber(caliber.id))
-            var linkDraft = ReferenceFixture.draft
-            linkDraft.title = "Service interval"
-            _ = try await ReferenceService(coordinator: coordinator).save(
-                linkDraft, for: .caliber(caliber.id), editing: nil)
+            _ = try await MaterialFixture.link(
+                titled: "Service interval", for: .caliber(caliber.id), in: coordinator)
         }
         let calibers = try await coordinator.read { try SearchQueries.fetch("2824", in: $0) }
         #expect(calibers.count == 2 && Set(calibers.map(\.title)) == Set(labels.values))

@@ -41,27 +41,4 @@ nonisolated struct ChildRemovalService: Sendable {
             return try JobTaskQueries.ordered(for: jobID, in: db)
         }
     }
-
-    func removeItem(_ id: UUID, for owner: LibraryItemOwner, kind: LibraryItemKind) async throws {
-        try await coordinator.mutate { db, _, _ in
-            try RecordAccess.requireOwner(owner, in: db)
-            guard let item = try LibraryItemQueries.fetch(id, in: db) else {
-                throw RemovalError.missingRecord
-            }
-            guard item.belongs(to: owner), item.kind == kind else {
-                throw RemovalError.scopeMismatch
-            }
-            _ = try item.delete(db)
-            if let assetID = item.fileAssetID {
-                try db.execute(
-                    sql: """
-                        DELETE FROM fileAsset WHERE id = ?
-                          AND NOT EXISTS (SELECT 1 FROM libraryItem WHERE fileAssetID = ?)
-                        """, arguments: [assetID.uuidString, assetID.uuidString])
-            }
-        }
-        // Unreferenced generated originals are the durable cleanup work list.
-        // The committed removal stays successful if cleanup must wait for restart.
-        try? await coordinator.recoverImports()
-    }
 }

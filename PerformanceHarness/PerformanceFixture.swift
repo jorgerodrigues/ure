@@ -92,14 +92,11 @@ nonisolated enum PerformanceFixture {
                     importedAt: Date(timeIntervalSince1970: date), pixelWidth: template.width,
                     pixelHeight: template.height, orientation: 1
                 ).insert(db)
-                var item = LibraryItem(
-                    id: try id(6, index), watchID: nil, jobID: try id(3, index / 5), caliberID: nil,
-                    kind: .photo, title: "Synthetic photo \(index)", sourceURL: "",
-                    sourceDescription: "", notes: "", createdAt: Date(timeIntervalSince1970: date),
+                let item = LibraryItem(
+                    id: try id(6, index), owner: .job(try id(3, index / 5)), kind: .photo,
+                    title: "Synthetic photo \(index) · Ühren movement, before cleaning", url: nil,
+                    fileAssetID: assetID, createdAt: Date(timeIntervalSince1970: date),
                     updatedAt: Date(timeIntervalSince1970: date))
-                item.fileAssetID = assetID
-                item.photoStage = PhotoStage.allCases[index % PhotoStage.allCases.count]
-                item.caption = "Ühren movement, before cleaning"
                 try LibraryItemQueries.insert(item, in: db)
             }
             try db.execute(

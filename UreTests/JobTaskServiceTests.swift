@@ -225,22 +225,19 @@ nonisolated struct JobTaskServiceTests {
         let before = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
         let source = try fixture.source(type: .png)
-        let result = try #require(
-            await PhotoService(coordinator: coordinator).importFiles(
-                [source], for: .job(job.id)
-            ).first)
-        let photo = try result.outcome.get()
-        _ = try await PhotoService(coordinator: coordinator).setCover(photo.id, for: job.watchID)
+        let photo = try await MaterialFixture.file(source, for: .job(job.id), in: coordinator)
+        try await MaterialService(coordinator: coordinator).setCover(photo.id, for: job.watchID)
         try await RecordNotesService(coordinator: coordinator).save(
             "Keep this finding", for: .job(job.id))
-        let link = try await ReferenceService(coordinator: coordinator).save(
-            ReferenceFixture.draft, for: .job(job.id), editing: nil)
+        let link = try await MaterialFixture.link(
+            titled: "Technical sheet", for: .job(job.id), in: coordinator)
         _ = try await JobService(coordinator: coordinator).transition(
             job.id, using: JobTransitionDraft(stage: .inProgress))
         let watches = try await coordinator.read(WatchQueries.fetchAll)
         let jobs = try await coordinator.read(JobQueries.fetchAll)
         let events = try await coordinator.read(ActivityQueries.fetchAll)
-        let bytes = try Data(contentsOf: try await coordinator.originalURL(for: photo.asset.id))
+        let asset = try #require(photo.asset)
+        let bytes = try Data(contentsOf: try await coordinator.originalURL(for: asset.id))
         try await coordinator.mutate { db, _, _ in
             try JobTaskMigrationFixture.removeTasks(in: db)
             try db.execute(
@@ -260,8 +257,8 @@ nonisolated struct JobTaskServiceTests {
             try await RecordNotesService(coordinator: reopened).text(for: .job(job.id))
                 .hasSuffix(" · Observation · Notes\nKeep this finding"))
         #expect(try await reopened.read(LibraryItemQueries.fetchAll).contains(link))
-        #expect(try await reopened.read(PhotoQueries.fetchAll) == [photo])
-        #expect(try Data(contentsOf: try await reopened.originalURL(for: photo.asset.id)) == bytes)
+        #expect(try await reopened.read(MaterialQueries.fetchAll).contains(photo))
+        #expect(try Data(contentsOf: try await reopened.originalURL(for: asset.id)) == bytes)
         #expect(try await reopened.read(JobTaskQueries.fetchAll).isEmpty)
         var created = JobTaskFixture.draft(.done)
         created.title = "Completed after migration"

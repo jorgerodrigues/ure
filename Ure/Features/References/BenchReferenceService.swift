@@ -7,7 +7,7 @@ nonisolated struct BenchReference: Equatable, Identifiable, Sendable {
     let asset: FileAsset?
     var id: UUID { item.id }
 
-    var label: String { "\(owner.scope) · \(item.kind.rawValue) · \(item.title)" }
+    var label: String { "\(owner.scope) · \(item.kind.title) · \(item.title)" }
 }
 
 nonisolated struct BenchSnapshot: Sendable {
@@ -36,7 +36,7 @@ nonisolated struct BenchSnapshot: Sendable {
         return items.compactMap { item in
             guard let owner = owners.first(where: item.belongs) else { return nil }
             if item.kind == .link {
-                guard ReferenceDraft.parsedURL(item.sourceURL) != nil else { return nil }
+                guard WebLink.url(from: item.url ?? "") != nil else { return nil }
                 return BenchReference(item: item, owner: owner, asset: nil)
             }
             guard let assetID = item.fileAssetID, let asset = assetsByID[assetID] else {

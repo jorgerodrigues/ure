@@ -109,31 +109,31 @@ struct JobTimelineStateTests {
         let observations = [
             Task { await editing.watches.observe() }, Task { await editing.jobs.observe() },
             Task { await editing.tasks.observe() }, Task { await editing.parts.observe() },
-            Task { await editing.references.observe() },
             Task { await timeline.observe(jobID: job.id, coordinator: coordinator) },
         ]
         defer { observations.forEach { $0.cancel() } }
         try await waitUntil {
             !editing.watches.isLoading && !editing.jobs.isLoading && !editing.tasks.isLoading
-                && !editing.parts.isLoading && !editing.references.isLoading && !timeline.isLoading
+                && !editing.parts.isLoading && !timeline.isLoading
         }
         editing.watches.select(job.watchID)
         editing.jobs.open(job)
         let taskEntry = try #require(timeline.entries.first { $0.source == .task(task.id) })
-        editing.references.create(for: .job(job.id))
-        editing.references.draft?.title = "Keep this draft"
-        editing.references.draft?.sourceURL = "https://example.org/keep"
+        editing.parts.create(for: job.id, jobs: editing.jobs)
+        editing.parts.draft = PartFixture.draft()
+        editing.parts.draft?.description = "Keep this draft"
+        editing.parts.draft?.status = .arrived
         var opened = false
         timeline.openSource(taskEntry, jobID: job.id, editing: editing) { opened = true }
         #expect(editing.showsUnsavedChanges && !opened)
         editing.stay()
-        #expect(editing.references.draft?.title == "Keep this draft")
+        #expect(editing.parts.draft?.description == "Keep this draft")
         timeline.openSource(taskEntry, jobID: job.id, editing: editing) { opened = true }
         await editing.saveAndContinue()
         #expect(opened && editing.tasks.selectedTask == task)
-        #expect(editing.references.owner == nil)
-        let saved = try await coordinator.read(LibraryItemQueries.fetchAll)
-        #expect(saved.map(\.title) == ["Keep this draft"])
+        #expect(editing.parts.draft == nil)
+        let saved = try await coordinator.read(PartQueries.fetchAll)
+        #expect(saved.map(\.record.description).contains("Keep this draft"))
         var closure = JobTransitionDraft(stage: .completed)
         closure.outcome = "Done"
         _ = try await jobs.transition(job.id, using: closure)
@@ -158,9 +158,7 @@ struct JobTimelineStateTests {
             calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
             jobs: JobState(service: JobService(coordinator: coordinator)),
             notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
-            references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
-            photos: PhotoState(service: PhotoService(coordinator: coordinator)),
-            documents: DocumentState(service: DocumentService(coordinator: coordinator)),
+            material: MaterialState(service: MaterialService(coordinator: coordinator)),
             tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
             parts: PartState(service: PartService(coordinator: coordinator)))
     }

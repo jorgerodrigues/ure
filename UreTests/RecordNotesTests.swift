@@ -66,7 +66,7 @@ nonisolated struct RecordNotesMigrationTests {
         let package = fixture.directory.appending(path: "before-notes.watchbackup")
         try LegacyLibraryFixture.package(at: package)
         let staged = try await coordinator.stageRestore(from: package)
-        #expect(staged.summary.appliedMigrations == ["v19-record-notes"])
+        #expect(staged.summary.appliedMigrations == ["v19-record-notes", "v20-material"])
         #expect(staged.summary.counts["note"] == nil && staged.summary.counts["watch"] == 2)
         let result = try await coordinator.activateRestore(staged)
         #expect(result.outcome == .restored)
@@ -298,9 +298,7 @@ struct RecordNotesStateTests {
             watches: WatchState(service: WatchService(coordinator: coordinator)),
             calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
             jobs: JobState(service: JobService(coordinator: coordinator)), notes: notes,
-            references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
-            photos: PhotoState(service: PhotoService(coordinator: coordinator)),
-            documents: DocumentState(service: DocumentService(coordinator: coordinator)),
+            material: MaterialState(service: MaterialService(coordinator: coordinator)),
             tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
             parts: PartState(service: PartService(coordinator: coordinator)))
         await notes.load(owners[1])
@@ -426,6 +424,7 @@ nonisolated enum NoteMigrationFixture {
 // Puts a current library back to the schema before v19, keeping each notes text as a note.
 nonisolated enum RecordNotesMigrationFixture {
     static func restoreNoteRecords(in db: Database) throws {
+        try MaterialMigrationFixture.restoreItemFields(in: db)
         try db.create(table: "note") { table in
             table.column("id", .text).primaryKey()
             table.column("watchID", .text).references("watch", onDelete: .restrict)

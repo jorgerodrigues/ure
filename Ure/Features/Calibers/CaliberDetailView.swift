@@ -3,9 +3,7 @@ import SwiftUI
 struct CaliberDetailView: View {
     @Environment(CaliberState.self) private var calibers
     @Environment(WatchState.self) private var watches
-    @Environment(DocumentState.self) private var documents
-    @Environment(PhotoState.self) private var photos
-    @Environment(ReferenceState.self) private var references
+    @Environment(MaterialState.self) private var material
 
     @Environment(WorkshopNavigation.self) private var navigation
     @Environment(WorkshopEditing.self) private var editing
@@ -14,17 +12,9 @@ struct CaliberDetailView: View {
         if calibers.draft != nil {
             CaliberEditorView()
         } else if let caliber = calibers.selectedCaliber,
-            documents.isPresenting(for: .caliber(caliber.id))
+            material.isPresenting(on: .caliber(caliber.id))
         {
-            DocumentDetailView(owner: .caliber(caliber.id))
-        } else if let caliber = calibers.selectedCaliber,
-            photos.isPresenting(for: .caliber(caliber.id))
-        {
-            PhotoDetailView(owner: .caliber(caliber.id))
-        } else if let caliber = calibers.selectedCaliber,
-            references.isPresenting(for: .caliber(caliber.id))
-        {
-            ReferenceDetailView(owner: .caliber(caliber.id))
+            MaterialViewerView(page: .caliber(caliber.id))
         } else if let caliber = calibers.selectedCaliber {
             Form {
                 RecordHeading(title: caliber.label, subtitle: caliber.manufacturer)
@@ -47,8 +37,7 @@ struct CaliberDetailView: View {
                     CaliberSpecificationsView(caliber: caliber)
                 }
                 NotesSectionView(owner: .caliber(caliber.id))
-                PhotoSectionView(owner: .caliber(caliber.id))
-                ReferenceSectionView(owner: .caliber(caliber.id))
+                MaterialSectionView(owner: .caliber(caliber.id))
                 Section("Linked watches") {
                     if watches.isLoading {
                         ProgressView("Loading watches…")

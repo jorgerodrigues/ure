@@ -150,8 +150,8 @@ struct RestoreStateTests {
             library: library, configuration: AppConfiguration(libraryRoot: fixture.files.root))
         let oldSession = state.session
         let owners = try await ReferenceFixture.owners(coordinator)
-        let reference = try await ReferenceService(coordinator: coordinator).save(
-            ReferenceFixture.draft, for: owners[1], editing: nil)
+        let reference = try await MaterialFixture.link(
+            titled: "Technical sheet", for: owners[1], in: coordinator)
         let snapshot = try await coordinator.read(BenchSnapshot.fetch)
         oldSession.bench.apply(snapshot)
         oldSession.bench.selectJob(snapshot.jobs.first?.id)
@@ -179,9 +179,7 @@ struct RestoreStateTests {
         #expect(state.session.notes !== oldSession.notes)
         #expect(state.session.tasks !== oldSession.tasks)
         #expect(state.session.parts !== oldSession.parts)
-        #expect(state.session.photos !== oldSession.photos)
-        #expect(state.session.documents !== oldSession.documents)
-        #expect(state.session.references !== oldSession.references)
+        #expect(state.session.material !== oldSession.material)
         #expect(state.session.search !== oldSession.search)
         #expect(state.session.workshop !== oldSession.workshop)
         #expect(state.session.partsOverview !== oldSession.partsOverview)

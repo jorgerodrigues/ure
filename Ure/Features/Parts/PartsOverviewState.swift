@@ -91,9 +91,7 @@ final class PartsOverviewState {
             }
             editing.tasks.close()
             editing.parts.close()
-            editing.references.close()
-            editing.photos.close()
-            editing.documents.close()
+            editing.material.close()
             editing.watches.select(job.watchID)
             editing.jobs.open(job)
             editing.parts.open(part, for: job.id)

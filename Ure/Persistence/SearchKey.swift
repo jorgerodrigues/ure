@@ -25,7 +25,7 @@ nonisolated enum SearchKey {
                 ["name", "brand", "model", "caseReference", "serial", "approximateYear", "notes"]
             case .caliber: ["designation", "manufacturer", "variant", "notes"]
             case .job: ["title", "notes"]
-            case .libraryItem: ["title", "caption"]
+            case .libraryItem: ["title"]
             case .partRequirement: ["description", "manufacturerReference"]
             }
         }

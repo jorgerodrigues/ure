@@ -94,17 +94,11 @@ nonisolated struct RecoveryOperation: Sendable {
         case "import-photo", "import-pdf":
             let owner = try await watchOwner(coordinator)
             let sources = directory.appending(path: "sources")
-            if operation == "import-photo" {
-                let results = await PhotoService(coordinator: coordinator).importFiles(
-                    [sources.appending(path: "photo.png")], for: owner)
-                guard let result = results.first else { throw HarnessError.unexpectedOutcome }
-                _ = try result.outcome.get()
-            } else {
-                let results = await DocumentService(coordinator: coordinator).importFiles(
-                    [sources.appending(path: "technical.pdf")], for: owner)
-                guard let result = results.first else { throw HarnessError.unexpectedOutcome }
-                _ = try result.outcome.get()
-            }
+            let source = operation == "import-photo" ? "photo.png" : "technical.pdf"
+            let results = await MaterialService(coordinator: coordinator).importFiles(
+                [sources.appending(path: source)], for: owner)
+            guard let result = results.first else { throw HarnessError.unexpectedOutcome }
+            _ = try result.outcome.get()
         case "export":
             _ = try await coordinator.exportBackup(to: package, applicationVersion: "W029")
         case "stage":

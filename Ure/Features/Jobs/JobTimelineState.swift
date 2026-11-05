@@ -62,9 +62,7 @@ final class JobTimelineState {
             }
             editing.tasks.close()
             editing.parts.close()
-            editing.references.close()
-            editing.photos.close()
-            editing.documents.close()
+            editing.material.close()
             open()
             onOpen()
         }

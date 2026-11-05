@@ -35,14 +35,8 @@ nonisolated struct RestoreStagingTests {
         for owner in owners {
             let photo = try fixture.files.source(type: .heic)
             let pdf = try fixture.files.source(type: .pdf)
-            _ = try #require(
-                await PhotoService(coordinator: coordinator).importFiles([photo], for: owner).first
-            )
-            .outcome.get()
-            _ = try #require(
-                await DocumentService(coordinator: coordinator).importFiles([pdf], for: owner).first
-            )
-            .outcome.get()
+            _ = try await MaterialFixture.file(photo, for: owner, in: coordinator)
+            _ = try await MaterialFixture.file(pdf, for: owner, in: coordinator)
         }
         let orphan = try await coordinator.importOriginal(
             from: fixture.files.source(type: .png), maximumByteCount: 1_000_000)
@@ -381,10 +375,8 @@ nonisolated private struct RestoreFixture: Sendable {
         _ = try await coordinator.open()
         let owners = try await ReferenceFixture.owners(coordinator)
         let source = try files.source(type: .png)
-        let photo = try #require(
-            await PhotoService(coordinator: coordinator).importFiles([source], for: owners[0]).first
-        ).outcome.get()
-        let asset = photo.asset
+        let photo = try await MaterialFixture.file(source, for: owners[0], in: coordinator)
+        let asset = try #require(photo.asset)
         _ = try await coordinator.exportBackup(to: package, applicationVersion: "fixture")
         return asset
     }
@@ -499,7 +491,7 @@ nonisolated private struct RestoreFixture: Sendable {
         case .crossJobPart:
             try await seedCrossJobPart()
         case .wrongFileKind:
-            try await mutatePackage("UPDATE libraryItem SET kind = 'Document', photoStage = NULL")
+            try await mutatePackage("UPDATE libraryItem SET kind = 'Document'")
         }
     }
 

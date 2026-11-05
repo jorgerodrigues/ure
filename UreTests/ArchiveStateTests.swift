@@ -63,7 +63,7 @@ struct ArchiveStateTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func removalFailureKeepsSelectionAndSuccessfulConfirmationClearsItAndThePin() async throws {
+    func failedRemovalKeepsTheViewerAndRemovalClosesItAndClearsThePin() async throws {
         let fixture = ImportFixture()
         defer { fixture.remove() }
         let coordinator = LibraryCoordinator(root: fixture.root)
@@ -71,9 +71,7 @@ struct ArchiveStateTests {
         let owners = try await ReferenceFixture.owners(coordinator)
         let job = try #require(try await coordinator.read(JobQueries.fetchAll).first)
         let source = try fixture.source(type: .png)
-        let photo = try #require(
-            await PhotoService(coordinator: coordinator).importFiles([source], for: owners[0]).first
-        ).outcome.get()
+        let photo = try await MaterialFixture.file(source, for: owners[0], in: coordinator)
         let editing = SearchEditingFixture.make(coordinator)
         let preferences = try ArchiveBenchPreferences(root: fixture.root)
         defer { preferences.remove() }
@@ -85,29 +83,25 @@ struct ArchiveStateTests {
         }
         editing.watches.select(job.watchID)
         editing.jobs.open(job)
-        editing.photos.open(photo, for: owners[0])
+        let record = try #require(editing.material.records.first { $0.id == photo.id })
+        editing.material.open(record, on: owners[0])
         bench.selectJob(job.id)
         bench.pin(photo.id)
         #expect(bench.reference?.id == photo.id)
-        #expect(await editing.photos.remove() == false)
-        editing.photos.requestRemoval()
-        #expect(editing.photos.showsRemovalConfirmation)
-        editing.photos.showsRemovalConfirmation = false
-        #expect(editing.photos.selectedID == photo.id)
+        #expect(editing.material.isPresenting(on: owners[0]))
         try await coordinator.mutate { db, _, _ in
             try db.execute(
                 sql:
                     "CREATE TRIGGER failRemoval BEFORE DELETE ON libraryItem BEGIN SELECT RAISE(ABORT, 'injected'); END"
             )
         }
-        editing.photos.requestRemoval()
-        #expect(await editing.photos.remove() == false)
-        #expect(editing.photos.selectedID == photo.id && editing.photos.saveError != nil)
+        #expect(!(await editing.material.remove(record, on: owners[0], undoManager: nil)))
+        #expect(editing.material.presented?.itemID == photo.id)
+        #expect(editing.material.errors[owners[0]] != nil)
         #expect(bench.pinnedID == photo.id)
         try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failRemoval") }
-        editing.photos.requestRemoval()
-        #expect(await editing.photos.remove())
-        #expect(editing.photos.selectedID == nil && editing.photos.owner == nil)
+        #expect(await editing.material.remove(record, on: owners[0], undoManager: nil))
+        #expect(editing.material.presented == nil && editing.material.errors[owners[0]] == nil)
         try await SearchEditingFixture.waitUntil { bench.pinnedID == nil }
         #expect(bench.reference == nil && preferences.store.value.itemID == nil)
         observations.forEach { $0.cancel() }

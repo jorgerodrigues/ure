@@ -326,8 +326,8 @@ nonisolated struct FileImportServiceTests {
         let coordinator = LibraryCoordinator(root: fixture.root)
         let before = try await coordinator.open()
         let owners = try await ReferenceFixture.owners(coordinator)
-        let link = try await ReferenceService(coordinator: coordinator).save(
-            ReferenceFixture.draft, for: owners[0], editing: nil)
+        let link = try await MaterialFixture.link(
+            titled: "Technical sheet", for: owners[0], in: coordinator)
         let source = try fixture.source(type: .png)
         let bytes = try Data(contentsOf: source)
         try await coordinator.mutate { db, originals, _ in

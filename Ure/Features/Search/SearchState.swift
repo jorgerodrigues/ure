@@ -82,9 +82,7 @@ final class SearchState {
             }
             editing.tasks.close()
             editing.parts.close()
-            editing.references.close()
-            editing.photos.close()
-            editing.documents.close()
+            editing.material.close()
             editing.jobs.close()
             if let caliberID = result.caliberID {
                 editing.calibers.searchText = ""
@@ -116,30 +114,16 @@ final class SearchState {
                 })
             else { return nil }
             return { editing.parts.open(part, for: jobID) }
-        case .link:
-            guard !editing.references.isLoading, editing.references.loadError == nil,
+        case .link, .photo, .document:
+            guard !editing.material.isLoading, editing.material.loadError == nil,
                 let owner = result.itemOwner,
-                let item = editing.references.records(for: owner).first(where: {
+                let record = editing.material.records(for: owner).first(where: {
                     $0.id == result.recordID
                 })
             else { return nil }
-            return { editing.references.open(item, for: owner) }
-        case .photo:
-            guard !editing.photos.isLoading, editing.photos.loadError == nil,
-                let owner = result.itemOwner,
-                let photo = editing.photos.records(for: owner, filtered: false).first(where: {
-                    $0.id == result.recordID
-                })
-            else { return nil }
-            return { editing.photos.open(photo, for: owner) }
-        case .document:
-            guard !editing.documents.isLoading, editing.documents.loadError == nil,
-                let owner = result.itemOwner,
-                let document = editing.documents.records(for: owner).first(where: {
-                    $0.id == result.recordID
-                })
-            else { return nil }
-            return { editing.documents.open(document, for: owner) }
+            // A link opens its record's page. Only an explicit Open sends it to the browser.
+            guard record.item.kind != .link else { return {} }
+            return { editing.material.open(record, on: owner) }
         }
     }
 

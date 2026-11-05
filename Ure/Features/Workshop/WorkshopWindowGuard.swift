@@ -9,13 +9,14 @@ final class WorkshopApplicationDelegate: NSObject, NSApplicationDelegate {
         if restore.isActivating { return .terminateCancel }
         let editing = restore.session.editing
         if editing.isSaving || editing.isNavigationPending { return .terminateCancel }
-        guard editing.notes.hasUnsavedChanges else { return reviewDrafts(sender, restore: restore) }
-        Task { await saveNotesThenTerminate(sender, restore: restore) }
+        guard editing.hasUnsavedFields else { return reviewDrafts(sender, restore: restore) }
+        Task { await saveFieldsThenTerminate(sender, restore: restore) }
         return .terminateLater
     }
 
-    private func saveNotesThenTerminate(_ sender: NSApplication, restore: RestoreState) async {
-        guard await restore.session.notes.saveAll() || confirmQuitWithUnsavedNotes() else {
+    private func saveFieldsThenTerminate(_ sender: NSApplication, restore: RestoreState) async {
+        guard await restore.session.editing.saveAllFields() || confirmQuitWithUnsavedFields()
+        else {
             sender.reply(toApplicationShouldTerminate: false)
             return
         }
@@ -26,11 +27,11 @@ final class WorkshopApplicationDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func confirmQuitWithUnsavedNotes() -> Bool {
+    private func confirmQuitWithUnsavedFields() -> Bool {
         let alert = NSAlert()
-        alert.messageText = "Your notes did not save."
+        alert.messageText = "Some of your typing did not save."
         alert.informativeText =
-            "The notes are still on screen. If you quit now, the text that did not save is lost."
+            "The text is still on screen. If you quit now, the text that did not save is lost."
         alert.addButton(withTitle: "Stay")
         alert.addButton(withTitle: "Quit Anyway").hasDestructiveAction = true
         return alert.runModal() == .alertSecondButtonReturn
@@ -116,7 +117,7 @@ struct WorkshopWindowGuard: NSViewRepresentable {
         @MainActor
         func windowShouldClose(_ sender: NSWindow) -> Bool {
             if editing.isSaving { return false }
-            editing.notes.saveNow()
+            editing.saveFieldsNow()
             if !editing.hasUnsavedChanges {
                 return originalDelegate?.windowShouldClose?(sender) ?? true
             }

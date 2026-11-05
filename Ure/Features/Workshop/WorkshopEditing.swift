@@ -7,24 +7,19 @@ final class WorkshopEditing {
     let calibers: CaliberState
     let jobs: JobState
     let notes: RecordNotesState
-    let references: ReferenceState
-    let photos: PhotoState
-    let documents: DocumentState
+    let material: MaterialState
     let tasks: JobTaskState
     let parts: PartState
 
     init(
         watches: WatchState, calibers: CaliberState, jobs: JobState, notes: RecordNotesState,
-        references: ReferenceState, photos: PhotoState, documents: DocumentState,
-        tasks: JobTaskState, parts: PartState
+        material: MaterialState, tasks: JobTaskState, parts: PartState
     ) {
         self.watches = watches
         self.calibers = calibers
         self.jobs = jobs
         self.notes = notes
-        self.references = references
-        self.photos = photos
-        self.documents = documents
+        self.material = material
         self.tasks = tasks
         self.parts = parts
     }
@@ -49,20 +44,31 @@ final class WorkshopEditing {
     func closeChildren() {
         tasks.close()
         parts.close()
-        references.close()
-        photos.close()
-        documents.close()
+        material.close()
+    }
+
+    // Fields that save as you type, such as notes and material titles. They never ask to be
+    // saved, so they are not drafts.
+    var hasUnsavedFields: Bool { notes.hasUnsavedChanges || material.hasUnsavedTitles }
+
+    func saveFieldsNow() {
+        notes.saveNow()
+        material.saveTitlesNow()
+    }
+
+    func saveAllFields() async -> Bool {
+        let notesSaved = await notes.saveAll()
+        let titlesSaved = await material.saveAllTitles()
+        return notesSaved && titlesSaved
     }
 
     var isSaving: Bool {
-        watches.isSaving || calibers.isSaving || jobs.isSaving
-            || references.isSaving || photos.isSaving || photos.isImporting || documents.isSaving
-            || documents.isImporting || tasks.isSaving || parts.isSaving
+        watches.isSaving || calibers.isSaving || jobs.isSaving || material.isBusy
+            || tasks.isSaving || parts.isSaving
     }
     var canCancelDraft: Bool {
         guard !isSaving, !isNavigationPending else { return false }
-        return parts.draft != nil || tasks.draft != nil || documents.draft != nil
-            || photos.draft != nil || references.draft != nil
+        return parts.draft != nil || tasks.draft != nil
             || jobs.isEditing || calibers.draft != nil || watches.draft != nil
     }
 
@@ -72,12 +78,6 @@ final class WorkshopEditing {
             parts.cancel()
         } else if tasks.draft != nil {
             tasks.cancel()
-        } else if documents.draft != nil {
-            documents.cancel()
-        } else if photos.draft != nil {
-            photos.cancel()
-        } else if references.draft != nil {
-            references.cancel()
         } else if jobs.isEditing {
             jobs.cancel()
         } else if calibers.draft != nil {
@@ -103,21 +103,16 @@ final class WorkshopEditing {
     }
     var hasUnsavedChanges: Bool {
         watches.hasUnsavedChanges || calibers.hasUnsavedChanges || jobs.hasUnsavedChanges
-            || references.hasUnsavedChanges || photos.hasUnsavedChanges
-            || documents.hasUnsavedChanges || tasks.hasUnsavedChanges || parts.hasUnsavedChanges
+            || tasks.hasUnsavedChanges || parts.hasUnsavedChanges
     }
     var isNavigationPending: Bool {
         watches.isNavigationPending || calibers.isNavigationPending || jobs.isNavigationPending
-            || references.isNavigationPending
-            || photos.isNavigationPending || documents.isNavigationPending
             || tasks.isNavigationPending || parts.isNavigationPending
     }
 
     var showsUnsavedChanges: Bool {
         get {
             watches.showsUnsavedChanges || calibers.showsUnsavedChanges || jobs.showsUnsavedChanges
-                || references.showsUnsavedChanges
-                || photos.showsUnsavedChanges || documents.showsUnsavedChanges
                 || tasks.showsUnsavedChanges || parts.showsUnsavedChanges
         }
         set {
@@ -127,12 +122,6 @@ final class WorkshopEditing {
                 calibers.showsUnsavedChanges = newValue
             } else if jobs.isNavigationPending {
                 jobs.showsUnsavedChanges = newValue
-            } else if references.isNavigationPending {
-                references.showsUnsavedChanges = newValue
-            } else if photos.isNavigationPending {
-                photos.showsUnsavedChanges = newValue
-            } else if documents.isNavigationPending {
-                documents.showsUnsavedChanges = newValue
             } else if tasks.isNavigationPending {
                 tasks.showsUnsavedChanges = newValue
             } else {
@@ -145,9 +134,6 @@ final class WorkshopEditing {
         if watches.isNavigationPending { return "Save changes to this watch?" }
         if calibers.isNavigationPending { return "Save changes to this caliber?" }
         if jobs.isNavigationPending { return "Save changes to this job?" }
-        if references.isNavigationPending { return "Save changes to this reference?" }
-        if photos.isNavigationPending { return "Save changes to this photo?" }
-        if documents.isNavigationPending { return "Save changes to this document?" }
         if tasks.isNavigationPending { return "Save changes to this task?" }
         return "Save changes to this part?"
     }
@@ -157,28 +143,16 @@ final class WorkshopEditing {
             onCancel?()
             return
         }
-        notes.saveNow()
+        saveFieldsNow()
         watches.requestNavigation(
             {
                 self.calibers.requestNavigation(
                     {
                         self.jobs.requestNavigation(
                             {
-                                self.references.requestNavigation(
+                                self.tasks.requestNavigation(
                                     {
-                                        self.photos.requestNavigation(
-                                            {
-                                                self.documents.requestNavigation(
-                                                    {
-                                                        self.tasks.requestNavigation(
-                                                            {
-                                                                self.parts.requestNavigation(
-                                                                    action, onCancel: onCancel)
-                                                            }, onCancel: onCancel)
-                                                    },
-                                                    onCancel: onCancel)
-                                            },
-                                            onCancel: onCancel)
+                                        self.parts.requestNavigation(action, onCancel: onCancel)
                                     }, onCancel: onCancel)
                             },
                             onCancel: onCancel)
@@ -193,12 +167,6 @@ final class WorkshopEditing {
             calibers.stay()
         } else if jobs.isNavigationPending {
             jobs.stay()
-        } else if references.isNavigationPending {
-            references.stay()
-        } else if photos.isNavigationPending {
-            photos.stay()
-        } else if documents.isNavigationPending {
-            documents.stay()
         } else if tasks.isNavigationPending {
             tasks.stay()
         } else {
@@ -213,12 +181,6 @@ final class WorkshopEditing {
             calibers.discardAndContinue()
         } else if jobs.isNavigationPending {
             jobs.discardAndContinue()
-        } else if references.isNavigationPending {
-            references.discardAndContinue()
-        } else if photos.isNavigationPending {
-            photos.discardAndContinue()
-        } else if documents.isNavigationPending {
-            documents.discardAndContinue()
         } else if tasks.isNavigationPending {
             tasks.discardAndContinue()
         } else {
@@ -238,12 +200,6 @@ final class WorkshopEditing {
         } else if jobs.isNavigationPending {
             guard canSaveJob else { jobs.stay(); return }
             await jobs.saveAndContinue()
-        } else if references.isNavigationPending {
-            await references.saveAndContinue()
-        } else if photos.isNavigationPending {
-            await photos.saveAndContinue()
-        } else if documents.isNavigationPending {
-            await documents.saveAndContinue()
         } else if tasks.isNavigationPending {
             await tasks.saveAndContinue()
         } else {

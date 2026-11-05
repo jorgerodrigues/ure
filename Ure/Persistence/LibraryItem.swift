@@ -5,13 +5,14 @@ nonisolated enum LibraryItemKind: String, Codable, Sendable {
     case link = "Link"
     case photo = "Photo"
     case document = "Document"
-}
 
-nonisolated enum PhotoStage: String, Codable, CaseIterable, Sendable {
-    case unclassified = "Unclassified"
-    case before = "Before"
-    case during = "During"
-    case after = "After"
+    var title: String {
+        switch self {
+        case .link: "Link"
+        case .photo: "Photo"
+        case .document: "PDF"
+        }
+    }
 }
 
 nonisolated enum LibraryItemOwner: Hashable, Sendable {
@@ -28,6 +29,7 @@ nonisolated enum LibraryItemOwner: Hashable, Sendable {
     }
 }
 
+// One piece of material: a photo, a PDF or a link that belongs to one watch, job or caliber.
 nonisolated struct LibraryItem: Codable, Equatable, Identifiable, Sendable, FetchableRecord,
     PersistableRecord
 {
@@ -38,15 +40,36 @@ nonisolated struct LibraryItem: Codable, Equatable, Identifiable, Sendable, Fetc
     let jobID: UUID?
     let caliberID: UUID?
     let kind: LibraryItemKind
-    let title: String
-    let sourceURL: String
-    let sourceDescription: String
-    let notes: String
+    var title: String
+    let url: String?
+    let fileAssetID: UUID?
     let createdAt: Date
-    let updatedAt: Date
-    var fileAssetID: UUID? = nil
-    var photoStage: PhotoStage? = nil
-    var caption: String? = nil
+    var updatedAt: Date
+
+    init(
+        id: UUID, owner: LibraryItemOwner, kind: LibraryItemKind, title: String, url: String?,
+        fileAssetID: UUID?, createdAt: Date, updatedAt: Date
+    ) {
+        self.id = id
+        switch owner {
+        case .watch(let ownerID): (watchID, jobID, caliberID) = (ownerID, nil, nil)
+        case .job(let ownerID): (watchID, jobID, caliberID) = (nil, ownerID, nil)
+        case .caliber(let ownerID): (watchID, jobID, caliberID) = (nil, nil, ownerID)
+        }
+        self.kind = kind
+        self.title = title
+        self.url = url
+        self.fileAssetID = fileAssetID
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    var owner: LibraryItemOwner? {
+        if let watchID { return .watch(watchID) }
+        if let jobID { return .job(jobID) }
+        if let caliberID { return .caliber(caliberID) }
+        return nil
+    }
 
     func belongs(to owner: LibraryItemOwner) -> Bool {
         switch owner {
@@ -83,6 +106,7 @@ nonisolated enum LibraryItemQueries {
         try record.insert(db)
         try SearchKey.refresh(record.id, table: .libraryItem, in: db)
     }
+
     static func update(_ record: LibraryItem, in db: Database) throws {
         try record.update(db)
         try SearchKey.refresh(record.id, table: .libraryItem, in: db)
