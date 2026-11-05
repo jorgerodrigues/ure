@@ -86,7 +86,7 @@ struct PartsOverviewStateTests {
         defer { observations.forEach { $0.cancel() } }
         try await waitUntil {
             !overview.isLoading && !editing.parts.isLoading && !editing.jobs.isLoading
-                && !editing.watches.isLoading && !editing.tasks.isLoading
+                && !editing.watches.isLoading && !editing.checklist.isLoading
         }
         overview.open(part.id, editing: editing)
         #expect(editing.parts.selectedID == part.id && editing.jobs.selectedID == first.id)
@@ -147,7 +147,7 @@ struct PartsOverviewStateTests {
         overview.open(other.id, editing: editing)
         await editing.saveAndContinue()
         #expect(editing.parts.selectedID == other.id && editing.jobs.selectedID == second.id)
-        #expect(editing.watches.selectedID == second.watchID && editing.tasks.jobID == nil)
+        #expect(editing.watches.selectedID == second.watchID)
         #expect(editing.material.presented == nil)
         try await waitUntil {
             overview.rows.contains { $0.part.description == "Keep my correction" }
@@ -177,7 +177,7 @@ struct PartsOverviewStateTests {
             jobs: JobState(service: JobService(coordinator: coordinator)),
             notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
             material: MaterialState(service: MaterialService(coordinator: coordinator)),
-            tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
+            checklist: ChecklistState(service: ChecklistService(coordinator: coordinator)),
             parts: PartState(
                 service: PartService(coordinator: coordinator, openBrowser: openBrowser)))
     }
@@ -188,7 +188,7 @@ struct PartsOverviewStateTests {
         [
             Task { await overview.observe() }, Task { await editing.parts.observe() },
             Task { await editing.jobs.observe() }, Task { await editing.watches.observe() },
-            Task { await editing.tasks.observe() },
+            Task { await editing.checklist.observe() },
         ]
     }
 

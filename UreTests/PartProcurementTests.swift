@@ -234,7 +234,7 @@ nonisolated struct PartProcurementTests {
     }
 
     @Test(arguments: PartStatus.allCases)
-    func aDoneJobKeepsItsProcurementAndTasksAndTakesChanges(status: PartStatus) async throws {
+    func aDoneJobKeepsItsProcurementAndChecklistAndTakesChanges(status: PartStatus) async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let clock = clock
@@ -242,13 +242,13 @@ nonisolated struct PartProcurementTests {
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
         let service = PartService(coordinator: coordinator)
-        let task = try await JobTaskService(coordinator: coordinator).save(
-            JobTaskFixture.draft(.waiting), for: job.id, editing: nil)
+        let steps = try await ChecklistService(coordinator: coordinator).save(
+            [ChecklistStep(id: UUID(), text: "Fit the new mainspring")], for: job.id)
         let needed = try await service.save(PartFixture.draft(), for: job.id, editing: nil)
         let part = try await change(needed, to: status, service: service)
         _ = try await JobService(coordinator: coordinator).setStage(job.id, to: .done)
         #expect(try await coordinator.read(PartQueries.fetchAll) == [part])
-        #expect(try await coordinator.read(JobTaskQueries.fetchAll) == [task])
+        #expect(try await coordinator.read(ChecklistQueries.fetchAll) == steps)
         var correction = PartDraft(part: part)
         correction.status = .installed
         correction.confirmsOnHand = true
@@ -275,11 +275,11 @@ nonisolated struct PartProcurementTests {
         let photo = try await material.importFiles([source], for: .job(job.id))[0].outcome.get()
         try await material.setCover(photo.id, for: job.watchID)
         let watch = try #require(try await coordinator.read(WatchQueries.fetchAll).first)
-        let taskService = JobTaskService(coordinator: coordinator)
-        _ = try await taskService.save(JobTaskFixture.draft(.done), for: job.id, editing: nil)
-        let second = try await taskService.save(
-            JobTaskFixture.draft(.waiting), for: job.id, editing: nil)
-        let tasks = try await taskService.move(second.id, for: job.id, to: .up)
+        let checklist = ChecklistService(coordinator: coordinator)
+        let first = ChecklistStep(id: UUID(), text: "Clean all parts", isTicked: true)
+        let second = ChecklistStep(id: UUID(), text: "Fit the new mainspring")
+        _ = try await checklist.save([first, second], for: job.id)
+        let steps = try await checklist.save([second, first], for: job.id)
         var draft = PartFixture.draft()
         draft.links = [PartLinkDraft(url: "https://example.org/part")]
         let part = try await PartService(coordinator: coordinator).save(
@@ -294,7 +294,7 @@ nonisolated struct PartProcurementTests {
         #expect(after.generationID != before.generationID)
         #expect(try await reopened.read(PartQueries.fetchAll) == [part])
         #expect(try await reopened.read(JobQueries.fetchAll) == [job])
-        #expect(try await reopened.read(JobTaskQueries.fetchAll) == tasks)
+        #expect(try await reopened.read(ChecklistQueries.fetchAll) == steps)
         #expect(try await reopened.read(WatchQueries.fetchAll) == [watch])
         #expect(try await reopened.read(MaterialQueries.fetchAll) == [photo])
         #expect(

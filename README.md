@@ -24,9 +24,9 @@ The matrix covers imports, new and replacement exports, upgrades, restore stagin
 
 Run `make performance XCODE_EXTRA_FLAGS=SDK_STAT_CACHE_ENABLE=NO` to build the optimized `UrePerformanceHarness` command-line target and measure W031's synthetic library. Python 3 uses only its standard library. This command does not start the app or UI automation.
 
-The fixture has 500 watches, 1,000 jobs, 10,000 tasks, and 5,000 photo items with separate managed originals. It also has job notes, part links, archived records, and Unicode and punctuation identifiers. Three deterministic JPEG templates cover 640 × 480, 2400 × 1600, and 6000 × 4000 images. The logical original size is about 4.6 GB. Each fresh measurement process opens through `LibraryCoordinator` with `URE_TESTING=1` and an injected library location.
+The fixture has 500 watches, 1,000 jobs, 10,000 checklist steps, and 5,000 photo items with separate managed originals. It also has job notes, part links, archived records, and Unicode and punctuation identifiers. Three deterministic JPEG templates cover 640 × 480, 2400 × 1600, and 6000 × 4000 images. The logical original size is about 4.6 GB. Each fresh measurement process opens through `LibraryCoordinator` with `URE_TESTING=1` and an injected library location.
 
-The driver retains raw samples and `summary.json` under `.build/performance-runs/<run-id>/`. It checks exact result IDs, task and part counts, database integrity, and every original's size and SHA-256. It reports warm queries, thumbnail decoding, coordinator open time, and resident memory during 20 large-image open/release cycles. A successful command means the measurements and data checks completed. It does not mean all performance acceptance passed. Native usable-window, scrolling, task input, and viewer memory acceptance remain W032 gates. See the [W031 verification report](docs/planning/performance-verification.md).
+The driver retains raw samples and `summary.json` under `.build/performance-runs/<run-id>/`. It checks exact result IDs, step and part counts, database integrity, and every original's size and SHA-256. It reports warm queries, thumbnail decoding, coordinator open time, and resident memory during 20 large-image open/release cycles. A successful command means the measurements and data checks completed. It does not mean all performance acceptance passed. Native usable-window, scrolling, typing, and viewer memory acceptance remain W032 gates. See the [W031 verification report](docs/planning/performance-verification.md).
 
 To compare an optimization against the same library, rebuild the Release harness and run:
 
@@ -57,17 +57,17 @@ Local runs use ad-hoc signing. No Apple developer account is required. App Sandb
 
 The main window contains Workshop, Watches, Calibers, and Parts. Use **Option-Command-1** through **Option-Command-4** to select a section. **Command-comma** opens Settings. Startup creates or reopens the local library. Workshop shows open jobs. Watches and Calibers each have a list and a page you write on, with archived records folded away at the end of the list. Parts shows requirements from open jobs.
 
-Use **Option-Command-E** to edit the displayed task or part, **Command-S** to save, and **Command-period** to cancel editing. **Command-[** returns to the owner through the draft guard. The Record menu also has removal and archive actions. These commands follow the displayed record and its permissions. Editing commands are disabled in the read-only reference window. **Pin Reference** is also in the View menu.
+Use **Option-Command-E** to edit the displayed part, **Command-S** to save, and **Command-period** to cancel editing. **Command-[** returns to the owner through the draft guard. The Record menu also has removal and archive actions. These commands follow the displayed record and its permissions. Editing commands are disabled in the read-only reference window. **Pin Reference** is also in the View menu.
 
 Focus a photo and use the arrow keys to pan. Fit and Zoom controls remain available by keyboard. Use **Option-Command-Left Arrow** and **Option-Command-Right Arrow** for the previous or next photo or PDF page. Plain arrows remain available for text, lists, and photo panning. Reference content scrolls so long titles, filenames, and notes do not hide its actions.
 
 ## Workshop overview
 
-Workshop groups open jobs under In progress and Waiting. Each row shows the saved watch name and cover thumbnail, job title, task counts and rounded-down percentage, skipped count, what a waiting job waits for, and number of Needed or Ordered part requirements. Each requirement counts once, regardless of its quantity or task links. Empty and all-skipped task lists show **No tasks planned**.
+Workshop groups open jobs under In progress and Waiting. Each row shows the saved watch name and cover thumbnail, job title, how many checklist steps are done, what a waiting job waits for, and number of Needed or Ordered part requirements. Each requirement counts once, regardless of its quantity. A checklist without steps shows **No steps yet**.
 
-Rows within each group put the latest saved job, task, or part change first. Watch identity and cover edits refresh the labels and thumbnail. Text search matches watch identity, job title, and what a waiting job waits for. The stage filter works together with text search. **Clear Filters** restores all open jobs.
+Rows within each group put the latest saved job, step, or part change first. Watch identity and cover edits refresh the labels and thumbnail. Text search matches watch identity, job title, and what a waiting job waits for. The stage filter works together with text search. **Clear Filters** restores all open jobs.
 
-Select a row to open that exact watch and job in Workshop. The job page, draft protection for tasks and parts, and pinned reference tools work there. Filters retain the selected detail and show a message when its row is excluded. Setting a job to Done removes it from the open list and keeps it on its watch's page. Setting it back returns it to its group. Loading failures show an error and Retry.
+Select a row to open that exact watch and job in Workshop. The job page, draft protection for parts, and pinned reference tools work there. Filters retain the selected detail and show a message when its row is excluded. Setting a job to Done removes it from the open list and keeps it on its watch's page. Setting it back returns it to its group. Loading failures show an error and Retry.
 
 ## Search
 
@@ -81,7 +81,7 @@ The normal Watches, Calibers, Workshop, and Parts lists have local search. Job h
 
 Use **Archive Watch** or **Archive Caliber** in the Record menu, or right-click the record in its list. Any watch can be archived, even one with an open job, and that job stays in Workshop and can still change. **Command-Z** undoes an archive or an unarchive. Archived watches and calibers fold away in the **Archived** section at the end of their list, and their page offers **Unarchive** in the toolbar. They stay in search. Existing watch links to archived calibers stay readable. Archived records reject changes until restored.
 
-Tasks have a **Remove** action in saved detail. Removal requires confirmation. Task confirmation lists its part links. Parts stay saved. Part link removal stays in the part editor and commits with **Save**. Part requirements use **Cancelled** rather than deletion.
+A checklist step goes with **Backspace** on a step without text or with **Delete Step**, and **Command-Z** brings it back. Part link removal stays in the part editor and commits with **Save**. Part requirements use **Cancelled** rather than deletion.
 
 Material is removed at once, and **Command-Z** brings it back. See [Material](#material). There is no permanent watch or job deletion.
 
@@ -109,27 +109,23 @@ Choose a caliber from the watch's caliber pop-up, or choose **None** to clear it
 
 A job is one repair of one watch, and its page is a page you write on, laid out as the "2 Job" artboard. Use **Start Job** under a watch's jobs. It opens a job named "New Job", In progress, and puts the cursor in its title with the title selected, so typing replaces it. There is no Save button. The title, the problem and what a waiting job waits for save as you type, and **Command-Z** undoes each after it saved.
 
-The header shows the watch's cover, or the job's first photo when the watch has none. Beside it are the state, the date the job opened and how long ago, such as "Opened 12 October · 23 days", the title, and a line that links the watch and its caliber and names the owner and contact from the watch. The problem follows in the job's own words. Then come the parts, the checklist with its task progress, the material and the notes.
+The header shows the watch's cover, or the job's first photo when the watch has none. Beside it are the state, the date the job opened and how long ago, such as "Opened 12 October · 23 days", the title, and a line that links the watch and its caliber and names the owner and contact from the watch. The problem follows in the job's own words. Then come the parts, the checklist, the material and the notes.
 
-A job is In progress, Waiting or Done. Choose the state from the pop-up. The change saves at once, and **Command-Z** puts back the state before, with its dates and waiting text. Choosing Waiting puts the cursor in **Waiting for**, such as "a mainspring". Leaving Waiting clears it. Done records the day the job was done, such as "Opened 12 October · Done 2 November", and leaving Done clears that date. A Done job stays editable, with its tasks, parts, material and notes.
+A job is In progress, Waiting or Done. Choose the state from the pop-up. The change saves at once, and **Command-Z** puts back the state before, with its dates and waiting text. Choosing Waiting puts the cursor in **Waiting for**, such as "a mainspring". Leaving Waiting clears it. Done records the day the job was done, such as "Opened 12 October · Done 2 November", and leaving Done clears that date. A Done job stays editable, with its checklist, parts, material and notes.
 
 A watch can have several jobs, with at most one that is not Done. The database also enforces the rule when requests compete. A Done job can move back to In progress or Waiting only while its watch has no other open job. Starting a job needs a watch that is not archived. A job of an archived watch can still change, also its state.
 
 Libraries from before W037 had six stages, an intake snapshot, an agreed scope, an intake condition, an outcome, recommendations, a cancellation reason, two explanations for unfinished work, and an activity history. The upgrade makes Planned, In progress and Ready jobs In progress, keeps Waiting jobs Waiting with their reason as what they wait for, and makes Completed and Cancelled jobs Done on the day they closed. It writes the removed values into the job's notes under "From the old record", one line each, such as "Outcome: Serviced, +3 s/d" or "Cancelled: Owner declined the quote". Intake values that the watch no longer holds are written too, such as "Serial at intake: 0012". Reasons typed into the history that no record holds any more follow under "History", each with its date. Then the history goes.
 
-## Job tasks
+## Job checklist
 
-Use **Add Task** in a job detail. Enter a title and optional detail and group label. Choose To do, Doing, Waiting, Done, or Skipped. Waiting requires a reason or a linked Needed or Ordered part. Skipped always requires a reason. Several tasks can be Doing at once.
+A job's checklist is a list of steps you type like a note, laid out as on the "2 Job" artboard. A step is text with a tick, or a heading such as "Cleaning". A checklist starts empty, and nothing creates or ticks steps for you. The Checklist heading says how many steps are done, such as "6 of 10 done", over a thin bar. Headings do not count, and a checklist without steps says **No steps yet**.
 
-Choose **Required parts** in the task editor to link several parts from the same job. Save commits the selection. Cancel keeps the previous links. Needed and Ordered show **Waiting for parts**. Arrived and Installed satisfy availability. Any cancelled link shows **Needs review**. Once every linked part is available, the label becomes **Parts available**. The task stays Waiting until you change it. Removing the last unresolved link requires a waiting reason or another task status. Procurement saves refresh labels from saved data.
+Type in **Add a step** to make a step there. **Return** starts the next step, and **Return** on a step without text moves on, like **Tab**. **Backspace** on a step without text removes it and puts the cursor at the end of the step before. A line that starts with "#" and a space becomes a heading. The **Up Arrow** and **Down Arrow** move between the lines. **Shift-Command-U** ticks or unticks the step, and **Control-Command-Up Arrow** and **Control-Command-Down Arrow** move it. A click on a tick box ticks it too. While you type, the keys show under the checklist.
 
-Use **Edit Task**, **Save**, **Cancel**, or **Command-S**. Status changes use the editor. Failed saves keep the draft. Pending saves block duplicate commands. Task drafts use the shared Save, Discard, or Stay guard for record and section changes, window closure, and quitting. A Done job's tasks still change.
+Each change saves without a button: a step's text half a second after you stop typing and when you leave it, and a tick, a heading, a move or a removal at once. **Command-Z** undoes each change, also after it saved. Each step's right-click menu and the Checklist menu offer **Tick Step**, **Make Heading**, **Move Step Up**, **Move Step Down** and **Delete Step**. VoiceOver reads each step's text and whether it is ticked. A Done job's checklist still changes. Steps and parts are independent, so a fitted part never ticks a step, and no step changes the job's state.
 
-Task status changes never change the job's state, and setting a job to Done keeps every task's status.
-
-Tasks keep their saved bench order. New tasks go at the end. Drag a row before another row, or drop below the list to move it to the end. The row menu and task detail offer **Move up** and **Move down**. In a saved task detail, **Option-Command-Up Arrow** and **Option-Command-Down Arrow** run the same actions from the Task menu. Optional group labels stay visible without changing the saved order. Failed moves keep the previous order. An archived job disables ordering.
-
-The Checklist heading shows Done divided by all non-Skipped tasks, with both counts and a whole percentage. The percentage rounds down, so unfinished work cannot display 100 percent. Skipped tasks have a separate count. Empty and all-skipped lists show **No tasks planned**. Adding or reopening a task updates progress after Save succeeds. A Done job keeps the saved task statuses and can show progress below 100 percent. Part links follow in W018.
+Libraries from before W039 had tasks with five statuses, details, waiting and skipped reasons, and links to the job's parts. The upgrade makes each task a step in the same order, ticks the Done and Skipped ones, and adds a heading where the group label changes. It writes each task's detail and reasons into the job's notes under "From the old record", after a line such as "Step · Let down the mainspring". The links between tasks and parts go, and the parts stay.
 
 ## Required parts
 
@@ -143,7 +139,7 @@ Use **Edit Part** to choose Needed, Ordered, Arrived, Installed, or Cancelled. S
 
 Ordering saves an optional order reference. Correcting Arrived, Installed, or Cancelled back to Ordered keeps the order reference. Moving back to Needed clears the current order details.
 
-Backward corrections, cancellation, and restoring a cancelled part require a reason. Save clears milestone dates that no longer apply. Cancellation keeps the order reference for reading. Cancel in the editor discards the draft. A status changed by another saved action requires cancelling and reopening the stale editor. Procurement never changes task status or job state.
+Backward corrections, cancellation, and restoring a cancelled part require a reason. Save clears milestone dates that no longer apply. Cancellation keeps the order reference for reading. Cancel in the editor discards the draft. A status changed by another saved action requires cancelling and reopening the stale editor. Procurement never changes a checklist step or the job's state.
 
 ## Notes
 
@@ -179,7 +175,7 @@ Libraries from before W034 kept a photo stage, a caption, a PDF's source URL, a 
 
 ## Bench references
 
-Open a saved job and use **Pin Reference** to choose one saved photo, PDF, or link from that job, its watch, or its current caliber. The pin stays in place while you open notes, material, tasks or parts. Switching jobs clears unrelated pins. A watch reference stays for another job on that watch. A caliber reference stays for a job whose watch uses the same caliber.
+Open a saved job and use **Pin Reference** to choose one saved photo, PDF, or link from that job, its watch, or its current caliber. The pin stays in place while you open notes, material, the checklist or parts. Switching jobs clears unrelated pins. A watch reference stays for another job on that watch. A caliber reference stays for a job whose watch uses the same caliber.
 
 Use **Toggle Reference Pane** or **Shift-Command-R** to collapse or show the pane. It appears beside the editor when there is room. At narrower widths, widen the window or use **Open Reference Window** with **Option-Command-R**. The reference window has reading, zoom, explicit browser opening, and original export controls. New, Save, and section-changing commands are disabled while that window is active. Closing it leaves the main editor's draft in place.
 

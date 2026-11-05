@@ -21,15 +21,14 @@ struct WorkshopOverviewStateTests {
         #expect(workshop.rows.isEmpty)
         let job = try await JobTaskFixture.job(coordinator)
         try await waitUntil { workshop.rows.count == 1 }
-        #expect(workshop.rows.first?.progress.percentage == nil)
-        let taskService = JobTaskService(coordinator: coordinator)
-        let task = try await taskService.save(
-            JobTaskFixture.draft(.done), for: job.id, editing: nil)
-        try await waitUntil { workshop.rows.first?.progress.percentage == 100 }
-        var reopened = JobTaskDraft(task: task)
-        reopened.status = .doing
-        _ = try await taskService.save(reopened, for: job.id, editing: task.id)
-        try await waitUntil { workshop.rows.first?.progress.percentage == 0 }
+        #expect(workshop.rows.first?.progress.stepCount == 0)
+        let checklist = ChecklistService(coordinator: coordinator)
+        var step = ChecklistStep(id: UUID(), text: "Clean all parts", isTicked: true)
+        _ = try await checklist.save([step], for: job.id)
+        try await waitUntil { workshop.rows.first?.progress.summary == "1 of 1 done" }
+        step.isTicked = false
+        _ = try await checklist.save([step], for: job.id)
+        try await waitUntil { workshop.rows.first?.progress.summary == "0 of 1 done" }
         let parts = PartService(coordinator: coordinator)
         let part = try await parts.save(PartFixture.draft(), for: job.id, editing: nil)
         try await waitUntil { workshop.rows.first?.unresolvedPartCount == 1 }
@@ -75,18 +74,18 @@ struct WorkshopOverviewStateTests {
         _ = try await JobService(coordinator: coordinator).setStage(second.id, to: .waiting)
         _ = try await JobService(coordinator: coordinator).update(
             second.id, .waitingFor("A mainspring"))
-        let task = try await JobTaskService(coordinator: coordinator).save(
-            JobTaskFixture.draft(.toDo), for: first.id, editing: nil)
+        let part = try await PartService(coordinator: coordinator).save(
+            PartFixture.draft(), for: first.id, editing: nil)
         let editing = makeEditing(coordinator)
         let workshop = WorkshopOverviewState(coordinator: coordinator)
         let observations = [
             Task { await workshop.observe() }, Task { await editing.watches.observe() },
-            Task { await editing.jobs.observe() }, Task { await editing.tasks.observe() },
+            Task { await editing.jobs.observe() }, Task { await editing.parts.observe() },
         ]
         defer { observations.forEach { $0.cancel() } }
         try await waitUntil {
             !workshop.isLoading && !editing.watches.isLoading && !editing.jobs.isLoading
-                && !editing.tasks.isLoading
+                && !editing.parts.isLoading
         }
         workshop.open(first.id, editing: editing)
         #expect(editing.jobs.selectedID == first.id && editing.watches.selectedID == first.watchID)
@@ -111,21 +110,20 @@ struct WorkshopOverviewStateTests {
         workshop.searchText = "Does not exist"
         #expect(workshop.filteredRows.isEmpty)
         workshop.clearFilters()
-        editing.tasks.open(task, for: first.id)
-        editing.tasks.edit(jobs: editing.jobs)
-        editing.tasks.draft?.title = "Keep my draft"
+        editing.parts.open(part, for: first.id)
+        editing.parts.edit(jobs: editing.jobs)
+        editing.parts.draft?.description = "Keep my draft"
         workshop.open(second.id, editing: editing)
         #expect(editing.showsUnsavedChanges && editing.jobs.selectedID == first.id)
         editing.stay()
-        #expect(editing.tasks.draft?.title == "Keep my draft")
+        #expect(editing.parts.draft?.description == "Keep my draft")
         workshop.open(second.id, editing: editing)
         await editing.saveAndContinue()
         #expect(
             editing.jobs.selectedID == second.id && editing.watches.selectedID == second.watchID)
-        #expect(
-            editing.tasks.jobID == nil && editing.parts.jobID == nil)
-        let saved = try await coordinator.read { try JobTaskQueries.fetch(task.id, in: $0) }
-        #expect(saved?.title == "Keep my draft")
+        #expect(editing.parts.jobID == nil)
+        let saved = try await coordinator.read { try PartQueries.fetch(part.id, in: $0) }
+        #expect(saved?.record.description == "Keep my draft")
         workshop.open(UUID(), editing: editing)
         #expect(workshop.navigationError != nil && editing.jobs.selectedID == second.id)
         _ = try await JobService(coordinator: coordinator).setStage(second.id, to: .done)
@@ -145,7 +143,7 @@ struct WorkshopOverviewStateTests {
             jobs: JobState(service: JobService(coordinator: coordinator)),
             notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
             material: MaterialState(service: MaterialService(coordinator: coordinator)),
-            tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
+            checklist: ChecklistState(service: ChecklistService(coordinator: coordinator)),
             parts: PartState(service: PartService(coordinator: coordinator)))
     }
 

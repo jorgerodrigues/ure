@@ -88,16 +88,8 @@ private struct WorkshopJobRow: View {
                 Text(row.watch.name).font(.body).fontWeight(.semibold)
                 Text(row.job.title).font(.subheadline)
                 Text(row.job.stage.rawValue)
-                if let percentage = row.progress.percentage {
-                    Text(
-                        "\(row.progress.doneCount) of \(row.progress.countedCount) done · \(percentage)%"
-                    )
-                } else {
-                    Text("No tasks planned")
-                }
-                Text(
-                    "\(row.progress.skippedCount) skipped · \(row.unresolvedPartCount) unresolved parts"
-                )
+                Text(row.progress.summary)
+                Text("\(row.unresolvedPartCount) unresolved parts")
                 if let waitingFor = row.job.waitingFor {
                     Text("Waiting for \(waitingFor)")
                 }

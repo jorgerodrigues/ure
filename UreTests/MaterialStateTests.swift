@@ -353,7 +353,7 @@ enum MaterialEditingFixture {
             jobs: jobs ?? JobState(service: JobService(coordinator: coordinator)),
             notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
             material: material ?? MaterialState(service: MaterialService(coordinator: coordinator)),
-            tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
+            checklist: ChecklistState(service: ChecklistService(coordinator: coordinator)),
             parts: PartState(service: PartService(coordinator: coordinator)))
     }
 }

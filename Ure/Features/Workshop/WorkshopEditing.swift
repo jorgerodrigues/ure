@@ -7,19 +7,19 @@ final class WorkshopEditing {
     let jobs: JobState
     let notes: RecordNotesState
     let material: MaterialState
-    let tasks: JobTaskState
+    let checklist: ChecklistState
     let parts: PartState
 
     init(
         watches: WatchState, calibers: CaliberState, jobs: JobState, notes: RecordNotesState,
-        material: MaterialState, tasks: JobTaskState, parts: PartState
+        material: MaterialState, checklist: ChecklistState, parts: PartState
     ) {
         self.watches = watches
         self.calibers = calibers
         self.jobs = jobs
         self.notes = notes
         self.material = material
-        self.tasks = tasks
+        self.checklist = checklist
         self.parts = parts
     }
 
@@ -42,16 +42,16 @@ final class WorkshopEditing {
     }
 
     func closeChildren() {
-        tasks.close()
         parts.close()
         material.close()
     }
 
-    // Fields that save as you type, such as notes, material titles and the facts on watch,
-    // caliber and job pages. They never ask to be saved, so they are not drafts.
+    // Fields that save as you type, such as notes, material titles, the facts on watch,
+    // caliber and job pages, and checklists. They never ask to be saved, so they are not
+    // drafts.
     var hasUnsavedFields: Bool {
         notes.hasUnsavedChanges || material.hasUnsavedTitles || calibers.hasUnsavedFacts
-            || watches.hasUnsavedFacts || jobs.hasUnsavedFacts
+            || watches.hasUnsavedFacts || jobs.hasUnsavedFacts || checklist.hasUnsavedChanges
     }
 
     func saveFieldsNow() {
@@ -60,6 +60,7 @@ final class WorkshopEditing {
         calibers.saveFactsNow()
         watches.saveFactsNow()
         jobs.saveFactsNow()
+        checklist.saveNow()
     }
 
     func saveAllFields() async -> Bool {
@@ -68,47 +69,35 @@ final class WorkshopEditing {
         let caliberFactsSaved = await calibers.saveAllFacts()
         let watchFactsSaved = await watches.saveAllFacts()
         let jobFactsSaved = await jobs.saveAllFacts()
+        let checklistsSaved = await checklist.saveAll()
         return notesSaved && titlesSaved && caliberFactsSaved && watchFactsSaved
-            && jobFactsSaved
+            && jobFactsSaved && checklistsSaved
     }
 
     var isSaving: Bool {
         watches.isSaving || calibers.isSaving || jobs.isSaving || material.isBusy
-            || tasks.isSaving || parts.isSaving
+            || parts.isSaving
     }
     var canCancelDraft: Bool {
         guard !isSaving, !isNavigationPending else { return false }
-        return parts.draft != nil || tasks.draft != nil
+        return parts.draft != nil
     }
 
     func cancelDraft() {
         guard canCancelDraft else { return }
-        if parts.draft != nil {
-            parts.cancel()
-        } else {
-            tasks.cancel()
-        }
+        parts.cancel()
     }
 
-    // Task and part editors keep Save and Cancel until W039 and W040 replace them.
-    var hasUnsavedChanges: Bool { tasks.hasUnsavedChanges || parts.hasUnsavedChanges }
-    var isNavigationPending: Bool { tasks.isNavigationPending || parts.isNavigationPending }
+    // The part editor keeps Save and Cancel until W040 replaces it.
+    var hasUnsavedChanges: Bool { parts.hasUnsavedChanges }
+    var isNavigationPending: Bool { parts.isNavigationPending }
 
     var showsUnsavedChanges: Bool {
-        get { tasks.showsUnsavedChanges || parts.showsUnsavedChanges }
-        set {
-            if tasks.isNavigationPending {
-                tasks.showsUnsavedChanges = newValue
-            } else {
-                parts.showsUnsavedChanges = newValue
-            }
-        }
+        get { parts.showsUnsavedChanges }
+        set { parts.showsUnsavedChanges = newValue }
     }
 
-    var unsavedChangesTitle: String {
-        if tasks.isNavigationPending { return "Save changes to this task?" }
-        return "Save changes to this part?"
-    }
+    var unsavedChangesTitle: String { "Save changes to this part?" }
 
     func requestNavigation(_ action: @escaping () -> Void, onCancel: (() -> Void)? = nil) {
         guard !isSaving, !isNavigationPending else {
@@ -116,35 +105,16 @@ final class WorkshopEditing {
             return
         }
         saveFieldsNow()
-        tasks.requestNavigation(
-            { self.parts.requestNavigation(action, onCancel: onCancel) }, onCancel: onCancel)
+        parts.requestNavigation(action, onCancel: onCancel)
     }
 
-    func stay() {
-        if tasks.isNavigationPending {
-            tasks.stay()
-        } else {
-            parts.stay()
-        }
-    }
+    func stay() { parts.stay() }
 
-    func discardAndContinue() {
-        if tasks.isNavigationPending {
-            tasks.discardAndContinue()
-        } else {
-            parts.discardAndContinue()
-        }
-    }
+    func discardAndContinue() { parts.discardAndContinue() }
 
     func saveAndContinueCommand() {
         Task { await saveAndContinue() }
     }
 
-    func saveAndContinue() async {
-        if tasks.isNavigationPending {
-            await tasks.saveAndContinue()
-        } else {
-            await parts.saveAndContinue()
-        }
-    }
+    func saveAndContinue() async { await parts.saveAndContinue() }
 }

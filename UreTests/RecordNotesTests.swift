@@ -67,7 +67,7 @@ nonisolated struct RecordNotesMigrationTests {
         #expect(
             staged.summary.appliedMigrations == [
                 "v19-record-notes", "v20-material", "v21-caliber-facts", "v22-watch-owner",
-                "v23-job-states",
+                "v23-job-states", "v24-checklist-steps",
             ])
         #expect(staged.summary.counts["note"] == nil && staged.summary.counts["watch"] == 2)
         let result = try await coordinator.activateRestore(staged)
@@ -299,7 +299,7 @@ struct RecordNotesStateTests {
             calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
             jobs: JobState(service: JobService(coordinator: coordinator)), notes: notes,
             material: MaterialState(service: MaterialService(coordinator: coordinator)),
-            tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
+            checklist: ChecklistState(service: ChecklistService(coordinator: coordinator)),
             parts: PartState(service: PartService(coordinator: coordinator)))
         await notes.load(owners[1])
         let jobNotes = try #require(notes.field(for: owners[1]))

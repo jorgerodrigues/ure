@@ -60,26 +60,29 @@ nonisolated struct ReleaseJourneyTests {
         #expect(linkedPart.links.map(\.url) == [link.url, secondLink.url])
         _ = try await jobs.setStage(job.id, to: .waiting)
         #expect(try await jobs.update(job.id, .waitingFor("A spring")).waitingFor == "A spring")
-        let tasks = JobTaskService(coordinator: coordinator)
-        #expect(try await progress(job.id, coordinator).fraction == nil)
-        var taskDraft = JobTaskFixture.draft(.waiting)
-        taskDraft.waitingReason = ""
-        taskDraft.partIDs = [linkedPart.id]
-        let waitingTask = try await tasks.save(taskDraft, for: job.id, editing: nil)
+        let checklist = ChecklistService(coordinator: coordinator)
+        #expect(try await progress(job.id, coordinator).summary == "No steps yet")
+        // The checklist is typed by hand. Nothing ticks a step for you, not even a part that
+        // arrives.
+        var fit = ChecklistStep(id: UUID(), text: "Fit the spring")
+        let steps = [
+            ChecklistStep(id: UUID(), text: "Assembly", isHeading: true), fit,
+            ChecklistStep(id: UUID(), text: "Regulate"),
+        ]
+        let saved = try await checklist.save(steps, for: job.id)
         var arrival = PartDraft(part: linkedPart)
         arrival.status = .arrived
-        let arrived = try await parts.save(arrival, for: job.id, editing: linkedPart.id)
-        #expect(TaskPartAvailability.label(for: [arrived.record]) == .partsAvailable)
+        _ = try await parts.save(arrival, for: job.id, editing: linkedPart.id)
         #expect(
-            try await coordinator.read { try JobTaskQueries.fetch(waitingTask.id, in: $0) }
-                == waitingTask)
-        let done = try await tasks.save(JobTaskFixture.draft(.done), for: job.id, editing: nil)
-        _ = try await tasks.save(JobTaskFixture.draft(.skipped), for: job.id, editing: nil)
-        #expect(try await progress(job.id, coordinator).percentage == 50)
-        var reopen = JobTaskDraft(task: done)
-        reopen.status = .toDo
-        _ = try await tasks.save(reopen, for: job.id, editing: done.id)
-        #expect(try await progress(job.id, coordinator).percentage == 0)
+            try await coordinator.read { try ChecklistQueries.ordered(for: job.id, in: $0) }
+                == saved)
+        #expect(try await progress(job.id, coordinator).summary == "0 of 2 done")
+        fit.isTicked = true
+        _ = try await checklist.save([steps[0], fit, steps[2]], for: job.id)
+        #expect(try await progress(job.id, coordinator).summary == "1 of 2 done")
+        fit.isTicked = false
+        _ = try await checklist.save([steps[0], fit, steps[2]], for: job.id)
+        #expect(try await progress(job.id, coordinator).fraction == 0)
         let photoSource = try fixture.source(type: .jpeg, name: "bench.jpg")
         let pdfSource = try DocumentFixture.source(in: fixture)
         let added = try await MaterialService(coordinator: coordinator).importFiles(
@@ -142,10 +145,10 @@ nonisolated struct ReleaseJourneyTests {
     }
 
     private func progress(_ jobID: UUID, _ coordinator: LibraryCoordinator) async throws
-        -> JobTaskProgress
+        -> ChecklistProgress
     {
         try await coordinator.read { db in
-            JobTaskProgress(tasks: try JobTaskQueries.ordered(for: jobID, in: db))
+            ChecklistProgress(records: try ChecklistQueries.ordered(for: jobID, in: db))
         }
     }
 

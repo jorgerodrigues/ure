@@ -6,22 +6,26 @@ import Testing
 
 nonisolated struct WorkshopOverviewTests {
     @Test
-    func openStagesAggregateTasksAndWholePartRequirementsWithoutDuplicateJobs() async throws {
+    func openStagesAggregateStepsAndWholePartRequirementsWithoutDuplicateJobs() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let date = Date(timeIntervalSince1970: 1_700_000_000)
         let coordinator = fixture.coordinator(dependencies: LibraryDependencies(now: { date }))
         _ = try await coordinator.open()
         let jobs = JobService(coordinator: coordinator)
-        let tasks = JobTaskService(coordinator: coordinator)
+        let checklist = ChecklistService(coordinator: coordinator)
         let parts = PartService(coordinator: coordinator)
         var openIDs: Set<UUID> = []
         var closedIDs: Set<UUID> = []
         for stage in JobStage.allCases {
             let job = try await JobTaskFixture.job(coordinator)
-            for status in JobTaskStatus.allCases {
-                _ = try await tasks.save(JobTaskFixture.draft(status), for: job.id, editing: nil)
-            }
+            _ = try await checklist.save(
+                [
+                    ChecklistStep(id: UUID(), text: "Cleaning", isHeading: true),
+                    ChecklistStep(id: UUID(), text: "Clean all parts", isTicked: true),
+                    ChecklistStep(id: UUID(), text: "Fit the new mainspring"),
+                    ChecklistStep(id: UUID(), text: "Regulate"),
+                ], for: job.id)
             for status in PartStatus.allCases {
                 var draft = PartFixture.draft()
                 draft.quantity = "7"
@@ -44,8 +48,8 @@ nonisolated struct WorkshopOverviewTests {
         #expect(Set(rows.map { $0.job.stage }) == [.inProgress, .waiting])
         for row in rows {
             #expect(row.watch.id == row.job.watchID)
-            #expect(row.progress.doneCount == 1 && row.progress.countedCount == 4)
-            #expect(row.progress.skippedCount == 1 && row.progress.percentage == 25)
+            #expect(row.progress.doneCount == 1 && row.progress.stepCount == 3)
+            #expect(row.progress.summary == "1 of 3 done")
             #expect(row.unresolvedPartCount == 2)
             #expect(row.updatedAt == date)
         }
@@ -60,7 +64,7 @@ nonisolated struct WorkshopOverviewTests {
     }
 
     @Test
-    func emptyAndSkippedProgressAndLatestChildDatesDetermineStableOrder() async throws {
+    func emptyAndHeadingOnlyProgressAndLatestChildDatesDetermineStableOrder() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let date = Date(timeIntervalSince1970: 100)
@@ -68,25 +72,27 @@ nonisolated struct WorkshopOverviewTests {
         _ = try await coordinator.open()
         #expect(try await coordinator.read(WorkshopQueries.fetch).isEmpty)
         let empty = try await JobTaskFixture.job(coordinator)
-        let skipped = try await JobTaskFixture.job(coordinator)
+        let headed = try await JobTaskFixture.job(coordinator)
         let recent = try await JobTaskFixture.job(coordinator)
-        let task = try await JobTaskService(coordinator: coordinator).save(
-            JobTaskFixture.draft(.skipped), for: skipped.id, editing: nil)
+        let heading = try #require(
+            try await ChecklistService(coordinator: coordinator).save(
+                [ChecklistStep(id: UUID(), text: "Cleaning", isHeading: true)], for: headed.id
+            ).first)
         let part = try await PartService(coordinator: coordinator).save(
             PartFixture.draft(), for: recent.id, editing: nil)
         try await coordinator.mutate { db, _, _ in
             try db.execute(
-                sql: "UPDATE jobTask SET updatedAt = 200 WHERE id = ?",
-                arguments: [task.id.uuidString])
+                sql: "UPDATE checklistStep SET updatedAt = 200 WHERE id = ?",
+                arguments: [heading.id.uuidString])
             try db.execute(
                 sql: "UPDATE partRequirement SET updatedAt = 300 WHERE id = ?",
                 arguments: [part.id.uuidString])
         }
         let rows = try await coordinator.read(WorkshopQueries.fetch)
-        #expect(rows.map(\.id) == [recent.id, skipped.id, empty.id])
+        #expect(rows.map(\.id) == [recent.id, headed.id, empty.id])
         #expect(rows[0].updatedAt == Date(timeIntervalSince1970: 300))
-        #expect(rows[1].progress.percentage == nil && rows[1].progress.skippedCount == 1)
-        #expect(rows[2].progress.percentage == nil && rows[2].unresolvedPartCount == 0)
+        #expect(rows[1].progress.stepCount == 0 && rows[1].progress.summary == "No steps yet")
+        #expect(rows[2].progress.stepCount == 0 && rows[2].unresolvedPartCount == 0)
         try await coordinator.mutate { db, _, _ in
             try db.execute(
                 sql: "UPDATE job SET updatedAt = 400 WHERE id = ?", arguments: [empty.id.uuidString]
@@ -99,7 +105,7 @@ nonisolated struct WorkshopOverviewTests {
         let tied = try await coordinator.read(WorkshopQueries.fetch)
         #expect(
             tied.map(\.id)
-                == [empty.id, skipped.id, recent.id].sorted { $0.uuidString < $1.uuidString })
+                == [empty.id, headed.id, recent.id].sorted { $0.uuidString < $1.uuidString })
         try await coordinator.close()
     }
 }

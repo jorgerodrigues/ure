@@ -89,7 +89,6 @@ final class PartsOverviewState {
                     "The part is unavailable. Retry loading parts or open its watch history."
                 return
             }
-            editing.tasks.close()
             editing.parts.close()
             editing.material.close()
             editing.watches.select(job.watchID)

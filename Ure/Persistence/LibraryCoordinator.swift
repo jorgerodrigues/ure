@@ -411,9 +411,9 @@ actor LibraryCoordinator {
         }.values(in: database)
     }
 
-    func taskValues() throws -> AsyncValueObservation<JobTaskSnapshot> {
+    func checklistValues() throws -> AsyncValueObservation<[ChecklistStepRecord]> {
         guard let database else { throw LibraryError.notOpen }
-        return ValueObservation.tracking(TaskPartQueries.snapshot).values(in: database)
+        return ValueObservation.tracking(ChecklistQueries.fetchAll).values(in: database)
     }
 
     func partValues() throws -> AsyncValueObservation<[PartRequirement]> {

@@ -92,6 +92,7 @@ nonisolated struct MaterialMigrationTests {
         #expect(
             staged.summary.appliedMigrations == [
                 "v20-material", "v21-caliber-facts", "v22-watch-owner", "v23-job-states",
+                "v24-checklist-steps",
             ])
         #expect(staged.summary.counts["libraryItem"] == LegacyMaterialFixture.items.count - 1)
         let result = try await coordinator.activateRestore(staged)
