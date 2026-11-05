@@ -65,12 +65,15 @@ A local-only test hosted the app's real `LibraryRootView`, with every session en
 
 The renders in `~/Developer/test-assets/jorge-w033-notes-94d20e/` show the watch, job and caliber notes in light and dark, the failed save, and the search result. The text matches the Paper notes block: 15 pt, 24 pt lines, and the first line breaks at the same word as the "4 Watch" artboard. Offscreen rendering leaves the selected sidebar row's label blank. That is a capture limit, not a change in this story. The typing hint sits below the visible part of the long watch page, so it is not in a render. The check confirmed that the field reports editing while focused, which is what shows the hint.
 
+## Codex review
+
+The model in `~/.codex/config.toml`, `gpt-6.1-sol`, is not supported for this ChatGPT account, so the first run failed before it reviewed anything. On 5 November 2026 the user approved Codex's default model for this review. The review ran with `--ignore-user-config`, which used `gpt-6-astra` and left the config file unchanged. It read the whole diff and the new files, and it reported no findings in its first round.
+
 ## Accepted app check
 
 On 5 November 2026 the user accepted the local window check as the W033 app check, in place of a screenshot of and keyboard input to the running app's own window. Those need Screen Recording and Accessibility for the session, or Automation Mode.
 
 ## Remaining gates
 
-- The Codex review could not run. The model in `~/.codex/config.toml`, `gpt-6.1-sol`, is not supported for this ChatGPT account.
 - The performance measurement was not rerun. Only its fixture and expected results changed.
 - Native UI tests were not run, as the repository rules require during story work.
