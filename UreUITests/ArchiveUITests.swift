@@ -11,9 +11,9 @@ nonisolated final class ArchiveUITests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         let window = app.windows.firstMatch
-        window.typeKey("2", modifierFlags: [.command, .option])
-        XCTAssertTrue(app.buttons["addWatch"].waitForExistence(timeout: 5))
-        app.buttons["addWatch"].click()
+        window.typeKey("3", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["newRecord"].waitForExistence(timeout: 5))
+        app.buttons["newRecord"].click()
         let name = app.textFields["watchName"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         name.typeText("Archive fixture")
@@ -40,9 +40,9 @@ nonisolated final class ArchiveUITests: XCTestCase {
         app.staticTexts["Archive fixture"].firstMatch.rightClick()
         app.menuItems["Archive Watch"].click()
         XCTAssertTrue(app.buttons["unarchiveWatch"].waitForExistence(timeout: 5))
-        window.typeKey("1", modifierFlags: [.command, .option])
+        window.typeKey("1", modifierFlags: .command)
         XCTAssertTrue(app.staticTexts["Full service"].firstMatch.waitForExistence(timeout: 5))
-        window.typeKey("2", modifierFlags: [.command, .option])
+        window.typeKey("3", modifierFlags: .command)
         app.staticTexts["Archive fixture"].firstMatch.click()
         XCTAssertTrue(app.buttons["unarchiveWatch"].waitForExistence(timeout: 5))
         app.buttons["unarchiveWatch"].click()

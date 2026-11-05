@@ -60,7 +60,7 @@ nonisolated final class WatchUITests: XCTestCase {
         window.typeKey(.tab, modifierFlags: [])
         window.typeKey("z", modifierFlags: .command)
         XCTAssertEqual(app.textFields["watchOwner"].value as? String, "")
-        window.typeKey("3", modifierFlags: [.command, .option])
+        window.typeKey("4", modifierFlags: .command)
         XCTAssertFalse(app.sheets.buttons["Stay"].waitForExistence(timeout: 2))
     }
 
@@ -70,7 +70,7 @@ nonisolated final class WatchUITests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         openWatches(app)
-        app.buttons["addWatch"].click()
+        app.buttons["newRecord"].click()
         enter("Do not lose this", in: "watchName", app: app)
         app.windows.firstMatch.typeKey("q", modifierFlags: .command)
         XCTAssertTrue(app.wait(for: .notRunning, timeout: 5))
@@ -95,8 +95,8 @@ nonisolated final class WatchUITests: XCTestCase {
     private func openWatches(_ app: XCUIApplication) {
         app.activate()
         XCTAssertTrue(app.outlines["Workshop sections"].waitForExistence(timeout: 5))
-        app.windows.firstMatch.typeKey("2", modifierFlags: [.command, .option])
-        XCTAssertTrue(app.buttons["addWatch"].waitForExistence(timeout: 5))
+        app.windows.firstMatch.typeKey("3", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["newRecord"].waitForExistence(timeout: 5))
     }
 
     @MainActor

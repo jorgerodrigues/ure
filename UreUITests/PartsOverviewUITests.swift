@@ -12,7 +12,7 @@ nonisolated final class PartsOverviewUITests: XCTestCase {
         defer { app.terminate() }
         createPart(watch: "Parts watch A", job: "Service A", reference: "0012-A", app: app)
         createPart(watch: "Parts watch B", job: "Service B", reference: "0012-B", app: app)
-        app.windows.firstMatch.typeKey("4", modifierFlags: [.command, .option])
+        app.windows.firstMatch.typeKey("2", modifierFlags: .command)
         let rowA = overviewRow(watch: "Parts watch A", app: app)
         let rowB = overviewRow(watch: "Parts watch B", app: app)
         XCTAssertTrue(rowA.waitForExistence(timeout: 5))
@@ -40,7 +40,7 @@ nonisolated final class PartsOverviewUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["0012-B"].waitForExistence(timeout: 3))
         app.buttons["editPart"].click()
         enter("Keep my draft", identifier: "partDescription", app: app)
-        app.windows.firstMatch.typeKey("2", modifierFlags: [.command, .option])
+        app.windows.firstMatch.typeKey("3", modifierFlags: .command)
         XCTAssertTrue(app.sheets.buttons["Stay"].waitForExistence(timeout: 3))
         app.sheets.buttons["Stay"].click()
         XCTAssertEqual(app.textFields["partDescription"].value as? String, "Keep my draft")
@@ -82,9 +82,9 @@ nonisolated final class PartsOverviewUITests: XCTestCase {
 
     @MainActor
     private func createPart(watch: String, job: String, reference: String, app: XCUIApplication) {
-        app.windows.firstMatch.typeKey("2", modifierFlags: [.command, .option])
-        XCTAssertTrue(app.buttons["addWatch"].waitForExistence(timeout: 5))
-        app.buttons["addWatch"].click()
+        app.windows.firstMatch.typeKey("3", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["newRecord"].waitForExistence(timeout: 5))
+        app.buttons["newRecord"].click()
         enter(watch, identifier: "watchName", app: app)
         app.windows.firstMatch.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(app.buttons["startWatchJob"].waitForExistence(timeout: 5))

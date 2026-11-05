@@ -10,9 +10,9 @@ nonisolated final class TaskPartUITests: XCTestCase {
         app.launchArguments = ["-AppleLocale", "en_US", "-ApplePersistenceIgnoreState", "YES"]
         app.launch()
         defer { app.terminate() }
-        app.windows.firstMatch.typeKey("2", modifierFlags: [.command, .option])
-        XCTAssertTrue(app.buttons["addWatch"].waitForExistence(timeout: 5))
-        app.buttons["addWatch"].click()
+        app.windows.firstMatch.typeKey("3", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["newRecord"].waitForExistence(timeout: 5))
+        app.buttons["newRecord"].click()
         enter("Task parts watch", identifier: "watchName", app: app)
         app.windows.firstMatch.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(app.buttons["startWatchJob"].waitForExistence(timeout: 5))
