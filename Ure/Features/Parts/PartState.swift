@@ -368,6 +368,7 @@ final class PartState {
     private func discard(_ id: UUID) {
         parts.removeAll { $0.id == id }
         links[id] = nil
+        facts[id] = nil
         if selectedID == id { selectedID = nil }
     }
 
@@ -384,6 +385,10 @@ final class PartState {
     private func apply(_ library: PartLibrary) {
         parts = library.parts
         links = library.links
+        // A part that went takes its fields with it, so a text it could no longer save never
+        // counts as unsaved. A part that comes back gets new fields.
+        let kept = Set(library.parts.map(\.id))
+        facts = facts.filter { kept.contains($0.key) }
         for part in library.parts {
             if let existing = facts[part.id] {
                 existing.refresh(part)

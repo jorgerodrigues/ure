@@ -108,6 +108,22 @@ struct PartStateTests {
             parts.part(crystal.id) != nil && parts.links(of: crystal.id).count == 1
         }
         #expect(try await stored(crystal.id, coordinator) == crystal)
+
+        // A part deleted with a quantity it can't save leaves nothing unsaved behind, so quit
+        // and restore ask nothing. Undo brings it back with its saved quantity.
+        let facts = try #require(parts.facts(for: crystal.id))
+        facts.quantity.beginEditing()
+        facts.quantity.change(to: "0", undoManager: nil)
+        facts.quantity.endEditing()
+        #expect(parts.hasUnsavedFacts)
+        undoManager.beginUndoGrouping()
+        #expect(await parts.remove(crystal.id, undoManager: undoManager))
+        undoManager.endUndoGrouping()
+        #expect(!parts.hasUnsavedFacts && parts.facts(for: crystal.id) == nil)
+        undoManager.undo()
+        await parts.waitForPresenceChanges()
+        try await waitUntil { parts.facts(for: crystal.id) != nil }
+        #expect(parts.facts(for: crystal.id)?.quantity.text == "1" && !parts.hasUnsavedFacts)
         observation.cancel()
         await observation.value
         try await coordinator.close()
