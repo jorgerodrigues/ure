@@ -19,7 +19,7 @@ WORKER = Path(sys.argv[1]).resolve()
 RUN = REPO / ".build/recovery-runs" / str(uuid.uuid4())
 GENERATION = "00000000-0000-4000-8000-000000000001"
 VERSIONS = ("v10-documents", "v15-part-procurement")
-CURRENT_MIGRATION = "v24-checklist-steps"
+CURRENT_MIGRATION = "v25-jobs-without-watch"
 # Columns that a later migration removes on purpose.
 REMOVED_COLUMNS = {
     "partLink": {

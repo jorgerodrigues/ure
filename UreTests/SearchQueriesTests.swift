@@ -142,15 +142,16 @@ nonisolated struct SearchQueriesTests {
         let job = try await JobTaskFixture.job(coordinator)
         let service = RecordNotesService(coordinator: coordinator)
         try await service.save("Duplicate original", for: .job(job.id))
-        try await service.save("Duplicate original", for: .watch(job.watchID))
+        let watchID = try #require(job.watchID)
+        try await service.save("Duplicate original", for: .watch(watchID))
         #expect(
             Set(
                 try await coordinator.read { try SearchQueries.fetch("duplicate", in: $0) }.map(
-                    \.recordID)) == [job.id, job.watchID])
+                    \.recordID)) == [job.id, watchID])
         try await service.save("Duplicate corrected", for: .job(job.id))
         #expect(
             try await coordinator.read { try SearchQueries.fetch("original", in: $0) }.map(
-                \.recordID) == [job.watchID])
+                \.recordID) == [watchID])
         #expect(
             try await coordinator.read { try SearchQueries.fetch("corrected", in: $0) }.map(
                 \.recordID) == [job.id])
@@ -176,7 +177,7 @@ nonisolated struct SearchQueriesTests {
         try await coordinator.mutate { db, _, _ in
             try db.execute(
                 sql: "UPDATE watch SET archivedAt = ? WHERE id = ?",
-                arguments: [date.timeIntervalSince1970, job.watchID.uuidString])
+                arguments: [date.timeIntervalSince1970, watchID.uuidString])
         }
         let archived = try await coordinator.read { try SearchQueries.fetch("duplicate", in: $0) }
         #expect(archived.count == 2 && archived.allSatisfy { $0.isArchived })

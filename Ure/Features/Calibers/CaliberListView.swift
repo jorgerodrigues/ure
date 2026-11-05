@@ -29,7 +29,7 @@ struct CaliberListView: View {
                         "Add a caliber with its exact designation. Leave unknown specifications empty."
                     )
                 } actions: {
-                    Button("Add Caliber", action: create)
+                    Button(NewRecord.title(in: .calibers), action: create)
                 }
             } else {
                 List(selection: selection) {
@@ -64,14 +64,8 @@ struct CaliberListView: View {
         }
         .navigationTitle("Calibers")
         .navigationSubtitle(subtitle)
-        .searchable(text: $calibers.searchText, prompt: "Find a caliber")
-        .toolbar {
-            Button("Add Caliber", systemImage: "plus", action: create)
-                .labelStyle(.iconOnly)
-                .help("Add Caliber (⌘N)")
-                .accessibilityIdentifier("addCaliber")
-                .disabled(editing.isSaving || calibers.isLoading || calibers.loadError != nil)
-        }
+        .toolbarSearch(text: $calibers.searchText)
+        .toolbar { NewRecordButton(section: .calibers) }
         .disabled(editing.isSaving)
     }
 

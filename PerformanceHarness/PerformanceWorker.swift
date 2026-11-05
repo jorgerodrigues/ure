@@ -101,12 +101,14 @@ nonisolated struct PerformanceMeasurements: Sendable {
         try await measure("bench", into: &report) { db in
             try BenchSnapshot.fetch(db).items.map { $0.id.uuidString }
         }
-        try await measure("workshop", into: &report) { db in
-            let rows = try WorkshopQueries.fetch(db)
+        // The Jobs list: the open jobs, and none done since the fixture's date.
+        let cutoff = Date(timeIntervalSince1970: PerformanceFixture.date + 1)
+        try await measure("jobList", into: &report) { db in
+            let rows = try JobListQueries.fetch(db, doneSince: cutoff)
             guard
                 rows.allSatisfy({ row in
                     row.progress.doneCount == 4 && row.progress.stepCount == 8
-                        && row.unresolvedPartCount == 1
+                        && row.watch?.id == row.job.watchID
                 })
             else { throw PerformanceError.changedResults }
             return rows.map { $0.id.uuidString }

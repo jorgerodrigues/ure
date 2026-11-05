@@ -75,7 +75,8 @@ nonisolated struct ChecklistMigrationTests {
         let package = fixture.directory.appending(path: "before-checklists.watchbackup")
         try LegacyChecklistFixture.package(at: package)
         let staged = try await coordinator.stageRestore(from: package)
-        #expect(staged.summary.appliedMigrations == ["v24-checklist-steps"])
+        #expect(
+            staged.summary.appliedMigrations == ["v24-checklist-steps", "v25-jobs-without-watch"])
         #expect(
             staged.summary.counts["checklistStep"]
                 == LegacyChecklistFixture.jobs.map(\.expectedLines.count).reduce(0, +))
@@ -138,6 +139,7 @@ nonisolated struct ChecklistMigrationTests {
 // heading before it, so v24 makes the same steps when it runs again.
 nonisolated enum ChecklistMigrationFixture {
     static func restoreTasks(in db: Database) throws {
+        try JobWatchMigrationFixture.requireWatch(in: db)
         try db.create(table: "jobTask") { table in
             table.column("id", .text).primaryKey()
             table.column("jobID", .text).notNull().references("job", onDelete: .restrict)

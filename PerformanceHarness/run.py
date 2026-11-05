@@ -33,7 +33,7 @@ def expected_results():
         "photos": [record_id(6, i) for i in range(5000)],
         "bench": [record_id(6, i) for i in range(5000)],
         "parts": [record_id(8, i * 2) for i in range(450)],
-        "workshop": [record_id(3, i * 2) for i in range(450)],
+        "jobList": [record_id(3, i * 2) for i in range(450)],
     }
     # Search finds archived records too.
     groups = {

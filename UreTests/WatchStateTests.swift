@@ -143,12 +143,13 @@ struct WatchStateTests {
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
+        let watchID = try #require(job.watchID)
         let other = try await WatchService(coordinator: coordinator).create(named: "Another watch")
         let state = WatchState(service: WatchService(coordinator: coordinator))
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { state.watches.count == 2 }
-        state.select(job.watchID)
+        state.select(watchID)
         #expect(!state.showsArchived)
         let undo = UndoManager()
         undo.groupsByEvent = false
@@ -157,28 +158,30 @@ struct WatchStateTests {
         undo.endUndoGrouping()
         #expect(state.selectedWatch?.archivedAt != nil && state.selectedID == job.watchID)
         #expect(state.filteredWatches.map(\.id) == [other.id])
-        #expect(state.archivedWatches.map(\.id) == [job.watchID])
+        #expect(state.archivedWatches.map(\.id) == [watchID])
         #expect(state.showsArchived && state.activeCount == 1 && state.archivedCount == 1)
         #expect(undo.undoMenuItemTitle == "Undo Archive Watch")
-        #expect(try await archivedAt(job.watchID, coordinator) != nil)
+        #expect(try await archivedAt(watchID, coordinator) != nil)
 
         undo.undo()
         await state.waitForArchiveChanges()
-        #expect(try await archivedAt(job.watchID, coordinator) == nil)
+        #expect(try await archivedAt(watchID, coordinator) == nil)
         #expect(state.filteredWatches.count == 2 && state.archivedWatches.isEmpty)
         #expect(undo.redoMenuItemTitle == "Redo Archive Watch")
         undo.redo()
         await state.waitForArchiveChanges()
-        #expect(try await archivedAt(job.watchID, coordinator) != nil)
+        #expect(try await archivedAt(watchID, coordinator) != nil)
         #expect(undo.undoMenuItemTitle == "Undo Archive Watch")
 
         undo.beginUndoGrouping()
         #expect(await state.toggleArchive(undoManager: undo))
         undo.endUndoGrouping()
-        #expect(try await archivedAt(job.watchID, coordinator) == nil)
+        #expect(try await archivedAt(watchID, coordinator) == nil)
         #expect(undo.undoMenuItemTitle == "Undo Unarchive Watch")
         #expect(try await coordinator.read { try JobQueries.fetch(job.id, in: $0) } == job)
-        #expect(try await coordinator.read(WorkshopQueries.fetch).map(\.id) == [job.id])
+        #expect(
+            try await coordinator.read { try JobListQueries.fetch($0, doneSince: .distantPast) }
+                .map(\.id) == [job.id])
         state.discardUndo()
         #expect(!undo.canUndo)
         observation.cancel()

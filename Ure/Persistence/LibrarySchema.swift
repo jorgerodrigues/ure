@@ -769,6 +769,12 @@ nonisolated enum LibrarySchema {
             try db.drop(table: "jobTask")
             try SearchKey.backfill("job", fields: ["title", "notes"], in: db)
         }
+        migrator.registerMigration("v25-jobs-without-watch", foreignKeyChecks: .deferred) { db in
+            // A job can exist without a watch while you set it up. The job table is rebuilt
+            // with an optional watch, and every row, index and trigger stays as it was. Deferred
+            // checks keep each job's checklist steps, parts, material and watch cover meanwhile.
+            try JobWatchMigration.allowJobsWithoutWatch(in: db)
+        }
         return migrator
     }
 }

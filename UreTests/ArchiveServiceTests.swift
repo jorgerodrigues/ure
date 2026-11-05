@@ -17,10 +17,11 @@ nonisolated struct ArchiveServiceTests {
         let job = try await JobTaskFixture.job(coordinator)
         let steps = try await ChecklistService(coordinator: coordinator).save(
             [ChecklistStep(id: UUID(), text: "Clean all parts")], for: job.id)
+        let watchID = try #require(job.watchID)
         let prior = try #require(
-            try await coordinator.read { try WatchQueries.fetch(job.watchID, in: $0) })
+            try await coordinator.read { try WatchQueries.fetch(watchID, in: $0) })
         let service = ArchiveService(coordinator: coordinator)
-        let archived = try await service.setWatch(job.watchID, archived: true)
+        let archived = try await service.setWatch(watchID, archived: true)
         #expect(archived.archivedAt == clock)
         #expect(archived.updatedAt == prior.updatedAt)
         #expect(
@@ -28,8 +29,10 @@ nonisolated struct ArchiveServiceTests {
                 $0.recordID == prior.id
             }?.isArchived == true)
 
-        // The open job stays in the workshop and can still change, also its state.
-        #expect(try await coordinator.read(WorkshopQueries.fetch).map(\.id) == [job.id])
+        // The open job stays in Jobs and can still change, also its state.
+        #expect(
+            try await coordinator.read { try JobListQueries.fetch($0, doneSince: .distantPast) }
+                .map(\.id) == [job.id])
         let jobs = JobService(coordinator: coordinator)
         let renamed = try await jobs.update(job.id, .title("Service while archived"))
         try await RecordNotesService(coordinator: coordinator).save(

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 struct WorkshopView: View {
@@ -7,7 +8,7 @@ struct WorkshopView: View {
     @Environment(WatchState.self) private var watches
     @Environment(CaliberState.self) private var calibers
     @Environment(JobState.self) private var jobs
-    @Environment(WorkshopOverviewState.self) private var workshop
+    @Environment(JobListState.self) private var jobList
     @Environment(PartsOverviewState.self) private var partsOverview
     @Environment(ChecklistState.self) private var checklist
     @Environment(PartState.self) private var parts
@@ -27,8 +28,8 @@ struct WorkshopView: View {
             Group {
                 if search.isPresented {
                     SearchView()
-                } else if navigation.selectedSection == .workshop {
-                    WorkshopOverviewView()
+                } else if navigation.selectedSection == .jobs {
+                    JobListView()
                 } else if navigation.selectedSection == .watches {
                     WatchListView()
                 } else if navigation.selectedSection == .calibers {
@@ -68,7 +69,7 @@ struct WorkshopView: View {
         .task(watches.observe)
         .task(calibers.observe)
         .task(jobs.observe)
-        .task(id: workshop.observationRevision, workshop.observe)
+        .task(id: jobList.observationRevision, jobList.observe)
         .task(id: partsOverview.observationRevision, partsOverview.observe)
         .task(checklist.observe)
         .task(parts.observe)
@@ -80,13 +81,12 @@ struct WorkshopView: View {
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification),
             perform: revalidateReference
         )
+        .onReceive(
+            NotificationCenter.default.publisher(for: .NSCalendarDayChanged)
+                .receive(on: RunLoop.main),
+            perform: refreshJobDay
+        )
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button("Search Library", systemImage: "magnifyingglass", action: search.present)
-                    .labelStyle(.iconOnly)
-                    .help("Search Library (⇧⌘F)")
-                    .accessibilityIdentifier("searchLibrary")
-            }.visibilityPriority(.high)
             if hasActiveJob {
                 ToolbarItemGroup(placement: .primaryAction) {
                     BenchPinMenu(bench: bench)
@@ -116,36 +116,41 @@ struct WorkshopView: View {
     }
 
     @ViewBuilder private var detail: some View {
-        if navigation.selectedSection == .workshop {
+        if navigation.selectedSection == .jobs {
             Group {
-                if watches.selectedID == nil {
+                if jobs.selectedID == nil {
+                    // A New Job that did not save says why here, since no job is selected.
                     ContentUnavailableView(
-                        "Select a job", systemImage: "wrench.and.screwdriver",
-                        description: Text("Choose an open job to view its details."))
+                        "Select a job", systemImage: WorkshopSection.jobs.symbol,
+                        description: Text(
+                            jobs.saveError ?? "Choose a job, or start one with New Job."))
                 } else {
-                    WatchDetailView()
+                    JobDetailView()
                 }
             }
             .safeAreaInset(edge: .top) {
-                if let message = workshop.selectionMessage(for: jobs.selectedJob) {
+                if let message = jobList.selectionMessage(for: jobs.selectedJob) {
                     HStack {
                         Text(message).font(.callout)
-                        if jobs.selectedJob?.stage.isOpen == true {
-                            Button("Clear Filters", action: workshop.clearFilters)
+                        if jobList.contains(jobs.selectedID) {
+                            Button("Clear Search", action: jobList.clearSearch)
                         }
                     }
                     .padding()
-                    .accessibilityIdentifier("workshopSelectionMessage")
+                    .accessibilityIdentifier("jobListSelectionMessage")
                 }
             }
         } else if navigation.selectedSection == .parts {
+            // A part opens on its job's page, and Back to Watch shows the watch's page here.
             Group {
-                if watches.selectedID == nil {
-                    ContentUnavailableView(
-                        "Select a part", systemImage: "shippingbox",
-                        description: Text("Choose a part to view it in its job."))
-                } else {
+                if jobs.selectedID != nil {
+                    JobDetailView()
+                } else if watches.selectedID != nil {
                     WatchDetailView()
+                } else {
+                    ContentUnavailableView(
+                        "Select a part", systemImage: WorkshopSection.parts.symbol,
+                        description: Text("Choose a part to view it in its job."))
                 }
             }
             .safeAreaInset(edge: .top) {
@@ -169,27 +174,40 @@ struct WorkshopView: View {
         }
     }
 
+    // A job page is open: in Jobs and Parts whenever a job is selected, and in Watches when the
+    // selected watch shows its job.
     private var hasActiveJob: Bool {
-        navigation.selectedSection != .calibers && jobs.selectedID != nil
-            && jobs.watchID == watches.selectedID
+        switch navigation.selectedSection {
+        case .calibers: return false
+        case .jobs, .parts: return jobs.selectedID != nil
+        case .watches: return jobs.selectedID != nil && jobs.watchID == watches.selectedID
+        }
     }
-    private var isLoadingSelection: Bool { bench.isLoading || watches.isLoading || jobs.isLoading }
+    private var isLoadingSelection: Bool {
+        bench.isLoading || watches.isLoading || jobs.isLoading || jobList.isLoading
+    }
 
     private func startBench() async { bench.start(); restoreSelection() }
     private func selectBenchJob() { bench.selectJob(jobs.selectedID) }
+    // Opens the job you worked on last. It opens in Jobs while the list holds it, and on its
+    // watch's page once it is older.
     private func restoreSelection() {
         guard !didRestoreSelection, !isLoadingSelection else { return }
         didRestoreSelection = true
         guard !editing.hasUnsavedChanges, !editing.isSaving,
-            navigation.selectedSection == .workshop, calibers.selectedID == nil,
+            navigation.selectedSection == .jobs, calibers.selectedID == nil,
             parts.draft == nil,
             watches.selectedID == nil, jobs.selectedID == nil,
             let job = jobs.jobs.first(where: { $0.id == bench.jobID })
         else { return }
         watches.select(job.watchID)
         jobs.open(job)
-        navigation.selection = .watches
+        if !jobList.contains(job.id), job.watchID != nil { navigation.selection = .watches }
     }
-    private func revalidateReference(_ notification: Notification) { bench.revalidate() }
+    private func revalidateReference(_ notification: Notification) {
+        bench.revalidate()
+        jobList.refreshDay()
+    }
+    private func refreshJobDay(_ notification: Notification) { jobList.refreshDay() }
     private func openReference() { openWindow(id: "reference") }
 }

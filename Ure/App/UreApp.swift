@@ -32,7 +32,7 @@ struct UreApp: App {
                 .environment(restore.session.calibers)
                 .environment(restore.session.jobs)
                 .environment(restore.session.search)
-                .environment(restore.session.workshop)
+                .environment(restore.session.jobList)
                 .environment(restore.session.partsOverview)
                 .environment(restore.session.notes)
                 .environment(restore.session.checklist)

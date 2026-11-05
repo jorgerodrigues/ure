@@ -3,62 +3,64 @@ import XCTest
 
 nonisolated final class WorkshopUITests: XCTestCase {
     @MainActor
-    func testWorkshopFiltersRetainJobAndKeyboardSaveThenClosureKeepsHistory() {
+    func testNewJobPicksItsWatchAndJobsGroupsItUntilItIsDone() {
         let app = XCUIApplication()
         app.launchEnvironment["URE_TESTING"] = "1"
         app.launchEnvironment["URE_TEST_LIBRARY_ID"] = UUID().uuidString
         app.launchArguments = ["-AppleLocale", "en_US", "-ApplePersistenceIgnoreState", "YES"]
         app.launch()
         defer { app.terminate() }
-        app.windows.firstMatch.typeKey("2", modifierFlags: [.command, .option])
-        XCTAssertTrue(app.buttons["addWatch"].waitForExistence(timeout: 5))
-        app.buttons["addWatch"].click()
+        let window = app.windows.firstMatch
+        window.typeKey("3", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["newRecord"].waitForExistence(timeout: 5))
+        app.buttons["newRecord"].click()
         enter("Workshop watch", identifier: "watchName", app: app)
-        app.windows.firstMatch.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(app.buttons["startWatchJob"].waitForExistence(timeout: 5))
-        app.buttons["startWatchJob"].click()
-        enter("Workshop service", identifier: "jobTitle", app: app)
-        app.windows.firstMatch.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(
-            app.descendants(matching: .any)["jobState"].firstMatch.waitForExistence(timeout: 5))
-        app.windows.firstMatch.typeKey("1", modifierFlags: [.command, .option])
+        window.typeKey(.return, modifierFlags: [])
+
+        // ⌘N in Jobs makes a job without a watch, and the picker comes after its title.
+        window.typeKey("1", modifierFlags: .command)
+        window.typeKey("n", modifierFlags: .command)
+        XCTAssertTrue(app.textFields["jobTitle"].waitForExistence(timeout: 5))
+        app.textFields["jobTitle"].typeText("Workshop service")
+        window.typeKey(.return, modifierFlags: [])
+        let picker = app.textFields["jobWatchPicker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        picker.typeText("workshop")
+        window.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(app.buttons["jobWatch"].waitForExistence(timeout: 5))
+        XCTAssertFalse(picker.exists)
         let row = app.descendants(matching: .any).matching(
-            NSPredicate(format: "identifier BEGINSWITH %@", "workshopJob-")
+            NSPredicate(format: "identifier BEGINSWITH %@", "jobListRow-")
         ).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5))
-        row.click()
-        XCTAssertTrue(app.staticTexts["Workshop service"].exists)
-        app.popUpButtons["workshopStageFilter"].click()
-        app.menuItems["Waiting"].firstMatch.click()
-        XCTAssertTrue(app.staticTexts["No matching jobs"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.textFields["jobTitle"].exists)
-        XCTAssertTrue(app.descendants(matching: .any)["workshopSelectionMessage"].exists)
-        app.buttons["Clear Filters"].firstMatch.click()
-        XCTAssertTrue(row.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["In progress"].exists)
+
+        // ⌘F puts the cursor in the toolbar's search, which finds within Jobs.
+        window.typeKey("f", modifierFlags: .command)
         let search = app.searchFields.firstMatch
-        search.click()
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
         search.typeText("Missing job")
-        XCTAssertTrue(app.staticTexts["No matching jobs"].waitForExistence(timeout: 3))
-        app.buttons["Clear Filters"].firstMatch.click()
-        enter("Corrected workshop service", identifier: "jobTitle", app: app)
-        app.windows.firstMatch.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(
-            app.descendants(matching: .any)["jobState"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(row.waitForExistence(timeout: 1))
+        XCTAssertTrue(app.textFields["jobTitle"].exists)
+        search.typeKey("a", modifierFlags: .command)
+        search.typeKey(.delete, modifierFlags: [])
+        XCTAssertTrue(row.waitForExistence(timeout: 3))
+
+        // A Done job moves to Done recently and stays on its watch's page.
         let state = app.descendants(matching: .any)["jobState"].firstMatch
         XCTAssertTrue(state.waitForExistence(timeout: 5))
         state.click()
         app.menuItems["Done"].firstMatch.click()
-        XCTAssertTrue(app.staticTexts["No open jobs"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Done recently"].waitForExistence(timeout: 5))
         XCTAssertEqual(state.value as? String, "Done")
-        app.buttons["backToWatch"].click()
+        app.buttons["jobWatch"].click()
         let history = app.buttons.matching(
             NSPredicate(format: "identifier BEGINSWITH %@", "watchJob-")
         )
         .firstMatch
         XCTAssertTrue(history.waitForExistence(timeout: 5))
         history.click()
-        XCTAssertTrue(app.textFields["jobTitle"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.textFields["jobTitle"].value as? String, "Corrected workshop service")
+        XCTAssertEqual(app.textFields["jobTitle"].value as? String, "Workshop service")
     }
 
     @MainActor
@@ -174,8 +176,8 @@ nonisolated final class WorkshopUITests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
 
-        window.typeKey("2", modifierFlags: [.command, .option])
-        XCTAssertTrue(app.buttons["addWatch"].waitForExistence(timeout: 5))
+        window.typeKey("3", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["newRecord"].waitForExistence(timeout: 5))
         window.typeKey("n", modifierFlags: .command)
         XCTAssertTrue(app.textFields["watchName"].waitForExistence(timeout: 3))
         window.typeText("Minimum window watch")
@@ -183,12 +185,12 @@ nonisolated final class WorkshopUITests: XCTestCase {
         XCTAssertTrue(app.textFields["watchContact"].isHittable)
         XCTAssertTrue(app.buttons["startWatchJob"].waitForExistence(timeout: 5))
 
-        window.typeKey("3", modifierFlags: [.command, .option])
-        XCTAssertTrue(app.buttons["addCaliber"].waitForExistence(timeout: 5))
+        window.typeKey("4", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["newRecord"].waitForExistence(timeout: 5))
         window.typeKey("n", modifierFlags: .command)
         XCTAssertTrue(app.textFields["caliberName"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.textFields["caliberLiftAngle"].isHittable)
-        XCTAssertTrue(app.buttons["addCaliber"].isHittable)
+        XCTAssertTrue(app.buttons["newRecord"].isHittable)
         app.terminate()
     }
 }

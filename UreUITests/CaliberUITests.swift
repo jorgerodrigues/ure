@@ -7,7 +7,7 @@ nonisolated final class CaliberUITests: XCTestCase {
         let app = isolatedApp()
         app.launch()
         defer { app.terminate() }
-        openSection("3", control: "addCaliber", app: app)
+        openSection("4", control: "newRecord", app: app)
         let window = app.windows.firstMatch
         window.typeKey("n", modifierFlags: .command)
         XCTAssertTrue(app.textFields["caliberName"].waitForExistence(timeout: 5))
@@ -23,7 +23,7 @@ nonisolated final class CaliberUITests: XCTestCase {
         XCTAssertEqual(app.menuButtons["caliberWinding"].value as? String, "Manual")
         createWatch("First watch", caliber: "Example maker Fixture 0012", app: app)
         createWatch("Second watch", caliber: "Example maker Fixture 0012", app: app)
-        openSection("3", control: "addCaliber", app: app)
+        openSection("4", control: "newRecord", app: app)
         app.staticTexts["Example maker Fixture 0012"].firstMatch.click()
         XCTAssertTrue(app.buttons["First watch"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Second watch"].exists)
@@ -37,7 +37,7 @@ nonisolated final class CaliberUITests: XCTestCase {
         XCTAssertEqual(app.menuButtons["watchCaliber"].value as? String, "")
         app.terminate()
         app.launch()
-        openSection("3", control: "addCaliber", app: app)
+        openSection("4", control: "newRecord", app: app)
         app.staticTexts["Example maker Corrected fixture"].firstMatch.click()
         XCTAssertTrue(app.textFields["caliberName"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.textFields["caliberName"].value as? String, "Corrected fixture")
@@ -52,7 +52,7 @@ nonisolated final class CaliberUITests: XCTestCase {
         let app = isolatedApp()
         app.launch()
         defer { app.terminate() }
-        openSection("3", control: "addCaliber", app: app)
+        openSection("4", control: "newRecord", app: app)
         let window = app.windows.firstMatch
         window.typeKey("n", modifierFlags: .command)
         XCTAssertTrue(app.textFields["caliberName"].waitForExistence(timeout: 5))
@@ -63,10 +63,10 @@ nonisolated final class CaliberUITests: XCTestCase {
             app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Enter a beat rate'"))
                 .firstMatch.waitForExistence(timeout: 5))
         XCTAssertEqual(app.textFields["caliberBeatRate"].value as? String, "0")
-        window.typeKey("2", modifierFlags: [.command, .option])
+        window.typeKey("3", modifierFlags: .command)
         XCTAssertFalse(app.sheets.buttons["Stay"].waitForExistence(timeout: 2))
         XCTAssertTrue(app.staticTexts["No watches"].waitForExistence(timeout: 5))
-        openSection("3", control: "addCaliber", app: app)
+        openSection("4", control: "newRecord", app: app)
         app.staticTexts["Draft caliber"].firstMatch.click()
         XCTAssertTrue(app.textFields["caliberBeatRate"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.textFields["caliberBeatRate"].value as? String, "0")
@@ -87,14 +87,14 @@ nonisolated final class CaliberUITests: XCTestCase {
     private func openSection(_ shortcut: String, control: String, app: XCUIApplication) {
         app.activate()
         XCTAssertTrue(app.outlines["Workshop sections"].waitForExistence(timeout: 5))
-        app.windows.firstMatch.typeKey(shortcut, modifierFlags: [.command, .option])
+        app.windows.firstMatch.typeKey(shortcut, modifierFlags: .command)
         XCTAssertTrue(app.buttons[control].waitForExistence(timeout: 5))
     }
 
     @MainActor
     private func createWatch(_ name: String, caliber: String, app: XCUIApplication) {
-        openSection("2", control: "addWatch", app: app)
-        app.buttons["addWatch"].click()
+        openSection("3", control: "newRecord", app: app)
+        app.buttons["newRecord"].click()
         enter(name, in: "watchName", app: app)
         app.windows.firstMatch.typeKey(.return, modifierFlags: [])
         chooseCaliber(caliber, app: app)

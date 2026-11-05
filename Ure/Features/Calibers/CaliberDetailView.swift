@@ -118,7 +118,9 @@ private struct CaliberHeader: View {
         let used = watches.watches.filter { $0.caliberID == caliber.id }
         guard !used.isEmpty else { return "No watches yet" }
         let ids = Set(used.map(\.id))
-        let open = jobs.jobs.filter { ids.contains($0.watchID) && $0.stage.isOpen }.count
+        let open = jobs.jobs.filter { job in
+            job.stage.isOpen && job.watchID.map(ids.contains) == true
+        }.count
         let watchText = "In \(WatchWording.watches(used.count))"
         if open == 0 { return watchText }
         return "\(watchText) · \(open == 1 ? "1 job" : "\(open) jobs") open"

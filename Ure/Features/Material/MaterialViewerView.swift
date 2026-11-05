@@ -56,13 +56,16 @@ struct MaterialViewerView: View {
         }
         var actions = RecordMenuActions()
         if record.asset != nil { actions.exportOriginal = exportOriginal }
-        if canRemove(record) { actions.remove = remove }
+        if canRemove(record) {
+            actions.remove = remove
+            actions.removeTitle = "Remove \(record.item.kind.title)"
+        }
         return actions
     }
 
-    private var backAction: (() -> Void)? {
+    private var backAction: RecordBack? {
         guard !editing.isSaving else { return nil }
-        return back
+        return RecordBack(title: "Back to \(page.scope)", action: back)
     }
 
     private func back() { editing.requestNavigation(material.close) }

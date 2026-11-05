@@ -204,14 +204,14 @@ nonisolated final class JobUITests: XCTestCase {
     private func openWatches(_ app: XCUIApplication) {
         app.activate()
         XCTAssertTrue(app.outlines["Workshop sections"].waitForExistence(timeout: 5))
-        app.windows.firstMatch.typeKey("2", modifierFlags: [.command, .option])
-        XCTAssertTrue(app.buttons["addWatch"].waitForExistence(timeout: 5))
+        app.windows.firstMatch.typeKey("3", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["newRecord"].waitForExistence(timeout: 5))
     }
 
     @MainActor
     private func createWatch(_ app: XCUIApplication) {
         openWatches(app)
-        app.buttons["addWatch"].click()
+        app.buttons["newRecord"].click()
         enter("Inherited watch", in: "watchName", app: app)
         enter("000042.7-A", in: "watchSerial", app: app)
         app.windows.firstMatch.typeKey(.return, modifierFlags: [])

@@ -273,7 +273,7 @@ nonisolated struct PartProcurementTests {
         let source = try fixture.source(type: .png)
         let bytes = try Data(contentsOf: source)
         let photo = try await material.importFiles([source], for: .job(job.id))[0].outcome.get()
-        try await material.setCover(photo.id, for: job.watchID)
+        try await material.setCover(photo.id, for: try #require(job.watchID))
         let watch = try #require(try await coordinator.read(WatchQueries.fetchAll).first)
         let checklist = ChecklistService(coordinator: coordinator)
         let first = ChecklistStep(id: UUID(), text: "Clean all parts", isTicked: true)

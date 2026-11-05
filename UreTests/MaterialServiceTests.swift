@@ -383,7 +383,8 @@ nonisolated struct MaterialServiceTests {
             try db.execute(
                 sql: "UPDATE job SET archivedAt = 1 WHERE id = ?", arguments: [job.id.uuidString])
         }
-        _ = try await ArchiveService(coordinator: coordinator).setWatch(job.watchID, archived: true)
+        _ = try await ArchiveService(coordinator: coordinator).setWatch(
+            try #require(job.watchID), archived: true)
         let caliber = try #require(try await coordinator.read(CaliberQueries.fetchAll).first)
         _ = try await ArchiveService(coordinator: coordinator).setCaliber(
             caliber.id, archived: true)

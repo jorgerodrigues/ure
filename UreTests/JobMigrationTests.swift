@@ -81,7 +81,10 @@ nonisolated struct JobMigrationTests {
         let package = fixture.directory.appending(path: "before-job-states.watchbackup")
         try LegacyJobFixture.package(at: package)
         let staged = try await coordinator.stageRestore(from: package)
-        #expect(staged.summary.appliedMigrations == ["v23-job-states", "v24-checklist-steps"])
+        #expect(
+            staged.summary.appliedMigrations == [
+                "v23-job-states", "v24-checklist-steps", "v25-jobs-without-watch",
+            ])
         #expect(staged.summary.counts["job"] == LegacyJobFixture.jobs.count)
         // The staged library is already upgraded, so its history is gone.
         #expect(staged.summary.counts["activityEvent"] == nil)

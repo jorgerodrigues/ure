@@ -394,9 +394,11 @@ actor LibraryCoordinator {
         return ValueObservation.tracking(JobQueries.fetchAll).values(in: database)
     }
 
-    func workshopValues() throws -> AsyncValueObservation<[WorkshopJob]> {
+    // The jobs in the Jobs list: every open job, and the jobs done since the cutoff.
+    func jobListValues(doneSince cutoff: Date) throws -> AsyncValueObservation<[JobListRow]> {
         guard let database else { throw LibraryError.notOpen }
-        return ValueObservation.tracking(WorkshopQueries.fetch).values(in: database)
+        return ValueObservation.tracking { db in try JobListQueries.fetch(db, doneSince: cutoff) }
+            .values(in: database)
     }
 
     func partsOverviewValues() throws -> AsyncValueObservation<[OverviewPart]> {
