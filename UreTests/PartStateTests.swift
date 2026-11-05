@@ -42,6 +42,13 @@ struct PartStateTests {
         saved = try await stored(part.id, coordinator)
         #expect(saved.stage == .ordered && saved.orderedAt == clock.date(1_000))
 
+        // Two quick clicks move the part on twice, each with its own Undo step.
+        async let firstClick = parts.advance(part.id, undoManager: nil)
+        async let secondClick = parts.advance(part.id, undoManager: nil)
+        _ = await (firstClick, secondClick)
+        #expect(try await stored(part.id, coordinator).stage == .fitted)
+        _ = await parts.setStage(.ordered, of: part.id)
+
         // Each click is its own Undo step, and a fitted part stays fitted.
         for _ in 0..<2 {
             undoManager.beginUndoGrouping()
@@ -154,11 +161,18 @@ struct PartStateTests {
         #expect(!(await parts.submit("Crystal", spare: nil, on: entry)))
         #expect(entry.unsaved == ["Crystal"] && entry.text == "Crys" && parts.hasUnsavedFacts)
         #expect(!(await parts.submit("Gasket", spare: nil, on: entry)))
-        await parts.retryUnsaved(entry)
+        #expect(!(await parts.retryUnsaved(entry)))
+        #expect(entry.unsaved == ["Crystal", "Gasket"])
+        // Quitting tries them again and says that they did not save.
+        #expect(!(await parts.saveAllFacts()))
         #expect(entry.unsaved == ["Crystal", "Gasket"])
         try await JobTaskFixture.allowWrites(coordinator, on: "part")
-        await parts.retryUnsaved(entry)
+        // Two Try Agains at once add each name once.
+        async let first = parts.retryUnsaved(entry)
+        async let second = parts.retryUnsaved(entry)
+        _ = await (first, second)
         #expect(entry.unsaved.isEmpty && !parts.hasUnsavedFacts)
+        #expect(await parts.saveAllFacts())
         #expect(parts.parts(on: job.id).map(\.name) == ["Mainspring", "Crystal", "Gasket"])
         entry.endEditing()
         observation.cancel()

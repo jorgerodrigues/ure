@@ -165,13 +165,17 @@ final class PartState {
     }
 
     // Adds the names that did not save, in the order they were typed, until one fails again.
-    func retryUnsaved(_ entry: PartEntry, undoManager: UndoManager? = nil) async {
-        for name in entry.unsaved {
+    // Each name leaves the line before it is added, so a second Try Again never adds it twice.
+    // True when every name saved.
+    @discardableResult
+    func retryUnsaved(_ entry: PartEntry, undoManager: UndoManager? = nil) async -> Bool {
+        while let name = entry.takeUnsaved() {
             guard await add(named: name, to: entry.jobID, undoManager: undoManager) != nil else {
-                return
+                entry.putBackUnsaved(name)
+                return false
             }
-            entry.saved(name)
         }
+        return true
     }
 
     // ⌘N in Parts makes a spare named "New Part", in hand, selects it, and puts the cursor in
@@ -204,11 +208,15 @@ final class PartState {
     }
 
     // A click on a part's state moves it on, such as Needed to Ordered, and records the day.
-    // ⌘Z puts back the state it had, with its dates.
+    // The next state comes from the stored part once the changes before it have saved, so two
+    // quick clicks move it on twice. ⌘Z puts back the state it had, with its dates.
     @discardableResult
     func advance(_ id: UUID, undoManager: UndoManager? = nil) async -> Bool {
         guard let next = part(id)?.stage.next else { return false }
-        return await setStage(next, of: id, undoManager: undoManager)
+        return await stages.perform(PartStageValue(stage: next)) { [weak self] _ in
+            await self?.changeStage(id, undoManager: undoManager) { try await $0.advance(id) }
+                ?? false
+        }
     }
 
     func setStageCommand(_ stage: PartStage, of id: UUID, undoManager: UndoManager?) {
@@ -223,7 +231,9 @@ final class PartState {
     {
         guard let existing = part(id), existing.stage != stage else { return false }
         return await stages.perform(PartStageValue(stage: stage)) { [weak self] _ in
-            await self?.changeStage(id, to: stage, undoManager: undoManager) ?? false
+            await self?.changeStage(id, undoManager: undoManager) {
+                try await $0.setStage(id, to: stage)
+            } ?? false
         }
     }
 
@@ -261,10 +271,15 @@ final class PartState {
         for editor in unsavedEditors { editor.saveNow() }
     }
 
+    // Saves every field and tries the part names that did not save again. False while any
+    // typing is still unsaved, so quitting asks first.
     func saveAllFacts() async -> Bool {
         var succeeded = true
         for editor in unsavedEditors {
             if await !editor.flush() { succeeded = false }
+        }
+        for entry in entries.values where !entry.unsaved.isEmpty {
+            if await !retryUnsaved(entry) { succeeded = false }
         }
         return succeeded
     }
@@ -297,14 +312,15 @@ final class PartState {
         }
     }
 
-    private func changeStage(_ id: UUID, to stage: PartStage, undoManager: UndoManager?) async
-        -> Bool
-    {
+    private func changeStage(
+        _ id: UUID, undoManager: UndoManager?,
+        write: (PartService) async throws -> PartStageChange
+    ) async -> Bool {
         isSaving = true
         saveError = nil
         defer { isSaving = false }
         do {
-            let change = try await service.setStage(id, to: stage)
+            let change = try await write(service)
             adopt(change.part)
             let next = PartStageValue(part: change.part)
             guard next != change.prior else { return true }
@@ -520,7 +536,8 @@ final class PartEntry {
 
     func keepUnsaved(_ name: String) { unsaved.append(name) }
 
-    func saved(_ name: String) {
-        if let index = unsaved.firstIndex(of: name) { unsaved.remove(at: index) }
-    }
+    // The first name that did not save, taken off the list while it is tried again.
+    func takeUnsaved() -> String? { unsaved.isEmpty ? nil : unsaved.removeFirst() }
+
+    func putBackUnsaved(_ name: String) { unsaved.insert(name, at: 0) }
 }
