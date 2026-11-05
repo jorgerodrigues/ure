@@ -127,7 +127,7 @@ enum MaterialLayout {
     static let tileSpacing: CGFloat = 12
     static let stripHeight: CGFloat = 56
     static let cornerRadius: CGFloat = 8
-    static let pageColumns = 4
+    static let pageTileMinimum: CGFloat = 140
     static let pagePreviewHeight: CGFloat = 116
     static let pageRadius: CGFloat = 10
     static let pageStripHeight: CGFloat = 48

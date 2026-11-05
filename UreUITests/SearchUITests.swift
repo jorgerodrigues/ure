@@ -76,7 +76,7 @@ nonisolated final class SearchUITests: XCTestCase {
         XCTAssertTrue(app.buttons["addWatch"].waitForExistence(timeout: 5))
         app.buttons["addWatch"].click()
         enter(watch, identifier: "watchName", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        app.windows.firstMatch.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(app.buttons["startWatchJob"].waitForExistence(timeout: 5))
         app.buttons["startWatchJob"].click()
         enter(job, identifier: "jobTitle", app: app)

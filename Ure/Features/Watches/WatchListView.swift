@@ -80,8 +80,9 @@ struct WatchListView: View {
 
     private func selectedID() -> UUID? { watches.selectedID }
 
+    // Clicking the Archived heading or an empty part of the list keeps the selected watch.
     private func selectWatch(_ id: UUID?) {
-        guard id != watches.selectedID else { return }
+        guard let id, id != watches.selectedID else { return }
         editing.requestNavigation {
             jobs.close()
             watches.select(id)

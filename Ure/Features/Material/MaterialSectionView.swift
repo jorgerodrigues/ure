@@ -96,8 +96,8 @@ struct MaterialSectionView: View {
     private func retry() { Task { await material.observe() } }
 }
 
-// A form shows tiles at a fixed width. A page shows four tiles to a row, as on the "4 Watch"
-// artboard.
+// A form shows tiles at a fixed width. A page shows four tiles to a row at the width of the
+// "4 Watch" artboard, and fewer in a narrower window.
 private struct MaterialTiles: View {
     @Environment(MaterialState.self) private var material
     let owner: LibraryItemOwner
@@ -114,10 +114,11 @@ private struct MaterialTiles: View {
                     spacing: MaterialLayout.tileSpacing, alignment: .top)
             ]
         case .page:
-            Array(
-                repeating: GridItem(
-                    .flexible(), spacing: MaterialLayout.tileSpacing, alignment: .top),
-                count: MaterialLayout.pageColumns)
+            [
+                GridItem(
+                    .adaptive(minimum: MaterialLayout.pageTileMinimum),
+                    spacing: MaterialLayout.tileSpacing, alignment: .top)
+            ]
         }
     }
 

@@ -14,7 +14,7 @@ nonisolated final class TaskPartUITests: XCTestCase {
         XCTAssertTrue(app.buttons["addWatch"].waitForExistence(timeout: 5))
         app.buttons["addWatch"].click()
         enter("Task parts watch", identifier: "watchName", app: app)
-        save(app)
+        app.windows.firstMatch.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(app.buttons["startWatchJob"].waitForExistence(timeout: 5))
         app.buttons["startWatchJob"].click()
         enter("Fit setting mechanism", identifier: "jobTitle", app: app)

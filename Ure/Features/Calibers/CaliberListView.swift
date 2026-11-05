@@ -90,8 +90,9 @@ struct CaliberListView: View {
         watches.watches.filter { $0.caliberID == caliberID }.count
     }
 
+    // Clicking the Archived heading or an empty part of the list keeps the selected caliber.
     private func select(_ id: UUID?) {
-        guard id != calibers.selectedID else { return }
+        guard let id, id != calibers.selectedID else { return }
         editing.requestNavigation { calibers.select(id) }
     }
 

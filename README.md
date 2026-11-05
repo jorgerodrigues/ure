@@ -55,9 +55,9 @@ This builds a locally signed Release with Hardened Runtime, verifies its signatu
 
 Local runs use ad-hoc signing. No Apple developer account is required. App Sandbox is enabled. Xcode disables Hardened Runtime for ordinary ad-hoc builds; `make install` explicitly enables it and omits debug entitlements. The current bundle identifier is `local.ure.app`; settle an owner-controlled identifier before distribution and before storing valuable data.
 
-The main window contains Workshop, Watches, Calibers, Parts, and Archive. Use **Option-Command-1** through **Option-Command-5** to select a section. **Command-comma** opens Settings. Startup creates or reopens the local library. Workshop shows open jobs. Watches has a saved-record list and editors. Calibers has a list and a page you write on. Parts shows requirements from open jobs. Archive shows archived watches and calibers, plus closed jobs.
+The main window contains Workshop, Watches, Calibers, and Parts. Use **Option-Command-1** through **Option-Command-4** to select a section. **Command-comma** opens Settings. Startup creates or reopens the local library. Workshop shows open jobs. Watches and Calibers each have a list and a page you write on, with archived records folded away at the end of the list. Parts shows requirements from open jobs.
 
-Use **Option-Command-E** to edit the displayed record, **Command-S** to save, and **Command-period** to cancel editing. **Command-[** returns to the owner through the draft guard. The Record menu also has removal, job stage, watch condition, and reopening actions. These commands follow the displayed record and its permissions. Editing commands are disabled in the read-only reference window. **Pin Reference** is also in the View menu.
+Use **Option-Command-E** to edit the displayed job, task, or part, **Command-S** to save, and **Command-period** to cancel editing. **Command-[** returns to the owner through the draft guard. The Record menu also has removal, job stage, reopening, and archive actions. These commands follow the displayed record and its permissions. Editing commands are disabled in the read-only reference window. **Pin Reference** is also in the View menu.
 
 Focus a photo and use the arrow keys to pan. Fit and Zoom controls remain available by keyboard. Use **Option-Command-Left Arrow** and **Option-Command-Right Arrow** for the previous or next photo or PDF page. Plain arrows remain available for text, lists, and photo panning. Reference content scrolls so long titles, filenames, and notes do not hide its actions.
 
@@ -71,15 +71,15 @@ Select a row to open that exact watch and job in Workshop. The existing editors,
 
 ## Search
 
-Use **Search Library** in the toolbar or **Shift-Command-F** for global search. Results group watches, calibers, jobs, parts, links, photos, and PDFs. A photo or PDF opens in its viewer, and a link opens its record. A word in a record's notes finds that watch, caliber, or job. Each result names its watch, job, or shared caliber. Selecting it opens the exact saved record through the existing draft guard. Closed jobs remain searchable. **Include Archived** also searches archived watches, jobs, calibers, and their owned records. Use Archive to read archived owners and closed jobs.
+Use **Search Library** in the toolbar or **Shift-Command-F** for global search. Results group watches, calibers, jobs, parts, links, photos, and PDFs. A photo or PDF opens in its viewer, and a link opens its record. A word in a record's notes finds that watch, caliber, or job. Each result names its watch, job, or shared caliber. Selecting it opens the exact saved record through the existing draft guard. Closed jobs remain searchable. Search always includes archived watches and calibers and their owned records, and marks them as archived.
 
-Search matches saved watch identity, caliber designation, job titles, the notes of watches, calibers, and jobs, part descriptions, manufacturer references, and material titles. It preserves leading zeros and punctuation. Unicode case matching uses the same rule in every local filter. SQL characters such as `%`, `_`, and quotes are literal search text. PDF contents and text within images are not indexed.
+Search matches saved watch identity, the watch's owner and contact, caliber designation, job titles, the notes of watches, calibers, and jobs, part descriptions, manufacturer references, and material titles. It preserves leading zeros and punctuation. Unicode case matching uses the same rule in every local filter. SQL characters such as `%`, `_`, and quotes are literal search text. PDF contents and text within images are not indexed.
 
 The normal Watches, Calibers, Workshop, and Parts lists have local search. Job history and parts also have local text filters. Part text covers descriptions and manufacturer references. Filtering keeps an already open detail readable.
 
 ## Archive and removal
 
-Use **Archive Watch** or **Archive Caliber** in its saved detail or the Record menu. A watch cannot archive while it has an open job. **Unarchive** restores normal list visibility. Existing watch links to archived calibers stay readable. Archived owners reject changes until restored. Closed jobs require Reopen, and their watch must first be unarchived.
+Use **Archive Watch** or **Archive Caliber** in the Record menu, or right-click the record in its list. Any watch can be archived, even one with an open job, and that job stays in Workshop and can still change. **Command-Z** undoes an archive or an unarchive. Archived watches and calibers fold away in the **Archived** section at the end of their list, and their page offers **Unarchive** in the toolbar. They stay in search. Existing watch links to archived calibers stay readable. Archived records reject changes until restored. Closed jobs require Reopen, and their watch must first be unarchived.
 
 Tasks have a **Remove** action in saved detail. Removal requires confirmation. Task confirmation lists its part links. Parts and historical activity summaries stay saved. Part link removal stays in the part editor and commits with **Save**. Part requirements use **Cancelled** rather than deletion.
 
@@ -93,27 +93,29 @@ Select a row to open that exact part in its job. Part links open only through th
 
 ## Watch records
 
-Use **Add Watch** in Watches or **Command-N** to create a record. Only a name is required. Optional identity and specification fields remain unknown until entered. Serial numbers and case references preserve leading zeros and punctuation. Case diameter and lug width use millimetres and must be finite positive numbers.
+Use **Add Watch** in Watches or **Command-N** to make a watch named "New Watch" with the cursor in its name, which is the page's title. Type the name, then use **Tab** or **Return** to move through the brand, model, reference, serial, year, case, diameter, lug width, owner, and contact. Each fact saves as you type, with no Save button, and **Command-Z** undoes it after it saved. As you type a brand, the brands already in the library show under the field. Serial numbers and references preserve leading zeros and punctuation. Diameter and lug width take millimetres, such as "35mm" or "35,0 mm", in the Mac's region format. The owner and contact are free text. Unknown facts stay empty. Click the cover to choose a photo from the watch or its jobs.
 
-Use **Save** or **Command-S** to commit the draft. **Cancel** discards it. Changing records or sections, closing the main window, and quitting with unsaved changes offer Save, Discard, or Stay. A failed save keeps the draft and reports the error. Saved changes refresh the list and detail. The list search filters watch identity fields. Change physical condition through an open job.
+The page also lists the watch's jobs, its material and its notes. The list search filters watch identity, owner, and contact.
+
+Libraries from before W036 kept a condition, a condition note, a stated water resistance and specification notes on each watch, and the owner's name, email and phone on each job. The upgrade gives each watch the owner from its most recent job that names one, with the email and phone joined into its contact. The removed watch values, and owners that other jobs name differently, go into the watch's notes under "From the old record".
 
 ## Shared caliber records
 
 Use **Add Caliber** in Calibers or **Command-N** while that section is selected. It makes a caliber named "New Caliber" and puts the cursor in its name, which is the page's title. Type the name, then use **Tab** or **Return** to move through the maker, beat rate, jewels, power reserve, and lift angle. Each fact saves as you type, with no Save button, and **Command-Z** undoes it after it saved. Choose Manual, Automatic, or Quartz from the winding pop-up. As you type a maker, the makers already in the library show under the field, and **Tab** takes the first. Numbers take what you would write on paper, such as "28 800 vph" or "52,5°", in the Mac's region format. Unknown facts stay empty. A number the fact does not take stays on screen as not valid yet, and the caliber keeps its last good value. Write sources for technical claims in the caliber's notes. The library starts without seeded caliber facts.
 
-Select a caliber in the watch editor, or choose **Unknown** to clear its link. Several watches can share one caliber. Its facts appear in each linked watch's detail. The caliber page lists the watches that use it and opens their records. Clearing one link preserves the caliber and all other watch links. The caliber's notes are shared knowledge in the caliber detail. Technical reference links are available in the caliber detail. Technical files follow in their own issues.
+Choose a caliber from the watch's caliber pop-up, or choose **None** to clear its link. The arrow after it opens the caliber's page. Several watches can share one caliber. The caliber page lists the watches that use it and opens their records. Clearing one link preserves the caliber and all other watch links. The caliber's notes are shared knowledge in the caliber detail. Technical reference links are available in the caliber detail. Technical files follow in their own issues.
 
 ## Job intake and repair history
 
-Use **Start Job** in a watch's repair history. Only a job title is required. Reported problem, agreed scope, intake condition, and owner contact details are optional. Email and phone accept free text. Save creates a Planned job and copies the saved watch identity and exact caliber designation into a versioned intake snapshot. Later watch or caliber edits leave this snapshot unchanged.
+Use **Start Job** under a watch's jobs. Only a job title is required. Reported problem, agreed scope, and intake condition are optional. The job shows the owner and contact from its watch. Save creates a Planned job and copies the saved watch identity and exact caliber designation into a versioned intake snapshot. Later watch or caliber edits leave this snapshot unchanged.
 
 Use **Edit Intake** to correct an open job's intake, including its identity snapshot. Those corrections apply to that job only. Job editing uses Save, Cancel, Command-S, and the existing draft protection. A failed write preserves the draft. Cancelling a new intake creates no history entry.
 
-A watch can have several repair jobs, with at most one open job. **Open Job** returns to that existing job. The database also enforces the rule when save requests compete. The watch's history opens earlier jobs for reading. **Back to Watch** returns to its identity and history. The job's notes, tasks, and parts are available in the job detail.
+A watch can have several repair jobs, with at most one open job. The open job under the watch's name returns to that job. The database also enforces the rule when save requests compete. The watch's history opens earlier jobs for reading. **Back to Watch** returns to its identity and history. The job's notes, tasks, and parts are available in the job detail.
 
 Use **Change Stage** for Planned, In progress, Waiting, Ready, Completed, or Cancelled. Waiting requires a reason. Completed requires an outcome and accepts optional recommendations. Cancelled requires a reason. Ready means ready for final review. Closing locks operational edits. **Reopen Job** selects an open stage and checks that no other job is open for this watch.
 
-Use **Change Condition** to record Unknown, Running, Running poorly, Stopped, or Disassembled with an optional note. Condition and job stage remain independent. Both forms use Save, Cancel, Command-S, and draft protection. Successful changes retain prior and next values in history. Use **Show Activity** to read the saved changes.
+The stage form uses Save, Cancel, Command-S, and draft protection. Successful changes retain prior and next values in history. Condition changes saved before W036 stay in that history. Use **Show Activity** to read the saved changes.
 
 ## Job activity
 
@@ -129,7 +131,7 @@ Choose **Required parts** in the task editor to link several parts from the same
 
 Use **Edit Task**, **Save**, **Cancel**, or **Command-S**. Status changes use the editor. Failed saves keep the draft. Pending saves block duplicate commands. Task drafts use the shared Save, Discard, or Stay guard for record and section changes, window closure, and quitting. Closed-job tasks remain readable. Reopen the job before adding or changing a task. The service also rejects stale saves after closure.
 
-Task completion and reopening save history in the same transaction as the task change. They do not change the job stage or watch condition. Completing or cancelling a job shows its task summary. If To do, Doing, or Waiting tasks remain, enter a separate explanation. Closing keeps every task's status. The explanation stays with the closed job and its transition history. Reopening clears the current explanation and retains that history.
+Task completion and reopening save history in the same transaction as the task change. They do not change the job stage. Completing or cancelling a job shows its task summary. If To do, Doing, or Waiting tasks remain, enter a separate explanation. Closing keeps every task's status. The explanation stays with the closed job and its transition history. Reopening clears the current explanation and retains that history.
 
 Tasks keep their saved bench order. New tasks go at the end. Drag a row before another row, or drop below the list to move it to the end. The row menu and task detail offer **Move up** and **Move down**. In a saved task detail, **Option-Command-Up Arrow** and **Option-Command-Down Arrow** run the same actions from the Task menu. Optional group labels stay visible without changing the saved order. Failed moves keep the previous order. Closed jobs disable ordering, and the service rejects stale moves after closure.
 
@@ -147,7 +149,7 @@ Use **Edit Part** to choose Needed, Ordered, Arrived, Installed, or Cancelled. S
 
 Ordering saves an optional order reference. Correcting Arrived, Installed, or Cancelled back to Ordered keeps the order reference. Moving back to Needed clears the current order details. Previous values remain in history.
 
-Backward corrections, cancellation, and restoring a cancelled part require a reason. Save clears milestone dates that no longer apply. Cancellation keeps the order reference for reading. Cancel in the editor discards the draft. A status changed by another saved action requires cancelling and reopening the stale editor. Procurement never changes task status, job stage, or watch condition. Use **Show Activity** to read the saved changes.
+Backward corrections, cancellation, and restoring a cancelled part require a reason. Save clears milestone dates that no longer apply. Cancellation keeps the order reference for reading. Cancel in the editor discards the draft. A status changed by another saved action requires cancelling and reopening the stale editor. Procurement never changes task status or job stage. Use **Show Activity** to read the saved changes.
 
 ## Notes
 

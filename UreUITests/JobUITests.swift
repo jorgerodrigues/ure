@@ -71,14 +71,12 @@ nonisolated final class JobUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Planned"].exists)
         XCTAssertTrue(app.staticTexts["000042.7-A"].exists)
         app.buttons["backToWatch"].click()
-        XCTAssertTrue(app.buttons["startWatchJob"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.buttons["startWatchJob"].label, "Open Job")
-        app.buttons["editWatch"].click()
+        XCTAssertTrue(app.buttons["watchOpenJob"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["startWatchJob"].exists)
         enter("Renamed watch", in: "watchName", app: app)
         enter("Changed serial", in: "watchSerial", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["startWatchJob"].waitForExistence(timeout: 5))
-        app.buttons["startWatchJob"].click()
+        app.windows.firstMatch.typeKey(.return, modifierFlags: [])
+        app.buttons["watchOpenJob"].click()
         XCTAssertTrue(app.buttons["editJob"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Inherited watch"].exists)
         XCTAssertTrue(app.staticTexts["000042.7-A"].exists)
@@ -158,7 +156,7 @@ nonisolated final class JobUITests: XCTestCase {
     }
 
     @MainActor
-    func testIndependentConditionWaitingClosureAndReopen() {
+    func testWaitingClosureAndReopen() {
         let app = isolatedApp()
         app.launch()
         defer { app.terminate() }
@@ -167,11 +165,6 @@ nonisolated final class JobUITests: XCTestCase {
         enter("Inspect movement", in: "jobTitle", app: app)
         app.windows.firstMatch.typeKey("s", modifierFlags: .command)
         XCTAssertTrue(app.buttons["changeJobStage"].waitForExistence(timeout: 5))
-        app.buttons["changeWatchCondition"].click()
-        choose("Disassembled", picker: "watchCondition", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["changeJobStage"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Disassembled"].exists)
         XCTAssertTrue(app.staticTexts["Planned"].exists)
         app.buttons["changeJobStage"].click()
         choose("Waiting", picker: "jobStage", app: app)
@@ -180,7 +173,6 @@ nonisolated final class JobUITests: XCTestCase {
         enter("Await inspection", in: "jobWaitingReason", app: app)
         app.windows.firstMatch.typeKey("s", modifierFlags: .command)
         XCTAssertTrue(app.buttons["changeJobStage"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Disassembled"].exists)
         XCTAssertTrue(app.staticTexts["Await inspection"].exists)
         app.buttons["changeJobStage"].click()
         choose("Completed", picker: "jobStage", app: app)
@@ -188,12 +180,10 @@ nonisolated final class JobUITests: XCTestCase {
         app.windows.firstMatch.typeKey("s", modifierFlags: .command)
         XCTAssertTrue(app.buttons["reopenJob"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["editJob"].exists)
-        XCTAssertFalse(app.buttons["changeWatchCondition"].exists)
         app.buttons["reopenJob"].click()
         app.windows.firstMatch.typeKey("s", modifierFlags: .command)
         XCTAssertTrue(app.buttons["editJob"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["In progress"].exists)
-        XCTAssertTrue(app.staticTexts["Disassembled"].exists)
     }
 
     @MainActor
@@ -346,7 +336,7 @@ nonisolated final class JobUITests: XCTestCase {
         app.buttons["addWatch"].click()
         enter("Inherited watch", in: "watchName", app: app)
         enter("000042.7-A", in: "watchSerial", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        app.windows.firstMatch.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(app.buttons["startWatchJob"].waitForExistence(timeout: 5))
     }
 
