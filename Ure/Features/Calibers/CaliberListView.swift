@@ -1,5 +1,7 @@
 import SwiftUI
 
+// The calibers by maker and name. Archived calibers fold away in a section at the end of the
+// list.
 struct CaliberListView: View {
     @Environment(CaliberState.self) private var calibers
     @Environment(WatchState.self) private var watches
@@ -30,13 +32,28 @@ struct CaliberListView: View {
                     Button("Add Caliber", action: create)
                 }
             } else {
-                List(calibers.filteredCalibers, selection: selection) { caliber in
-                    CaliberRow(caliber: caliber, watchCount: watchCount(caliber.id))
-                        .tag(caliber.id)
+                List(selection: selection) {
+                    ForEach(calibers.filteredCalibers) { caliber in
+                        CaliberRow(caliber: caliber, watchCount: watchCount(caliber.id))
+                            .tag(caliber.id)
+                    }
+                    if !calibers.archivedCalibers.isEmpty {
+                        ArchivedSectionHeader(
+                            count: calibers.archivedCalibers.count,
+                            isExpanded: $calibers.showsArchived
+                        )
+                        .accessibilityIdentifier("archivedCalibers")
+                        if calibers.showsArchived {
+                            ForEach(calibers.archivedCalibers) { caliber in
+                                CaliberRow(caliber: caliber, watchCount: watchCount(caliber.id))
+                                    .tag(caliber.id)
+                            }
+                        }
+                    }
                 }
                 .accessibilityIdentifier("caliberList")
                 .overlay {
-                    if calibers.filteredCalibers.isEmpty {
+                    if calibers.filteredCalibers.isEmpty, calibers.archivedCalibers.isEmpty {
                         ContentUnavailableView.search(text: calibers.searchText)
                     }
                 }
@@ -61,9 +78,12 @@ struct CaliberListView: View {
 
     private func selectedID() -> UUID? { calibers.selectedID }
 
+    // Such as "7 calibers · 1 archived".
     private var subtitle: String {
-        let count = calibers.filteredCalibers.count
-        return count == 1 ? "1 caliber" : "\(count) calibers"
+        let count = calibers.activeCount
+        let active = count == 1 ? "1 caliber" : "\(count) calibers"
+        if calibers.archivedCount == 0 { return active }
+        return "\(active) · \(calibers.archivedCount) archived"
     }
 
     private func watchCount(_ caliberID: UUID) -> Int {
@@ -83,22 +103,46 @@ struct CaliberListView: View {
 }
 
 // A caliber in the list: its maker and name, then its winding and how many watches use it,
-// such as "Automatic · 2 watches".
+// such as "Automatic · 2 watches". An archived caliber reads quieter and says when it was
+// archived. Right-click archives or unarchives it.
 private struct CaliberRow: View {
+    @Environment(CaliberState.self) private var calibers
+    @Environment(WorkshopEditing.self) private var editing
+    @Environment(\.undoManager) private var undoManager
     let caliber: CaliberRecord
     let watchCount: Int
 
     var body: some View {
         VStack(alignment: .leading, spacing: UreLayout.textSpacing) {
-            Text(caliber.title).font(.body).fontWeight(.semibold)
+            Text(caliber.title)
+                .font(.body)
+                .fontWeight(.semibold)
+                .foregroundStyle(isArchived ? .secondary : .primary)
             Text(detail)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(isArchived ? .tertiary : .secondary)
+        }
+        .contextMenu {
+            Button(isArchived ? "Unarchive Caliber" : "Archive Caliber", action: toggleArchive)
+                .disabled(editing.isSaving)
+        }
+    }
+
+    private var isArchived: Bool { caliber.archivedAt != nil }
+
+    private func toggleArchive() {
+        editing.requestNavigation {
+            calibers.select(caliber.id)
+            calibers.toggleArchiveCommand(undoManager: undoManager)
         }
     }
 
     private var detail: String {
-        let watches = watchCount == 0 ? "no watches yet" : CaliberWording.watches(watchCount)
+        if let archivedAt = caliber.archivedAt {
+            return [caliber.winding?.rawValue, "archived \(ArchivedDate.short(archivedAt))"]
+                .compactMap { $0 }.joined(separator: " · ")
+        }
+        let watches = watchCount == 0 ? "no watches yet" : WatchWording.watches(watchCount)
         guard let winding = caliber.winding else {
             return watches.prefix(1).uppercased() + watches.dropFirst()
         }

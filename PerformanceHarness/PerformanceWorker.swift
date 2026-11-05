@@ -111,11 +111,9 @@ nonisolated struct PerformanceMeasurements: Sendable {
             else { throw PerformanceError.changedResults }
             return rows.map { $0.id.uuidString }
         }
-        for archived in [false, true] {
-            for text in ["Synthetic", "ÜHREN", "00.A_%", "00.001_%'", "no match"] {
-                try await measure("search:\(archived):\(text)", into: &report) { db in
-                    try SearchQueries.fetch(text, includeArchived: archived, in: db).map(\.id)
-                }
+        for text in ["Synthetic", "ÜHREN", "00.A_%", "00.001_%'", "no match"] {
+            try await measure("search:\(text)", into: &report) { db in
+                try SearchQueries.fetch(text, in: db).map(\.id)
             }
         }
         let service = MaterialService(coordinator: coordinator)

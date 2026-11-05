@@ -3,7 +3,6 @@ nonisolated enum WorkshopSection: String, CaseIterable, Identifiable, Sendable {
     case watches
     case calibers
     case parts
-    case archive
 
     var id: Self { self }
 
@@ -13,7 +12,6 @@ nonisolated enum WorkshopSection: String, CaseIterable, Identifiable, Sendable {
         case .watches: "Watches"
         case .calibers: "Calibers"
         case .parts: "Parts"
-        case .archive: "Archive"
         }
     }
 
@@ -23,7 +21,6 @@ nonisolated enum WorkshopSection: String, CaseIterable, Identifiable, Sendable {
         case .watches: "watch.analog"
         case .calibers: "gearshape.2"
         case .parts: "shippingbox"
-        case .archive: "archivebox"
         }
     }
 
@@ -33,7 +30,6 @@ nonisolated enum WorkshopSection: String, CaseIterable, Identifiable, Sendable {
         case .watches: "2"
         case .calibers: "3"
         case .parts: "4"
-        case .archive: "5"
         }
     }
 }

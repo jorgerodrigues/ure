@@ -50,10 +50,12 @@ struct MaterialSectionView: View {
             Label(error, systemImage: "exclamationmark.triangle")
             Button("Retry", action: retry)
         } else {
-            MaterialTiles(owner: owner, isEditable: editing.canWrite(owner))
+            MaterialTiles(owner: owner, isEditable: editing.canWrite(owner), style: style)
             if editing.canWrite(owner) {
-                MaterialDropStrip(choose: chooseFiles, drop: addDropped, paste: paste)
-                    .disabled(editing.isSaving)
+                MaterialDropStrip(
+                    style: style, choose: chooseFiles, drop: addDropped, paste: paste
+                )
+                .disabled(editing.isSaving)
             } else {
                 Text(readOnlyMessage).foregroundStyle(.secondary)
             }
@@ -62,7 +64,7 @@ struct MaterialSectionView: View {
                 Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
             }
             if let caliber {
-                CaliberMaterialChips(caliber: caliber, page: owner)
+                CaliberMaterialChips(caliber: caliber, page: owner, style: style)
             }
         }
     }
@@ -94,16 +96,30 @@ struct MaterialSectionView: View {
     private func retry() { Task { await material.observe() } }
 }
 
+// A form shows tiles at a fixed width. A page shows four tiles to a row, as on the "4 Watch"
+// artboard.
 private struct MaterialTiles: View {
     @Environment(MaterialState.self) private var material
     let owner: LibraryItemOwner
     let isEditable: Bool
+    let style: RecordSectionStyle
 
-    private let columns = [
-        GridItem(
-            .adaptive(minimum: MaterialLayout.tileWidth, maximum: MaterialLayout.tileWidth + 40),
-            spacing: MaterialLayout.tileSpacing, alignment: .top)
-    ]
+    private var columns: [GridItem] {
+        switch style {
+        case .form:
+            [
+                GridItem(
+                    .adaptive(
+                        minimum: MaterialLayout.tileWidth, maximum: MaterialLayout.tileWidth + 40),
+                    spacing: MaterialLayout.tileSpacing, alignment: .top)
+            ]
+        case .page:
+            Array(
+                repeating: GridItem(
+                    .flexible(), spacing: MaterialLayout.tileSpacing, alignment: .top),
+                count: MaterialLayout.pageColumns)
+        }
+    }
 
     var body: some View {
         let records = material.records(for: owner)
@@ -112,10 +128,10 @@ private struct MaterialTiles: View {
         } else {
             LazyVGrid(columns: columns, alignment: .leading, spacing: MaterialLayout.tileSpacing) {
                 ForEach(records) { record in
-                    MaterialTile(record: record, page: owner, isEditable: isEditable)
+                    MaterialTile(record: record, page: owner, isEditable: isEditable, style: style)
                 }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, style == .form ? 4 : 0)
         }
     }
 }
@@ -126,16 +142,22 @@ private struct MaterialTile: View {
     let record: MaterialRecord
     let page: LibraryItemOwner
     let isEditable: Bool
+    let style: RecordSectionStyle
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: style == .page ? 1 : 6) {
             Button(action: open) {
                 MaterialPreview(record: record)
                     .frame(maxWidth: .infinity)
-                    .frame(height: MaterialLayout.previewHeight)
-                    .clipShape(RoundedRectangle(cornerRadius: MaterialLayout.cornerRadius))
-                    .contentShape(RoundedRectangle(cornerRadius: MaterialLayout.cornerRadius))
+                    .frame(height: previewHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: cornerRadius)
+                            .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5)
+                    )
+                    .contentShape(RoundedRectangle(cornerRadius: cornerRadius))
             }
+            .padding(.bottom, style == .page ? 7 : 0)
             .buttonStyle(.plain)
             .help(openHelp)
             .accessibilityLabel("Open \(record.item.title)")
@@ -149,10 +171,18 @@ private struct MaterialTile: View {
                 }
             }
             Text(record.item.detailLine())
-                .font(.caption)
+                .font(style == .page ? .system(size: MaterialLayout.detailSize) : .caption)
                 .foregroundStyle(.secondary)
         }
         .contextMenu { MaterialTileMenu(record: record, page: page, isEditable: isEditable) }
+    }
+
+    private var previewHeight: CGFloat {
+        style == .page ? MaterialLayout.pagePreviewHeight : MaterialLayout.previewHeight
+    }
+
+    private var cornerRadius: CGFloat {
+        style == .page ? MaterialLayout.pageRadius : MaterialLayout.cornerRadius
     }
 
     private var openHelp: String {
@@ -273,26 +303,50 @@ private struct MaterialImportResultView: View {
     }
 }
 
+// A form puts the chips under their label. A page puts them on one line after it, as on the
+// "4 Watch" artboard.
 private struct CaliberMaterialChips: View {
     @Environment(MaterialState.self) private var material
     let caliber: CaliberRecord
     let page: LibraryItemOwner
+    let style: RecordSectionStyle
 
     var body: some View {
         let records = material.records(for: .caliber(caliber.id))
         if !records.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("From \(caliber.title):")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                ChipFlowLayout(spacing: 6) {
-                    ForEach(records) { record in
-                        MaterialChip(record: record, page: page)
+            Group {
+                switch style {
+                case .form:
+                    VStack(alignment: .leading, spacing: 6) {
+                        label
+                        chips(records)
                     }
+                case .page:
+                    ChipFlowLayout(spacing: MaterialLayout.chipSpacing) {
+                        label.frame(height: MaterialLayout.chipHeight)
+                        ForEach(records) { record in
+                            MaterialChip(record: record, page: page, style: style)
+                        }
+                    }
+                    .padding(.top, 4)
                 }
             }
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Material from \(caliber.title)")
+        }
+    }
+
+    private var label: some View {
+        Text("From \(caliber.title):")
+            .font(style == .page ? .system(size: MaterialLayout.chipTextSize) : .callout)
+            .foregroundStyle(.secondary)
+    }
+
+    private func chips(_ records: [MaterialRecord]) -> some View {
+        ChipFlowLayout(spacing: 6) {
+            ForEach(records) { record in
+                MaterialChip(record: record, page: page, style: style)
+            }
         }
     }
 }
@@ -302,15 +356,31 @@ private struct MaterialChip: View {
     @Environment(WorkshopEditing.self) private var editing
     let record: MaterialRecord
     let page: LibraryItemOwner
+    let style: RecordSectionStyle
 
     var body: some View {
         Button(action: open) {
-            Label(record.item.title, systemImage: record.item.kind.symbol)
-                .lineLimit(1)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(Capsule().fill(.quaternary))
+            switch style {
+            case .form:
+                Label(record.item.title, systemImage: record.item.kind.symbol)
+                    .lineLimit(1)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(.quaternary))
+                    .contentShape(Capsule())
+            case .page:
+                HStack(spacing: 6) {
+                    Image(systemName: record.item.kind.symbol)
+                        .foregroundStyle(.secondary)
+                    Text(record.item.title).lineLimit(1)
+                }
+                .font(.system(size: MaterialLayout.chipTextSize))
+                .padding(.leading, 8)
+                .padding(.trailing, 10)
+                .frame(height: MaterialLayout.chipHeight)
+                .background(Capsule().fill(Color(nsColor: .quaternarySystemFill)))
                 .contentShape(Capsule())
+            }
         }
         .buttonStyle(.plain)
         .help(record.item.detailLine())

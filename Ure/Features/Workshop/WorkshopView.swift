@@ -33,10 +33,8 @@ struct WorkshopView: View {
                     WatchListView()
                 } else if navigation.selectedSection == .calibers {
                     CaliberListView()
-                } else if navigation.selectedSection == .parts {
-                    PartsOverviewView()
                 } else {
-                    ArchiveView()
+                    PartsOverviewView()
                 }
             }
             .navigationSplitViewColumnWidth(min: 260, ideal: UreLayout.listWidth, max: 400)
@@ -120,7 +118,7 @@ struct WorkshopView: View {
     @ViewBuilder private var detail: some View {
         if navigation.selectedSection == .workshop {
             Group {
-                if watches.selectedID == nil, watches.draft == nil {
+                if watches.selectedID == nil {
                     ContentUnavailableView(
                         "Select a job", systemImage: "wrench.and.screwdriver",
                         description: Text("Choose an open job to view its details."))
@@ -142,7 +140,7 @@ struct WorkshopView: View {
             }
         } else if navigation.selectedSection == .parts {
             Group {
-                if watches.selectedID == nil, watches.draft == nil {
+                if watches.selectedID == nil {
                     ContentUnavailableView(
                         "Select a part", systemImage: "shippingbox",
                         description: Text("Choose a part to view it in its job."))
@@ -166,27 +164,14 @@ struct WorkshopView: View {
             }
         } else if navigation.selectedSection == .watches {
             WatchDetailView()
-        } else if navigation.selectedSection == .calibers {
-            CaliberDetailView()
-        } else if navigation.selectedSection == .archive {
-            switch editing.archive.displayedTarget(editing: editing) {
-            case .caliber: CaliberDetailView()
-            case .watch, .job: WatchDetailView()
-            case nil:
-                ContentUnavailableView("Select an archive record", systemImage: "archivebox")
-            }
         } else {
-            ContentUnavailableView(
-                "Select a record", systemImage: navigation.selectedSection.symbol,
-                description: Text("Choose an item to view its details."))
+            CaliberDetailView()
         }
     }
 
     private var hasActiveJob: Bool {
-        (navigation.selectedSection == .watches || navigation.selectedSection == .workshop
-            || navigation.selectedSection == .parts || navigation.selectedSection == .archive)
-            && watches.draft == nil
-            && jobs.selectedID != nil && jobs.watchID == watches.selectedID
+        navigation.selectedSection != .calibers && jobs.selectedID != nil
+            && jobs.watchID == watches.selectedID
     }
     private var isLoadingSelection: Bool { bench.isLoading || watches.isLoading || jobs.isLoading }
 
@@ -195,7 +180,7 @@ struct WorkshopView: View {
     private func restoreSelection() {
         guard !didRestoreSelection, !isLoadingSelection else { return }
         didRestoreSelection = true
-        guard !editing.hasUnsavedChanges, !editing.isSaving, watches.draft == nil,
+        guard !editing.hasUnsavedChanges, !editing.isSaving,
             navigation.selectedSection == .workshop, calibers.selectedID == nil,
             !jobs.isEditing, tasks.draft == nil, parts.draft == nil,
             watches.selectedID == nil, jobs.selectedID == nil,

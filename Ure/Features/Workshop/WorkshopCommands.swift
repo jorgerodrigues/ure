@@ -57,8 +57,6 @@ struct WorkshopCommands: Commands {
             Divider()
             Button("Change Job Stage", action: changeStage)
                 .disabled(!canUseRecordActions || recordActions?.changeStage == nil)
-            Button("Change Watch Condition", action: changeCondition)
-                .disabled(!canUseRecordActions || recordActions?.changeCondition == nil)
             Button("Reopen Job", action: reopenJob)
                 .disabled(!canUseRecordActions || recordActions?.reopen == nil)
             Divider()
@@ -96,41 +94,35 @@ struct WorkshopCommands: Commands {
     }
 
     private var archiveTitle: String {
-        if navigation.selectedSection == .calibers
-            || (navigation.selectedSection == .archive
-                && editing.archive.isShowingCaliber(editing: editing))
-        {
+        if navigation.selectedSection == .calibers {
             if editing.calibers.selectedCaliber?.archivedAt != nil { return "Unarchive Caliber" }
             return "Archive Caliber"
         }
         if editing.watches.selectedWatch?.archivedAt != nil { return "Unarchive Watch" }
         return "Archive Watch"
     }
+    // Archiving has no rules: any watch can be archived, even one with an open job.
     private var canArchive: Bool {
         guard allowsEditing == true, !editing.isSaving, !editing.hasUnsavedChanges else {
             return false
         }
-        if navigation.selectedSection == .calibers
-            || (navigation.selectedSection == .archive
-                && editing.archive.isShowingCaliber(editing: editing))
-        {
-            return editing.calibers.selectedCaliber != nil
+        switch navigation.selectedSection {
+        case .calibers: return editing.calibers.selectedCaliber != nil
+        case .watches: return editing.watches.selectedWatch != nil
+        default: return false
         }
-        guard navigation.selectedSection == .watches || navigation.selectedSection == .archive,
-            let watch = editing.watches.selectedWatch, editing.watches.draft == nil,
-            !editing.jobs.isLoading, editing.jobs.loadError == nil
-        else { return false }
-        return watch.archivedAt != nil || editing.jobs.openJob(for: watch.id) == nil
     }
     private func toggleArchive() {
         guard canArchive else { return }
-        if navigation.selectedSection == .calibers
-            || (navigation.selectedSection == .archive
-                && editing.archive.isShowingCaliber(editing: editing))
-        {
-            editing.requestNavigation(editing.calibers.toggleArchiveCommand)
+        let undoManager = NSApp.keyWindow?.undoManager
+        if navigation.selectedSection == .calibers {
+            editing.requestNavigation {
+                editing.calibers.toggleArchiveCommand(undoManager: undoManager)
+            }
         } else {
-            editing.requestNavigation(editing.watches.toggleArchiveCommand)
+            editing.requestNavigation {
+                editing.watches.toggleArchiveCommand(undoManager: undoManager)
+            }
         }
     }
 
@@ -162,10 +154,8 @@ struct WorkshopCommands: Commands {
         if editing.parts.draft != nil { return editing.parts.canSave(jobs: editing.jobs) }
         if editing.tasks.draft != nil { return editing.tasks.canSave(jobs: editing.jobs) }
         switch navigation.selectedSection {
-        case .workshop, .watches, .parts:
-            if editing.jobs.isEditing { return editing.canSaveJob }
-            return editing.watches.canSave
-        default: return false
+        case .workshop, .watches, .parts: return editing.jobs.isEditing && editing.canSaveJob
+        case .calibers: return false
         }
     }
 
@@ -180,13 +170,8 @@ struct WorkshopCommands: Commands {
             return
         }
         switch navigation.selectedSection {
-        case .workshop, .watches, .parts:
-            if editing.jobs.isEditing {
-                editing.saveJobCommand()
-            } else {
-                editing.watches.saveCommand()
-            }
-        default: break
+        case .workshop, .watches, .parts: editing.saveJobCommand()
+        case .calibers: break
         }
     }
 
@@ -194,12 +179,13 @@ struct WorkshopCommands: Commands {
         guard allowsEditing == true else { return }
         let createsCaliber = navigation.selectedSection == .calibers
         editing.requestNavigation {
+            search.close()
             if createsCaliber {
                 editing.calibers.createCommand()
             } else {
                 editing.jobs.close()
                 navigation.selection = .watches
-                editing.watches.create()
+                editing.watches.createCommand()
             }
         }
     }
@@ -220,9 +206,6 @@ struct WorkshopCommands: Commands {
         allowsEditing == true && !editing.isSaving && !editing.isNavigationPending
     }
     private func changeStage() { if canUseRecordActions { recordActions?.changeStage?() } }
-    private func changeCondition() {
-        if canUseRecordActions { recordActions?.changeCondition?() }
-    }
     private func reopenJob() { if canUseRecordActions { recordActions?.reopen?() } }
 
     private func openReference() { openWindow(id: "reference") }

@@ -21,18 +21,18 @@ struct CaliberDetailView: View {
 
 // A caliber page you write on, laid out as the "5 Caliber" artboard: the header with the name
 // as its title, the facts, the watches that use the caliber, its material and its notes. Each
-// fact saves as you type, with no Save or Cancel.
+// fact saves as you type, with no Save or Cancel. An archived caliber reads like an archived
+// watch, with Unarchive in the toolbar.
 private struct CaliberPage: View {
     @Environment(CaliberState.self) private var calibers
     @Environment(WorkshopNavigation.self) private var navigation
+    @Environment(WorkshopEditing.self) private var editing
+    @Environment(\.undoManager) private var undoManager
     let caliber: CaliberRecord
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: PageLayout.sectionSpacing) {
-                if caliber.archivedAt != nil {
-                    CaliberArchivedNotice()
-                }
                 if let facts = calibers.facts(for: caliber.id) {
                     CaliberHeader(caliber: caliber, facts: facts)
                     CaliberFactGrid(caliberID: caliber.id, facts: facts).zIndex(1)
@@ -54,25 +54,19 @@ private struct CaliberPage: View {
         }
         .textSelection(.enabled)
         .navigationTitle(navigation.selectedSection.title)
-    }
-}
-
-private struct CaliberArchivedNotice: View {
-    @Environment(CaliberState.self) private var calibers
-    @Environment(WorkshopEditing.self) private var editing
-
-    var body: some View {
-        HStack {
-            Label("Archived. Unarchive to make changes.", systemImage: "archivebox")
-                .foregroundStyle(.secondary)
-            Spacer()
-            Button("Unarchive Caliber", action: unarchive)
-                .disabled(editing.isSaving)
-                .accessibilityIdentifier("archiveCaliber")
+        .toolbar {
+            if caliber.archivedAt != nil {
+                Button("Unarchive", action: unarchive)
+                    .help("Unarchive Caliber")
+                    .disabled(editing.isSaving)
+                    .accessibilityIdentifier("unarchiveCaliber")
+            }
         }
     }
 
-    private func unarchive() { editing.requestNavigation(calibers.toggleArchiveCommand) }
+    private func unarchive() {
+        editing.requestNavigation { calibers.toggleArchiveCommand(undoManager: undoManager) }
+    }
 }
 
 // The caliber's photo, its maker and name as the title, and where it is used. The name is
@@ -86,9 +80,9 @@ private struct CaliberHeader: View {
     let facts: CaliberFacts
 
     var body: some View {
-        HStack(alignment: .center, spacing: CaliberPageLayout.headerSpacing) {
+        HStack(alignment: .center, spacing: PageLayout.headerSpacing) {
             CaliberTile(caliberID: caliber.id)
-            VStack(alignment: .leading, spacing: CaliberPageLayout.titleSpacing) {
+            VStack(alignment: .leading, spacing: PageLayout.titleSpacing) {
                 HStack(alignment: .center, spacing: 0) {
                     if let maker = caliber.manufacturer {
                         Text(maker + " ")
@@ -103,9 +97,14 @@ private struct CaliberHeader: View {
                     )
                     .padding(.leading, -InPlaceLayout.inset)
                 }
-                Text(use)
-                    .font(.system(size: InPlaceLayout.textSize))
-                    .foregroundStyle(.secondary)
+                if let archivedAt = caliber.archivedAt {
+                    ArchivedPill(
+                        archivedAt: archivedAt, note: "Hidden from Calibers. Still in search.")
+                } else {
+                    Text(use)
+                        .font(.system(size: InPlaceLayout.textSize))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
@@ -120,7 +119,7 @@ private struct CaliberHeader: View {
         guard !used.isEmpty else { return "No watches yet" }
         let ids = Set(used.map(\.id))
         let open = jobs.jobs.filter { ids.contains($0.watchID) && $0.stage.isOpen }.count
-        let watchText = "In \(CaliberWording.watches(used.count))"
+        let watchText = "In \(WatchWording.watches(used.count))"
         if open == 0 { return watchText }
         return "\(watchText) · \(open == 1 ? "1 job" : "\(open) jobs") open"
     }
@@ -132,26 +131,12 @@ private struct CaliberTile: View {
     let caliberID: UUID
 
     var body: some View {
-        ZStack {
-            Rectangle().fill(Color(nsColor: .quaternarySystemFill))
-            if let photo = material.records(for: .caliber(caliberID)).first(where: isPhoto) {
-                PhotoThumbnailView(photoID: photo.id, fills: true)
-            } else {
-                Image(systemName: "gearshape.2")
-                    .font(.system(size: 36, weight: .light))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(width: CaliberPageLayout.tileSize, height: CaliberPageLayout.tileSize)
-        .clipShape(RoundedRectangle(cornerRadius: CaliberPageLayout.tileRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: CaliberPageLayout.tileRadius)
-                .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5)
-        )
-        .accessibilityHidden(true)
+        PageTile(photoID: photo?.id, symbol: "gearshape.2").accessibilityHidden(true)
     }
 
-    private func isPhoto(_ record: MaterialRecord) -> Bool { record.item.kind == .photo }
+    private var photo: MaterialRecord? {
+        material.records(for: .caliber(caliberID)).first { $0.item.kind == .photo }
+    }
 }
 
 // The six facts in three columns under a hairline: maker, winding and beat rate, then jewels,
@@ -165,14 +150,15 @@ private struct CaliberFactGrid: View {
     // While the caliber archives, its facts can't change, so the archive's save covers them.
     var body: some View {
         let isEditable = editing.canWrite(.caliber(caliberID)) && !calibers.isSaving
-        VStack(alignment: .leading, spacing: CaliberPageLayout.factsTop) {
+        VStack(alignment: .leading, spacing: PageLayout.factsTop) {
             Divider()
-            VStack(alignment: .leading, spacing: CaliberPageLayout.rowSpacing) {
-                HStack(alignment: .top, spacing: CaliberPageLayout.columnSpacing) {
+            VStack(alignment: .leading, spacing: PageLayout.factRowSpacing) {
+                HStack(alignment: .top, spacing: PageLayout.factColumnSpacing) {
                     FactRow(field: facts.maker, isEditable: isEditable, identifier: "caliberMaker")
                         .frame(maxWidth: .infinity, alignment: .leading)
                     FactPopUp(
-                        field: facts.winding, choices: Winding.allCases.map(\.rawValue),
+                        field: facts.winding,
+                        choices: Winding.allCases.map { FactPopUpChoice($0.rawValue) },
                         isEditable: isEditable, identifier: "caliberWinding"
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -182,7 +168,7 @@ private struct CaliberFactGrid: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .zIndex(1)
-                HStack(alignment: .top, spacing: CaliberPageLayout.columnSpacing) {
+                HStack(alignment: .top, spacing: PageLayout.factColumnSpacing) {
                     FactRow(
                         field: facts.jewels, isEditable: isEditable, identifier: "caliberJewels"
                     )
@@ -238,7 +224,7 @@ private struct CaliberWatches: View {
 
     private var count: String? {
         if linkedWatches.isEmpty { return nil }
-        return CaliberWording.watches(linkedWatches.count)
+        return WatchWording.watches(linkedWatches.count)
     }
 
     private func retry() {
@@ -319,21 +305,8 @@ private struct CaliberWatchThumbnail: View {
     }
 }
 
-enum CaliberWording {
-    static func watches(_ count: Int) -> String {
-        count == 1 ? "1 watch" : "\(count) watches"
-    }
-}
-
 // Values from the "5 Caliber" artboard on the Paper page "Rework · Simple".
 private enum CaliberPageLayout {
-    static let tileSize: CGFloat = 104
-    static let tileRadius: CGFloat = 18
-    static let headerSpacing: CGFloat = 24
-    static let titleSpacing: CGFloat = 6
-    static let factsTop: CGFloat = 24
-    static let rowSpacing: CGFloat = 20
-    static let columnSpacing: CGFloat = 32
     static let listSpacing: CGFloat = 8
     static let listHeadingBottom: CGFloat = 4
     static let rowHeight: CGFloat = 52

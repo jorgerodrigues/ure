@@ -13,9 +13,9 @@ nonisolated struct OverviewPart: Equatable, Identifiable, Sendable {
 nonisolated enum PartsOverviewQueries {
     private static let openJobs =
         """
-        SELECT job.id FROM job JOIN watch ON watch.id = job.watchID
+        SELECT job.id FROM job
         WHERE job.stage IN ('Planned', 'In progress', 'Waiting', 'Ready')
-          AND job.archivedAt IS NULL AND watch.archivedAt IS NULL
+          AND job.archivedAt IS NULL
         """
 
     static func fetch(_ db: Database) throws -> [OverviewPart] {

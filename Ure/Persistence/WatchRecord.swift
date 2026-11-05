@@ -1,36 +1,28 @@
 import Foundation
 import GRDB
 
-nonisolated enum WatchCondition: String, Codable, CaseIterable, Sendable {
-    case unknown = "Unknown"
-    case running = "Running"
-    case runningPoorly = "Running poorly"
-    case stopped = "Stopped"
-    case disassembled = "Disassembled"
-}
-
+// A watch on the bench: what it is, its caliber, its case, and who owns it. The owner and the
+// contact are plain text, because Ure never sends messages.
 nonisolated struct WatchRecord: Codable, Equatable, Identifiable, Sendable, FetchableRecord,
     PersistableRecord
 {
     static let databaseTableName = "watch"
 
     let id: UUID
-    let name: String
-    let brand: String?
-    let model: String?
-    let caseReference: String?
-    let serial: String?
-    let approximateYear: String?
-    let caliberID: UUID?
-    let caseMaterial: String?
-    let caseDiameter: Double?
-    let lugWidth: Double?
-    let waterResistance: String?
-    let specificationNotes: String?
+    var name: String
+    var brand: String?
+    var model: String?
+    var caseReference: String?
+    var serial: String?
+    var approximateYear: String?
+    var caliberID: UUID?
+    var caseMaterial: String?
+    var caseDiameter: Double?
+    var lugWidth: Double?
+    var owner: String? = nil
+    var contact: String? = nil
     let createdAt: Date
     var updatedAt: Date
-    var condition: WatchCondition = .unknown
-    var conditionNote: String? = nil
     var coverPhotoID: UUID? = nil
 
     var archivedAt: Date? = nil

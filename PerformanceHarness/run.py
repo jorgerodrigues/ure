@@ -35,24 +35,20 @@ def expected_results():
         "parts": [record_id(8, i * 2) for i in range(450)],
         "workshop": [record_id(3, i * 2) for i in range(450)],
     }
-    for archived in (False, True):
-        watches = 500 if archived else 450
-        jobs = watches * 2
-        calibers = 50 if archived else 45
-        groups = {
-            "Watch": (2, watches), "Caliber": (1, calibers), "Job": (3, jobs),
-            "Part": (8, jobs), "Photo": (6, watches * 10),
-        }
-        keys = {
-            kind: [f"{kind}-{record_id(number, i)}" for i in range(count)]
-            for kind, (number, count) in groups.items()
-        }
-        prefix = f"search:{str(archived).lower()}:"
-        expected[prefix + "Synthetic"] = sum(keys.values(), [])
-        expected[prefix + "ÜHREN"] = keys["Watch"] + keys["Job"] + keys["Photo"]
-        expected[prefix + "00.A_%"] = keys["Part"]
-        expected[prefix + "00.001_%'"] = [f"Watch-{record_id(2, 1)}"]
-        expected[prefix + "no match"] = []
+    # Search finds archived records too.
+    groups = {
+        "Watch": (2, 500), "Caliber": (1, 50), "Job": (3, 1000), "Part": (8, 1000),
+        "Photo": (6, 5000),
+    }
+    keys = {
+        kind: [f"{kind}-{record_id(number, i)}" for i in range(count)]
+        for kind, (number, count) in groups.items()
+    }
+    expected["search:Synthetic"] = sum(keys.values(), [])
+    expected["search:ÜHREN"] = keys["Watch"] + keys["Job"] + keys["Photo"]
+    expected["search:00.A_%"] = keys["Part"]
+    expected["search:00.001_%'"] = [f"Watch-{record_id(2, 1)}"]
+    expected["search:no match"] = []
     return expected
 
 

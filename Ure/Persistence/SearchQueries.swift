@@ -49,9 +49,8 @@ nonisolated struct SearchResult: Decodable, Equatable, Identifiable, Sendable, F
 }
 
 nonisolated enum SearchQueries {
-    static func fetch(
-        _ text: String, includeArchived: Bool = false, in db: Database
-    ) throws -> [SearchResult] {
+    // Archived records are found too, and say that they are archived.
+    static func fetch(_ text: String, in db: Database) throws -> [SearchResult] {
         let key = SearchKey.normalize(text.trimmingCharacters(in: .whitespacesAndNewlines))
         guard !key.isEmpty else { return [] }
         return try SearchResult.fetchAll(
@@ -89,9 +88,9 @@ nonisolated enum SearchQueries {
                     LEFT JOIN watch w ON w.id = coalesce(r.watchID, j.watchID)
                     LEFT JOIN caliber c ON c.id = r.caliberID
                 )
-                SELECT * FROM results WHERE (? OR isArchived = 0) AND instr(searchKey, ?) > 0
+                SELECT * FROM results WHERE instr(searchKey, ?) > 0
                 ORDER BY kind, title, recordID
-                """, arguments: [includeArchived, key])
+                """, arguments: [key])
     }
 
     // A caliber's maker and name in SQL, such as "Omega 552", as CaliberRecord.title gives it.

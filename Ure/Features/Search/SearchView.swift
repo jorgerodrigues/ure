@@ -7,9 +7,6 @@ struct SearchView: View {
     var body: some View {
         @Bindable var search = search
         VStack(spacing: 0) {
-            Toggle("Include Archived", isOn: $search.includeArchived)
-                .padding()
-                .accessibilityIdentifier("includeArchivedSearch")
             if let error = search.navigationError {
                 Label(error, systemImage: "exclamationmark.triangle")
                     .font(.callout).padding()
@@ -29,7 +26,7 @@ struct SearchView: View {
                     ContentUnavailableView(
                         "Search Library", systemImage: "magnifyingglass",
                         description: Text(
-                            "Find saved text and identifiers. PDF contents and text in images are not searched."
+                            "Find saved text and identifiers, also in archived records. PDF contents and text in images are not searched."
                         ))
                 } else if search.results.isEmpty {
                     ContentUnavailableView.search(text: search.text)

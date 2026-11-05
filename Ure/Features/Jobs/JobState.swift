@@ -99,14 +99,14 @@ final class JobState {
         clearErrors()
     }
 
-    func beginAction(_ action: JobAction, watch: WatchRecord) {
-        guard !isSaving, !isEditing, let job = selectedJob, job.watchID == watch.id else { return }
+    func beginAction(_ action: JobAction) {
+        guard !isSaving, !isEditing, let job = selectedJob else { return }
         if action == .reopen {
             guard !job.stage.isOpen else { return }
         } else {
             guard job.stage.isOpen else { return }
         }
-        actionDraft = JobActionDraft(action: action, job: job, watch: watch)
+        actionDraft = JobActionDraft(action: action, job: job)
         originalActionDraft = actionDraft
         clearErrors()
     }
@@ -134,30 +134,25 @@ final class JobState {
         clearErrors()
         defer { isSaving = false }
         do {
-            let saved: JobRecord?
+            let saved: JobRecord
             if let actionDraft, let selectedID {
                 switch actionDraft.action {
                 case .transition:
                     saved = try await service.transition(selectedID, using: actionDraft.transition)
                 case .reopen:
                     saved = try await service.reopen(selectedID, using: actionDraft.transition)
-                case .condition:
-                    _ = try await service.setCondition(selectedID, using: actionDraft.condition)
-                    saved = nil
                 }
             } else if let draft {
                 saved = try await service.save(draft, for: watchID, editing: selectedID)
             } else {
                 return false
             }
-            if let saved {
-                if let index = jobs.firstIndex(where: { $0.id == saved.id }) {
-                    jobs[index] = saved
-                } else {
-                    jobs.append(saved)
-                }
-                selectedID = saved.id
+            if let index = jobs.firstIndex(where: { $0.id == saved.id }) {
+                jobs[index] = saved
+            } else {
+                jobs.append(saved)
             }
+            selectedID = saved.id
             self.draft = nil
             originalDraft = nil
             self.actionDraft = nil

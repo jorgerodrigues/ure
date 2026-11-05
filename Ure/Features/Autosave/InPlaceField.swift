@@ -255,43 +255,80 @@ private struct FactMatchRow: View {
     private func take() { field.acceptSuggestion(match, undoManager: undoManager) }
 }
 
-// A fact that is one of a few values, such as a winding, as a pop-up button with the same
-// label, fill and prompt as a typed fact. A choice saves at once and can be undone.
+// One value a fact pop-up offers. The title is what the pop-up shows, such as "Omega 552", and
+// the value is what the fact saves.
+struct FactPopUpChoice: Identifiable {
+    let title: String
+    let value: String
+
+    var id: String { value }
+
+    // A choice that saves the text it shows, such as "Automatic".
+    init(_ text: String) {
+        title = text
+        value = text
+    }
+
+    init(title: String, value: String) {
+        self.title = title
+        self.value = value
+    }
+}
+
+// A fact that is one of a few values, such as a winding or a watch's caliber, as a pop-up
+// button with the same label, fill and prompt as a typed fact. A choice saves at once and can be
+// undone. A fact that names a record, such as a caliber, can open it from an arrow after its
+// name.
 struct FactPopUp: View {
     @Environment(\.undoManager) private var undoManager
     let field: FactField
-    let choices: [String]
+    let choices: [FactPopUpChoice]
     let isEditable: Bool
     let identifier: String
+    var open: (() -> Void)? = nil
     @State private var isHovering = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: InPlaceLayout.labelSpacing) {
             FactLabel(text: field.label, tone: FactTone(field))
-            Menu {
-                ForEach(choices, id: \.self) { choice in
-                    FactChoice(title: choice, value: choice, choose: choose)
+            HStack(spacing: InPlaceLayout.openSpacing) {
+                Menu {
+                    ForEach(choices) { choice in
+                        FactChoice(title: choice.title, value: choice.value, choose: choose)
+                    }
+                    Divider()
+                    FactChoice(title: "None", value: "", choose: choose)
+                } label: {
+                    FactPopUpLabel(
+                        text: shownText, prompt: field.prompt, showsIndicator: !opensRecord)
                 }
-                Divider()
-                FactChoice(title: "None", value: "", choose: choose)
-            } label: {
-                FactPopUpLabel(text: field.text, prompt: field.prompt)
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
+                .buttonStyle(.plain)
+                .fixedSize()
+                .padding(.horizontal, InPlaceLayout.inset)
+                .frame(height: InPlaceLayout.boxHeight)
+                .background(fill, in: RoundedRectangle(cornerRadius: InPlaceLayout.cornerRadius))
+                .onHover(perform: hover)
+                .disabled(!isEditable)
+                .accessibilityLabel(field.label)
+                .accessibilityValue(shownText)
+                .accessibilityIdentifier(identifier)
+                if let open, opensRecord {
+                    FactOpenButton(title: shownText, open: open)
+                        .padding(.leading, -InPlaceLayout.inset)
+                }
             }
-            .menuStyle(.button)
-            .menuIndicator(.hidden)
-            .buttonStyle(.plain)
-            .fixedSize()
-            .padding(.horizontal, InPlaceLayout.inset)
-            .frame(height: InPlaceLayout.boxHeight)
-            .background(fill, in: RoundedRectangle(cornerRadius: InPlaceLayout.cornerRadius))
-            .onHover(perform: hover)
-            .disabled(!isEditable)
-            .accessibilityLabel(field.label)
-            .accessibilityValue(field.text)
-            .accessibilityIdentifier(identifier)
             FactMessage(field: field)
         }
     }
+
+    // The title of the chosen value, or the saved text when no choice has it.
+    private var shownText: String {
+        choices.first { $0.value == field.text }?.title ?? field.text
+    }
+
+    private var opensRecord: Bool { open != nil && !field.text.isEmpty }
 
     private var fill: Color {
         if isEditable, isHovering { return Color(nsColor: .quaternarySystemFill) }
@@ -300,6 +337,26 @@ struct FactPopUp: View {
 
     private func hover(_ isInside: Bool) { isHovering = isInside }
     private func choose(_ value: String) { field.choose(value, undoManager: undoManager) }
+}
+
+// The arrow after a fact that names a record. It opens that record, also when the fact is
+// read-only.
+private struct FactOpenButton: View {
+    let title: String
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .frame(width: InPlaceLayout.openWidth, height: InPlaceLayout.boxHeight)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Open \(title)")
+        .accessibilityLabel("Open \(title)")
+    }
 }
 
 private struct FactChoice: View {
@@ -317,15 +374,18 @@ private struct FactChoice: View {
 private struct FactPopUpLabel: View {
     let text: String
     let prompt: String
+    let showsIndicator: Bool
 
     var body: some View {
         HStack(spacing: 6) {
             Text(text.isEmpty ? prompt : text)
                 .font(.system(size: InPlaceLayout.textSize))
                 .foregroundStyle(text.isEmpty ? .tertiary : .primary)
-            Image(systemName: "chevron.up.chevron.down")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.tertiary)
+            if showsIndicator {
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
         }
     }
 }

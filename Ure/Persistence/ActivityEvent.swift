@@ -34,14 +34,19 @@ nonisolated struct JobStageValue: Codable, Equatable, Sendable {
     }
 }
 
+// A watch's condition as older activity records saved it. Watches have had no condition since
+// W036, so only those records still hold one.
+nonisolated enum WatchCondition: String, Codable, CaseIterable, Sendable {
+    case unknown = "Unknown"
+    case running = "Running"
+    case runningPoorly = "Running poorly"
+    case stopped = "Stopped"
+    case disassembled = "Disassembled"
+}
+
 nonisolated struct WatchConditionValue: Codable, Equatable, Sendable {
     let condition: WatchCondition
     let note: String?
-
-    init(watch: WatchRecord) {
-        condition = watch.condition
-        note = watch.conditionNote
-    }
 }
 
 nonisolated enum ActivityValue: Codable, Equatable, Sendable {

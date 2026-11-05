@@ -7,72 +7,54 @@ struct JobActionEditorView: View {
     var body: some View {
         Form {
             if let draft = jobs.actionDraft {
-                if draft.action == .condition {
-                    Section("Physical watch condition") {
-                        Picker(
-                            "Condition", selection: field(\.condition.condition, default: .unknown)
-                        ) {
-                            ForEach(WatchCondition.allCases, id: \.self) { condition in
-                                Text(condition.rawValue).tag(condition)
-                            }
+                Section("Job stage") {
+                    Picker("Stage", selection: field(\.transition.stage, default: .planned)) {
+                        ForEach(stages, id: \.self) { stage in
+                            Text(stage.rawValue).tag(stage)
                         }
-                        .accessibilityIdentifier("watchCondition")
+                    }
+                    .accessibilityIdentifier("jobStage")
+                    Text("Ready means ready for final review.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if draft.transition.stage == .waiting {
                         TextField(
-                            "Condition note (optional)", text: field(\.condition.note, default: ""),
+                            "Waiting reason",
+                            text: field(\.transition.waitingReason, default: ""),
                             axis: .vertical
                         )
-                        .accessibilityIdentifier("watchConditionNote")
-                    }
-                } else {
-                    Section("Job stage") {
-                        Picker("Stage", selection: field(\.transition.stage, default: .planned)) {
-                            ForEach(stages, id: \.self) { stage in
-                                Text(stage.rawValue).tag(stage)
-                            }
-                        }
-                        .accessibilityIdentifier("jobStage")
-                        Text("Ready means ready for final review.")
-                            .font(.caption)
+                        .accessibilityIdentifier("jobWaitingReason")
+                        JobActionFieldError(message: jobs.fieldErrors[.waitingReason])
+                    } else if draft.transition.stage == .completed {
+                        TextField(
+                            "Outcome", text: field(\.transition.outcome, default: ""),
+                            axis: .vertical
+                        )
+                        .accessibilityIdentifier("jobOutcome")
+                        JobActionFieldError(message: jobs.fieldErrors[.outcome])
+                        TextField(
+                            "Recommendations (optional)",
+                            text: field(\.transition.recommendations, default: ""),
+                            axis: .vertical
+                        )
+                        .accessibilityIdentifier("jobRecommendations")
+                        Text("Completing this job locks operational edits.")
                             .foregroundStyle(.secondary)
-                        if draft.transition.stage == .waiting {
-                            TextField(
-                                "Waiting reason",
-                                text: field(\.transition.waitingReason, default: ""),
-                                axis: .vertical
-                            )
-                            .accessibilityIdentifier("jobWaitingReason")
-                            JobActionFieldError(message: jobs.fieldErrors[.waitingReason])
-                        } else if draft.transition.stage == .completed {
-                            TextField(
-                                "Outcome", text: field(\.transition.outcome, default: ""),
-                                axis: .vertical
-                            )
-                            .accessibilityIdentifier("jobOutcome")
-                            JobActionFieldError(message: jobs.fieldErrors[.outcome])
-                            TextField(
-                                "Recommendations (optional)",
-                                text: field(\.transition.recommendations, default: ""),
-                                axis: .vertical
-                            )
-                            .accessibilityIdentifier("jobRecommendations")
-                            Text("Completing this job locks operational edits.")
-                                .foregroundStyle(.secondary)
-                        } else if draft.transition.stage == .cancelled {
-                            TextField(
-                                "Cancellation reason",
-                                text: field(\.transition.cancellationReason, default: ""),
-                                axis: .vertical
-                            )
-                            .accessibilityIdentifier("jobCancellationReason")
-                            JobActionFieldError(message: jobs.fieldErrors[.cancellationReason])
-                            Text("Cancelling this job locks operational edits.")
-                                .foregroundStyle(.secondary)
-                        }
+                    } else if draft.transition.stage == .cancelled {
+                        TextField(
+                            "Cancellation reason",
+                            text: field(\.transition.cancellationReason, default: ""),
+                            axis: .vertical
+                        )
+                        .accessibilityIdentifier("jobCancellationReason")
+                        JobActionFieldError(message: jobs.fieldErrors[.cancellationReason])
+                        Text("Cancelling this job locks operational edits.")
+                            .foregroundStyle(.secondary)
                     }
-                    if !draft.transition.stage.isOpen, let jobID = jobs.selectedID {
-                        JobTaskClosureSummaryView(jobID: jobID)
-                        PartClosureSummaryView(jobID: jobID)
-                    }
+                }
+                if !draft.transition.stage.isOpen, let jobID = jobs.selectedID {
+                    JobTaskClosureSummaryView(jobID: jobID)
+                    PartClosureSummaryView(jobID: jobID)
                 }
             }
             if let error = jobs.saveError {
@@ -111,7 +93,6 @@ struct JobActionEditorView: View {
         switch jobs.actionDraft?.action {
         case .transition: "Change Job Stage"
         case .reopen: "Reopen Job"
-        case .condition: "Change Watch Condition"
         case nil: "Job"
         }
     }

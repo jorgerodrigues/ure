@@ -33,7 +33,6 @@ nonisolated struct JobService: Sendable {
             guard let watch = try WatchQueries.fetch(watchID, in: db) else {
                 throw JobError.unavailableWatch
             }
-            try RecordAccess.requireWatch(watchID, in: db)
             let now = Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
             if let id {
                 let existing = try Self.requireOpenJob(id, in: db)
@@ -48,6 +47,8 @@ nonisolated struct JobService: Sendable {
                 try JobQueries.update(record, in: db)
                 return record
             }
+            // A new job needs a watch that is not archived.
+            try RecordAccess.requireWatch(watchID, in: db)
             if let existing = try JobQueries.openJob(for: watchID, in: db) {
                 throw JobError.openJobExists(existing)
             }
@@ -64,9 +65,9 @@ nonisolated struct JobService: Sendable {
         }
     }
 
+    // An open job can change, also when its watch is archived.
     static func requireOpenJob(_ id: UUID, in db: Database) throws -> JobRecord {
         guard let job = try JobQueries.fetch(id, in: db) else { throw JobError.missingRecord }
-        try RecordAccess.requireWatch(job.watchID, in: db)
         guard job.archivedAt == nil else { throw ArchiveError.archived }
         guard job.stage.isOpen else { throw JobError.closedJob }
         return job
@@ -92,27 +93,6 @@ nonisolated struct JobService: Sendable {
                 throw JobError.openJobExists(open)
             }
             return try Self.changeStage(existing, using: draft, in: db, dependencies: dependencies)
-        }
-    }
-
-    func setCondition(_ id: UUID, using draft: WatchConditionDraft) async throws -> WatchRecord {
-        try await coordinator.mutate { db, _, dependencies in
-            let job = try Self.requireOpenJob(id, in: db)
-            guard var watch = try WatchQueries.fetch(job.watchID, in: db) else {
-                throw JobError.unavailableWatch
-            }
-            let prior = WatchConditionValue(watch: watch)
-            watch.condition = draft.condition
-            watch.conditionNote = JobDraft.optional(draft.note)
-            let next = WatchConditionValue(watch: watch)
-            guard prior != next else { return watch }
-            watch.updatedAt = Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
-            try WatchQueries.update(watch, in: db)
-            try ActivityQueries.insert(
-                jobID: id, kind: .watchConditionChanged, prior: .condition(prior),
-                next: .condition(next),
-                in: db, dependencies: dependencies)
-            return watch
         }
     }
 

@@ -5,7 +5,6 @@ import Observation
 
 nonisolated struct SearchRequest: Equatable {
     let text: String
-    let includeArchived: Bool
     let revision: Int
 }
 
@@ -14,7 +13,6 @@ final class SearchState {
     private let coordinator: LibraryCoordinator
     var isPresented = false
     var text = ""
-    var includeArchived = false
     private(set) var results: [SearchResult] = []
     private(set) var isLoading = false
     private(set) var loadError: String?
@@ -25,7 +23,7 @@ final class SearchState {
     init(coordinator: LibraryCoordinator) { self.coordinator = coordinator }
 
     var request: SearchRequest {
-        SearchRequest(text: text, includeArchived: includeArchived, revision: observationRevision)
+        SearchRequest(text: text, revision: observationRevision)
     }
     var hasQuery: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
@@ -42,8 +40,7 @@ final class SearchState {
         isLoading = hasQuery
         guard hasQuery else { return }
         do {
-            let values = try await coordinator.searchValues(
-                text: request.text, includeArchived: request.includeArchived)
+            let values = try await coordinator.searchValues(text: request.text)
             for try await results in values {
                 try Task.checkCancellation()
                 guard self.request == request else { return }

@@ -653,6 +653,31 @@ nonisolated enum LibrarySchema {
             try SearchKey.backfill(
                 "caliber", fields: ["designation", "manufacturer", "notes"], in: db)
         }
+        migrator.registerMigration("v22-watch-owner", foreignKeyChecks: .immediate) { db in
+            try db.alter(table: "watch") { table in
+                table.add(column: "owner", .text)
+                table.add(column: "contact", .text)
+            }
+            try WatchMigration.moveRemovedFields(in: db)
+            try db.alter(table: "watch") { table in
+                for column in [
+                    "condition", "conditionNote", "waterResistance", "specificationNotes",
+                ] {
+                    table.drop(column: column)
+                }
+            }
+            try db.alter(table: "job") { table in
+                for column in ["ownerName", "ownerEmail", "ownerPhone"] {
+                    table.drop(column: column)
+                }
+            }
+            try SearchKey.backfill(
+                "watch",
+                fields: [
+                    "name", "brand", "model", "caseReference", "serial", "approximateYear", "owner",
+                    "contact", "notes",
+                ], in: db)
+        }
         return migrator
     }
 }
