@@ -43,11 +43,11 @@ struct PartsOverviewStateTests {
                 && editing.parts.records(for: job.id).first?.record.status == .arrived
         }
         let watch = try await WatchService(coordinator: coordinator).update(
-            job.watchID, .name("Corrected watch Å時計"))
+            try #require(job.watchID), .name("Corrected watch Å時計"))
         _ = try await JobService(coordinator: coordinator).update(
             job.id, .title("Corrected repair"))
         try await waitUntil {
-            overview.rows.first?.watch.name == watch.name
+            overview.rows.first?.watch?.name == watch.name
                 && overview.rows.first?.job.title == "Corrected repair"
         }
         let closed = try await JobService(coordinator: coordinator).setStage(job.id, to: .done).job

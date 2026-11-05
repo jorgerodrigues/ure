@@ -45,7 +45,8 @@ struct PartsOverviewView: View {
             }
         }
         .navigationTitle("Parts")
-        .searchable(text: $overview.searchText, prompt: "Find a part, watch, or job")
+        .navigationSubtitle(overview.subtitle)
+        .toolbarSearch(text: $overview.searchText)
         .toolbar {
             Picker("Part status", selection: $overview.statusFilter) {
                 Text("All statuses").tag(PartStatus?.none)
@@ -76,14 +77,14 @@ private struct OverviewPartRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: UreLayout.rowSpacing) {
-            PhotoThumbnailView(photoID: row.watch.coverPhotoID)
+            PhotoThumbnailView(photoID: row.watch?.coverPhotoID)
                 .frame(width: UreLayout.rowThumbnailSize, height: UreLayout.rowThumbnailSize)
             VStack(alignment: .leading, spacing: UreLayout.textSpacing) {
                 Text(row.part.description).font(.body).fontWeight(.semibold)
                 if let reference = row.part.manufacturerReference {
                     Text("Reference: \(reference)")
                 }
-                Text("Watch: \(row.watch.name)")
+                Text("Watch: \(row.watch?.name ?? "No watch yet")")
                 Text("Job: \(row.job.title) · \(row.job.stage.rawValue)")
                 Text("\(row.part.status.rawValue) · Quantity \(row.part.quantity)")
             }

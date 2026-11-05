@@ -149,7 +149,7 @@ struct SearchStateTests {
             observation.cancel(); await observation.value
         }
         for (kind, id, text) in [
-            (SearchKind.job, job.id, job.title), (.watch, job.watchID, "Bench watch"),
+            (SearchKind.job, job.id, job.title), (.watch, try #require(job.watchID), "Bench watch"),
             (.caliber, try #require(editing.calibers.calibers.first?.id), "0012–Å"),
         ] {
             search.text = text

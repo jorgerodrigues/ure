@@ -17,7 +17,9 @@ nonisolated struct JobRecord: Codable, Equatable, Identifiable, Sendable, Fetcha
     static let databaseTableName = "job"
 
     let id: UUID
-    let watchID: UUID
+    // The watch on the bench. A job can start without one while you set it up, and shows
+    // "No watch yet" until you pick it.
+    var watchID: UUID?
     var title: String
     var stage: JobStage
     var problem: String? = nil

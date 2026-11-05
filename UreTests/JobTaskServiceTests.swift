@@ -166,7 +166,8 @@ nonisolated struct JobTaskServiceTests {
         let job = try await JobTaskFixture.job(coordinator)
         let source = try fixture.source(type: .png)
         let photo = try await MaterialFixture.file(source, for: .job(job.id), in: coordinator)
-        try await MaterialService(coordinator: coordinator).setCover(photo.id, for: job.watchID)
+        try await MaterialService(coordinator: coordinator).setCover(
+            photo.id, for: try #require(job.watchID))
         try await RecordNotesService(coordinator: coordinator).save(
             "Keep this finding", for: .job(job.id))
         let link = try await MaterialFixture.link(

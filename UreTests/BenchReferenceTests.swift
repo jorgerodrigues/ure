@@ -22,7 +22,7 @@ struct BenchReferenceTests {
         defer { preferences.remove() }
         let state = preferences.state(coordinator)
         _ = try await JobService(coordinator: coordinator).setStage(firstJob.id, to: .done)
-        let sameWatchJob = try await makeJob(coordinator, watchID: firstJob.watchID)
+        let sameWatchJob = try await makeJob(coordinator, watchID: try #require(firstJob.watchID))
         let secondWatch = try await WatchService(coordinator: coordinator).make(
             "Second watch", caliberID: caliber.id)
         let sharedJob = try await makeJob(coordinator, watchID: secondWatch.id)

@@ -61,7 +61,7 @@ struct PartDetailView: View {
         }
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                Button("Back to Job", systemImage: "chevron.left", action: back)
+                Button(RecordBack.jobTitle, systemImage: "chevron.left", action: back)
                     .disabled(editing.isSaving).accessibilityIdentifier("backFromPart")
             }
         }
@@ -72,12 +72,12 @@ struct PartDetailView: View {
         guard parts.draft == nil, parts.loadError == nil, parts.selectedPart != nil,
             !editing.isSaving, parts.canWrite(jobID, jobs: jobs)
         else { return RecordMenuActions() }
-        return RecordMenuActions(edit: edit)
+        return RecordMenuActions(edit: edit, editTitle: "Edit Part")
     }
     private func edit() { parts.edit(jobs: jobs) }
-    private var backAction: (() -> Void)? {
+    private var backAction: RecordBack? {
         guard !editing.isSaving else { return nil }
-        return back
+        return RecordBack(title: RecordBack.jobTitle, action: back)
     }
 
     private func back() { editing.requestNavigation(parts.close) }

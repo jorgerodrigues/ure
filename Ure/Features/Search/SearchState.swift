@@ -92,6 +92,11 @@ final class SearchState {
                 if let job = editing.jobs.jobs.first(where: { $0.id == result.jobID }) {
                     editing.jobs.open(job)
                 }
+            } else if let job = editing.jobs.jobs.first(where: { $0.id == result.jobID }) {
+                // A job without a watch yet opens in Jobs.
+                editing.watches.select(nil)
+                navigation.selection = .jobs
+                editing.jobs.open(job)
             }
             openTarget()
             self.navigationRevision += 1

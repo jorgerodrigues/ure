@@ -67,7 +67,7 @@ nonisolated struct RecordNotesMigrationTests {
         #expect(
             staged.summary.appliedMigrations == [
                 "v19-record-notes", "v20-material", "v21-caliber-facts", "v22-watch-owner",
-                "v23-job-states",
+                "v23-job-states", "v24-jobs-without-watch",
             ])
         #expect(staged.summary.counts["note"] == nil && staged.summary.counts["watch"] == 2)
         let result = try await coordinator.activateRestore(staged)

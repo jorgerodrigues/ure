@@ -62,16 +62,11 @@ nonisolated struct JobService: Sendable {
 
     let coordinator: LibraryCoordinator
 
-    // Opens a job In progress. The watch must not be archived and must have no open job.
-    func start(for watchID: UUID, title: String = newTitle) async throws -> JobRecord {
+    // Opens a job In progress. A job can start without a watch while you set it up. A watch
+    // must not be archived and must have no open job.
+    func start(for watchID: UUID?, title: String = newTitle) async throws -> JobRecord {
         try await coordinator.mutate { db, _, dependencies in
-            guard try WatchQueries.fetch(watchID, in: db) != nil else {
-                throw JobError.unavailableWatch
-            }
-            try RecordAccess.requireWatch(watchID, in: db)
-            if let existing = try JobQueries.openJob(for: watchID, in: db) {
-                throw JobError.openJobExists(existing)
-            }
+            if let watchID { try Self.requireWatchForOpenJob(watchID, in: db) }
             let now = Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
             var record = JobRecord(
                 id: dependencies.makeID(), watchID: watchID, title: Self.newTitle,
@@ -79,6 +74,50 @@ nonisolated struct JobService: Sendable {
             try record.apply(.title(title))
             try JobQueries.insert(record, in: db)
             return record
+        }
+    }
+
+    // Gives a job its watch, or takes it away again when Undo puts back "No watch yet". An open
+    // job needs a watch that is not archived and has no other open job. When the watch goes,
+    // a cover the watch took from this job's photos goes too, so the watch never shows a photo
+    // that is no longer its own.
+    func setWatch(_ id: UUID, to watchID: UUID?) async throws -> JobRecord {
+        try await coordinator.mutate { db, _, dependencies in
+            try Self.setWatch(id, to: watchID, at: dependencies.now(), in: db)
+        }
+    }
+
+    // Makes a watch with the name you typed in the picker and gives it to the job, in one go.
+    func setNewWatch(_ id: UUID, named name: String) async throws -> JobRecord {
+        try await coordinator.mutate { db, _, dependencies in
+            _ = try Self.requireJob(id, in: db)
+            let now = Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let watch = WatchRecord(
+                id: dependencies.makeID(), name: trimmed.isEmpty ? WatchService.newName : trimmed,
+                createdAt: now, updatedAt: now)
+            try WatchQueries.insert(watch, in: db)
+            return try Self.setWatch(id, to: watch.id, at: now, in: db)
+        }
+    }
+
+    // Removes a job that has nothing in it yet: no watch, the title it started with, and no
+    // problem, notes, tasks, parts or material. Anything else stays. True when it went.
+    func discardIfBlank(_ id: UUID) async throws -> Bool {
+        try await coordinator.mutate { db, _, _ in
+            guard let job = try JobQueries.fetch(id, in: db), job.watchID == nil,
+                job.title == Self.newTitle, job.problem == nil, job.waitingFor == nil,
+                (try RecordNotesQueries.fetch(.job(id), in: db) ?? "").isEmpty
+            else { return false }
+            for table in ["jobTask", "partRequirement", "libraryItem"] {
+                let count =
+                    try Int.fetchOne(
+                        db, sql: "SELECT count(*) FROM \(table) WHERE jobID = ?",
+                        arguments: [id.uuidString]) ?? 0
+                guard count == 0 else { return false }
+            }
+            try db.execute(sql: "DELETE FROM job WHERE id = ?", arguments: [id.uuidString])
+            return db.changesCount == 1
         }
     }
 
@@ -124,10 +163,48 @@ nonisolated struct JobService: Sendable {
     }
 
     // A job can change while it is in the library and not archived. That holds when it is
-    // Done and when its watch is archived.
+    // Done, when its watch is archived, and while it has no watch yet.
     static func requireJob(_ id: UUID, in db: Database) throws -> JobRecord {
         guard let job = try JobQueries.fetch(id, in: db) else { throw JobError.missingRecord }
         guard job.archivedAt == nil else { throw ArchiveError.archived }
+        return job
+    }
+
+    // A watch that can take a new open job: in the library, not archived, and with no open job.
+    private static func requireWatchForOpenJob(
+        _ watchID: UUID, except jobID: UUID? = nil, in db: Database
+    ) throws {
+        guard try WatchQueries.fetch(watchID, in: db) != nil else {
+            throw JobError.unavailableWatch
+        }
+        try RecordAccess.requireWatch(watchID, in: db)
+        if let existing = try JobQueries.openJob(for: watchID, in: db), existing.id != jobID {
+            throw JobError.openJobExists(existing)
+        }
+    }
+
+    private static func setWatch(
+        _ id: UUID, to watchID: UUID?, at time: Date, in db: Database
+    ) throws -> JobRecord {
+        var job = try requireJob(id, in: db)
+        guard job.watchID != watchID else { return job }
+        if let watchID {
+            guard try WatchQueries.fetch(watchID, in: db) != nil else {
+                throw JobError.unavailableWatch
+            }
+            try RecordAccess.requireWatch(watchID, in: db)
+            if job.stage.isOpen { try requireWatchForOpenJob(watchID, except: id, in: db) }
+        }
+        if let previous = job.watchID {
+            try db.execute(
+                sql: """
+                    UPDATE watch SET coverPhotoID = NULL
+                    WHERE id = ? AND coverPhotoID IN (SELECT id FROM libraryItem WHERE jobID = ?)
+                    """, arguments: [previous.uuidString, id.uuidString])
+        }
+        job.watchID = watchID
+        job.updatedAt = Date(timeIntervalSince1970: time.timeIntervalSince1970)
+        try JobQueries.update(job, in: db)
         return job
     }
 
@@ -135,8 +212,8 @@ nonisolated struct JobService: Sendable {
         _ value: JobStageValue, to existing: JobRecord, at now: Date, in db: Database
     ) throws -> JobRecord {
         guard JobStageValue(job: existing) != value else { return existing }
-        if value.stage.isOpen, !existing.stage.isOpen,
-            let open = try JobQueries.openJob(for: existing.watchID, in: db)
+        if value.stage.isOpen, !existing.stage.isOpen, let watchID = existing.watchID,
+            let open = try JobQueries.openJob(for: watchID, in: db)
         {
             throw JobError.openJobExists(open)
         }

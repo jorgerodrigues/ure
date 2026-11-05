@@ -9,7 +9,7 @@ final class WorkshopSession {
     let calibers: CaliberState
     let jobs: JobState
     let search: SearchState
-    let workshop: WorkshopOverviewState
+    let jobList: JobListState
     let partsOverview: PartsOverviewState
     let notes: RecordNotesState
     let tasks: JobTaskState
@@ -31,7 +31,7 @@ final class WorkshopSession {
             watches: watches, calibers: calibers, jobs: jobs, notes: notes, material: material,
             tasks: tasks, parts: parts)
         search = SearchState(coordinator: coordinator)
-        workshop = WorkshopOverviewState(coordinator: coordinator)
+        jobList = JobListState(coordinator: coordinator)
         partsOverview = PartsOverviewState(coordinator: coordinator)
         bench = BenchReferenceState(
             service: BenchReferenceService(coordinator: coordinator),

@@ -22,11 +22,21 @@ final class PartsOverviewState {
             if query.isEmpty { return true }
             return SearchKey.matches(
                 [
-                    row.searchKey, row.watch.name,
-                    row.watch.brand, row.watch.model, row.watch.caseReference, row.watch.serial,
-                    row.job.title,
+                    row.searchKey, row.watch?.name,
+                    row.watch?.brand, row.watch?.model, row.watch?.caseReference,
+                    row.watch?.serial, row.job.title,
                 ], query: query)
         }
+    }
+
+    // The parts of open jobs still to buy. The sidebar counts them.
+    var toBuyCount: Int { rows.filter { $0.part.status == .needed }.count }
+
+    // The toolbar's subtitle, such as "2 to buy · 2 ordered".
+    var subtitle: String {
+        let ordered = rows.filter { $0.part.status == .ordered }.count
+        if toBuyCount == 0, ordered == 0 { return "Nothing to buy" }
+        return "\(toBuyCount) to buy · \(ordered) ordered"
     }
 
     func selectionMessage(part: PartRequirement?, job: JobRecord?) -> String? {
@@ -41,8 +51,8 @@ final class PartsOverviewState {
     }
 
     func selectedID(editing: WorkshopEditing) -> UUID? {
-        guard let job = editing.jobs.selectedJob, job.watchID == editing.watches.selectedID,
-            let part = editing.parts.selectedPart, part.record.jobID == job.id
+        guard let job = editing.jobs.selectedJob, let part = editing.parts.selectedPart,
+            part.record.jobID == job.id
         else { return nil }
         return part.id
     }
@@ -82,8 +92,7 @@ final class PartsOverviewState {
                 let part = editing.parts.parts.first(where: { $0.id == id }),
                 part.record.jobID == row.job.id,
                 let job = editing.jobs.jobs.first(where: { $0.id == part.record.jobID }),
-                job.stage.isOpen, job.watchID == row.watch.id,
-                editing.watches.watches.contains(where: { $0.id == job.watchID })
+                job.stage.isOpen, job.watchID == row.watch?.id
             else {
                 self.navigationError =
                     "The part is unavailable. Retry loading parts or open its watch history."

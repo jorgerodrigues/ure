@@ -74,7 +74,10 @@ nonisolated struct WatchMigrationTests {
         let package = fixture.directory.appending(path: "before-watch-owner.watchbackup")
         try LegacyWatchFixture.package(at: package)
         let staged = try await coordinator.stageRestore(from: package)
-        #expect(staged.summary.appliedMigrations == ["v22-watch-owner", "v23-job-states"])
+        #expect(
+            staged.summary.appliedMigrations == [
+                "v22-watch-owner", "v23-job-states", "v24-jobs-without-watch",
+            ])
         #expect(staged.summary.counts["watch"] == LegacyWatchFixture.watches.count)
         #expect(staged.summary.counts["job"] == LegacyWatchFixture.jobs.count)
         let result = try await coordinator.activateRestore(staged)

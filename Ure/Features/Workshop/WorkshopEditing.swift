@@ -35,9 +35,11 @@ final class WorkshopEditing {
             guard !jobs.isLoading, jobs.loadError == nil,
                 let job = jobs.jobs.first(where: { $0.id == id }), job.archivedAt == nil
             else { return false }
-            // A job stays open to work on when it is Done and when its watch is archived.
-            return !watches.isLoading && watches.loadError == nil
-                && watches.watches.contains { $0.id == job.watchID }
+            // A job stays open to work on when it is Done, when its watch is archived, and while
+            // it has no watch yet.
+            guard !watches.isLoading, watches.loadError == nil else { return false }
+            guard let watchID = job.watchID else { return true }
+            return watches.watches.contains { $0.id == watchID }
         }
     }
 

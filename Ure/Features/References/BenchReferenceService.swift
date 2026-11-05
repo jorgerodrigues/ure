@@ -25,12 +25,14 @@ nonisolated struct BenchSnapshot: Sendable {
     }
 
     func references(for jobID: UUID?) -> [BenchReference] {
-        guard let job = jobs.first(where: { $0.id == jobID }),
-            let watch = watches.first(where: { $0.id == job.watchID })
-        else { return [] }
-        var owners: [LibraryItemOwner] = [.job(job.id), .watch(watch.id)]
-        if let caliberID = watch.caliberID, calibers.contains(where: { $0.id == caliberID }) {
-            owners.append(.caliber(caliberID))
+        guard let job = jobs.first(where: { $0.id == jobID }) else { return [] }
+        var owners: [LibraryItemOwner] = [.job(job.id)]
+        // A job without a watch yet offers only its own material.
+        if let watch = watches.first(where: { $0.id == job.watchID }) {
+            owners.append(.watch(watch.id))
+            if let caliberID = watch.caliberID, calibers.contains(where: { $0.id == caliberID }) {
+                owners.append(.caliber(caliberID))
+            }
         }
         let assetsByID = Dictionary(uniqueKeysWithValues: assets.map { ($0.id, $0) })
         return items.compactMap { item in

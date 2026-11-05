@@ -103,7 +103,8 @@ struct WorkshopEditingTests {
         let observations = [Task { await watches.observe() }, Task { await jobs.observe() }]
         defer { observations.forEach { $0.cancel() } }
         try await waitUntil { !watches.isLoading && !jobs.isLoading }
-        let facts = try #require(watches.facts(for: job.watchID))
+        let watchID = try #require(job.watchID)
+        let facts = try #require(watches.facts(for: watchID))
         facts.owner.beginEditing()
         facts.owner.change(to: "Ana Ribeiro", undoManager: nil)
         #expect(editing.hasUnsavedFields && !editing.hasUnsavedChanges)
@@ -111,20 +112,20 @@ struct WorkshopEditingTests {
         editing.requestNavigation { navigated = true }
         #expect(navigated && !editing.showsUnsavedChanges)
         try await waitUntil { !facts.owner.hasUnsavedChanges }
-        #expect(try await owner(of: job.watchID, coordinator) == "Ana Ribeiro")
+        #expect(try await owner(of: watchID, coordinator) == "Ana Ribeiro")
         facts.contact.beginEditing()
         facts.contact.change(to: "ana@example.pt", undoManager: nil)
         #expect(await editing.saveAllFields())
         #expect(!editing.hasUnsavedFields)
         #expect(
-            try await coordinator.read { try WatchQueries.fetch(job.watchID, in: $0)?.contact }
+            try await coordinator.read { try WatchQueries.fetch(watchID, in: $0)?.contact }
                 == "ana@example.pt")
 
         // An archived watch can't change, but its open job still can.
-        watches.select(job.watchID)
+        watches.select(watchID)
         #expect(await watches.toggleArchive())
         try await waitUntil { watches.selectedWatch?.archivedAt != nil }
-        #expect(!editing.canWrite(.watch(job.watchID)))
+        #expect(!editing.canWrite(.watch(watchID)))
         #expect(editing.canWrite(.job(job.id)))
         observations.forEach { $0.cancel() }
         for observation in observations { await observation.value }

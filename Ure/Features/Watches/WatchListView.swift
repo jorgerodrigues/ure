@@ -26,7 +26,7 @@ struct WatchListView: View {
                 } description: {
                     Text("Add a watch with a name. Fill in its specifications when you know them.")
                 } actions: {
-                    Button("Add Watch", action: createWatch)
+                    Button(NewRecord.title(in: .watches), action: createWatch)
                 }
             } else {
                 List(selection: selection) {
@@ -57,14 +57,8 @@ struct WatchListView: View {
         }
         .navigationTitle("Watches")
         .navigationSubtitle(subtitle)
-        .searchable(text: $watches.searchText, prompt: "Find a watch")
-        .toolbar {
-            Button("Add Watch", systemImage: "plus", action: createWatch)
-                .labelStyle(.iconOnly)
-                .help("Add Watch (⌘N)")
-                .accessibilityIdentifier("addWatch")
-                .disabled(editing.isSaving || watches.isLoading || watches.loadError != nil)
-        }
+        .toolbarSearch(text: $watches.searchText)
+        .toolbar { NewRecordButton(section: .watches) }
         .disabled(editing.isSaving)
     }
 

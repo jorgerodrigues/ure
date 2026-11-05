@@ -17,7 +17,7 @@ nonisolated struct PartsOverviewTests {
         for stage in JobStage.allCases {
             let job = try await JobTaskFixture.job(coordinator)
             _ = try await WatchService(coordinator: coordinator).update(
-                job.watchID, .name("Watch \(stage.rawValue) Å時計"))
+                try #require(job.watchID), .name("Watch \(stage.rawValue) Å時計"))
             for status in PartStatus.allCases {
                 var draft = PartFixture.draft()
                 draft.description = "Mainspring Å時計"
@@ -41,8 +41,8 @@ nonisolated struct PartsOverviewTests {
         #expect(rows.count == 10 && Set(rows.map(\.id)) == expected)
         #expect(Set(rows.map { $0.job.stage }) == [.inProgress, .waiting])
         for row in rows {
-            #expect(row.part.jobID == row.job.id && row.job.watchID == row.watch.id)
-            #expect(row.watch.name == "Watch \(row.job.stage.rawValue) Å時計")
+            #expect(row.part.jobID == row.job.id && row.job.watchID == row.watch?.id)
+            #expect(row.watch?.name == "Watch \(row.job.stage.rawValue) Å時計")
             #expect(row.part.quantity == 7 && row.part.description == "Mainspring Å時計")
         }
         for status in PartStatus.allCases {

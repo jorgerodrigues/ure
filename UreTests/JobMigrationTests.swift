@@ -81,7 +81,8 @@ nonisolated struct JobMigrationTests {
         let package = fixture.directory.appending(path: "before-job-states.watchbackup")
         try LegacyJobFixture.package(at: package)
         let staged = try await coordinator.stageRestore(from: package)
-        #expect(staged.summary.appliedMigrations == ["v23-job-states"])
+        #expect(
+            staged.summary.appliedMigrations == ["v23-job-states", "v24-jobs-without-watch"])
         #expect(staged.summary.counts["job"] == LegacyJobFixture.jobs.count)
         // The staged library is already upgraded, so its history is gone.
         #expect(staged.summary.counts["activityEvent"] == nil)
@@ -202,6 +203,7 @@ nonisolated struct JobMigrationTests {
 // nothing into the notes when it runs again.
 nonisolated enum JobStateMigrationFixture {
     static func restoreJobFields(in db: Database) throws {
+        try JobWatchMigrationFixture.requireWatch(in: db)
         // The job's tasks, parts and material wait for the rebuilt table, which takes the rows
         // back after the old one goes.
         try db.execute(sql: "PRAGMA defer_foreign_keys = ON")

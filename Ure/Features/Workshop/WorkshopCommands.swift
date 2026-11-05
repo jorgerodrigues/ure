@@ -13,7 +13,7 @@ struct WorkshopCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button(newRecordTitle, action: createRecord)
+            Button(NewRecord.title(in: navigation.selectedSection), action: createRecord)
                 .keyboardShortcut("n", modifiers: .command)
                 .disabled(!canCreate)
         }
@@ -25,7 +25,7 @@ struct WorkshopCommands: Commands {
             Button("Save", action: save)
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(!canSave)
-            Button("Cancel Editing", action: editing.cancelDraft)
+            Button("Cancel", action: editing.cancelDraft)
                 .keyboardShortcut(".", modifiers: .command)
                 .disabled(allowsEditing != true || !editing.canCancelDraft)
         }
@@ -33,6 +33,11 @@ struct WorkshopCommands: Commands {
             Button("Insert Today’s Date", action: insertToday)
                 .keyboardShortcut("d", modifiers: .command)
                 .disabled(allowsEditing != true || !editing.notes.isEditing)
+        }
+        CommandGroup(before: .textEditing) {
+            Button("Search", action: focusSearch)
+                .keyboardShortcut("f", modifiers: .command)
+                .disabled(allowsEditing != true)
         }
         CommandGroup(after: .textEditing) {
             Button("Search Library", action: search.present)
@@ -46,12 +51,12 @@ struct WorkshopCommands: Commands {
                 .disabled(!canUseRecordActions || recordActions?.exportOriginal == nil)
         }
         CommandMenu("Record") {
-            Button("Edit Selected Record", action: editRecord)
+            Button(recordActions?.editTitle ?? "Edit", action: editRecord)
                 .keyboardShortcut("e", modifiers: [.command, .option])
                 .disabled(!canUseRecordActions || recordActions?.edit == nil)
-            Button("Remove Selected Item…", role: .destructive, action: removeRecord)
+            Button(recordActions?.removeTitle ?? "Remove", role: .destructive, action: removeRecord)
                 .disabled(!canUseRecordActions || recordActions?.remove == nil)
-            Button("Back to Owner", action: backToOwner)
+            Button(recordBackAction?.title ?? "Back", action: backToOwner)
                 .keyboardShortcut("[", modifiers: .command)
                 .disabled(!canUseRecordActions || recordBackAction == nil)
             Divider()
@@ -73,7 +78,7 @@ struct WorkshopCommands: Commands {
                 Button(section.title) {
                     selectSection(section)
                 }
-                .keyboardShortcut(KeyEquivalent(section.shortcut), modifiers: [.command, .option])
+                .keyboardShortcut(KeyEquivalent(section.shortcut), modifiers: .command)
                 .disabled(allowsEditing != true || editing.isSaving)
             }
             Divider()
@@ -129,18 +134,14 @@ struct WorkshopCommands: Commands {
         }
     }
 
-    private var newRecordTitle: String {
-        if navigation.selectedSection == .calibers { return "New Caliber" }
-        return "New Watch"
+    private var canCreate: Bool {
+        allowsEditing == true && NewRecord.canMake(in: navigation.selectedSection, editing: editing)
     }
 
-    private var canCreate: Bool {
-        guard allowsEditing == true else { return false }
-        if editing.isSaving { return false }
-        if navigation.selectedSection == .calibers {
-            return !editing.calibers.isLoading && editing.calibers.loadError == nil
-        }
-        return !editing.watches.isLoading && editing.watches.loadError == nil
+    // ⌘F puts the cursor in the toolbar's search field, from every section.
+    private func focusSearch() {
+        guard allowsEditing == true else { return }
+        navigation.focusSearch()
     }
 
     // Only the task and part editors still save with ⌘S.
@@ -163,17 +164,9 @@ struct WorkshopCommands: Commands {
 
     private func createRecord() {
         guard allowsEditing == true else { return }
-        let createsCaliber = navigation.selectedSection == .calibers
-        editing.requestNavigation {
-            search.close()
-            if createsCaliber {
-                editing.calibers.createCommand()
-            } else {
-                editing.jobs.close()
-                navigation.selection = .watches
-                editing.watches.createCommand()
-            }
-        }
+        NewRecord.make(
+            in: navigation.selectedSection, editing: editing, navigation: navigation,
+            search: search)
     }
 
     private func insertToday() {
@@ -187,7 +180,7 @@ struct WorkshopCommands: Commands {
     private func editRecord() { if canUseRecordActions { recordActions?.edit?() } }
     private func removeRecord() { if canUseRecordActions { recordActions?.remove?() } }
     private func exportOriginal() { if canUseRecordActions { recordActions?.exportOriginal?() } }
-    private func backToOwner() { if canUseRecordActions { recordBackAction?() } }
+    private func backToOwner() { if canUseRecordActions { recordBackAction?.action() } }
     private var canUseRecordActions: Bool {
         allowsEditing == true && !editing.isSaving && !editing.isNavigationPending
     }
@@ -196,8 +189,7 @@ struct WorkshopCommands: Commands {
 
     private func canMoveTask(_ destination: JobTaskMove) -> Bool {
         guard allowsEditing == true,
-            navigation.selectedSection == .watches || navigation.selectedSection == .workshop
-                || navigation.selectedSection == .parts,
+            navigation.selectedSection != .calibers,
             !editing.isSaving, !editing.hasUnsavedChanges,
             let task = editing.tasks.selectedTask, editing.jobs.selectedID == task.jobID
         else { return false }

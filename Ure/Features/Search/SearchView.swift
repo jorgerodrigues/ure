@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SearchView: View {
     @Environment(SearchState.self) private var search
+    @Environment(WorkshopNavigation.self) private var navigation
     @FocusState private var isFocused: Bool
 
     var body: some View {
@@ -47,10 +48,11 @@ struct SearchView: View {
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .navigationTitle("Search")
-        .searchable(text: $search.text, prompt: "Find in library")
+        .searchable(text: $search.text, placement: .toolbar, prompt: ToolbarSearchLayout.prompt)
         .searchFocused($isFocused)
         .task(id: search.request, search.observe)
         .onAppear(perform: activateSearch)
+        .onChange(of: navigation.searchFocusRequest, activateSearch)
         .toolbar {
             Button("Close Search", systemImage: "xmark", action: search.close)
                 .labelStyle(.iconOnly)

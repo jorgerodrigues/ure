@@ -222,7 +222,7 @@ nonisolated struct TaskPartServiceTests {
         let source = try fixture.source(type: .png)
         let bytes = try Data(contentsOf: source)
         let photo = try await material.importFiles([source], for: .job(job.id))[0].outcome.get()
-        try await material.setCover(photo.id, for: job.watchID)
+        try await material.setCover(photo.id, for: try #require(job.watchID))
         let watch = try #require(try await coordinator.read(WatchQueries.fetchAll).first)
         try await coordinator.mutate { db, _, _ in try TaskPartMigrationFixture.removeLinks(in: db)
         }

@@ -97,7 +97,7 @@ struct JobTaskDetailView: View {
         }
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                Button("Back to Job", systemImage: "chevron.left", action: back)
+                Button(RecordBack.jobTitle, systemImage: "chevron.left", action: back)
                     .disabled(editing.isSaving)
                     .accessibilityIdentifier("backFromTask")
             }
@@ -110,7 +110,8 @@ struct JobTaskDetailView: View {
         guard tasks.draft == nil, tasks.loadError == nil, tasks.selectedTask != nil,
             !editing.isSaving, tasks.canWrite(jobID, jobs: jobs)
         else { return RecordMenuActions() }
-        return RecordMenuActions(edit: edit, remove: requestRemoval)
+        return RecordMenuActions(
+            edit: edit, editTitle: "Edit Task", remove: requestRemoval, removeTitle: "Remove Task")
     }
 
     private func requestRemoval() {
@@ -118,9 +119,9 @@ struct JobTaskDetailView: View {
         editing.requestNavigation(tasks.requestRemoval)
     }
     private func edit() { tasks.edit(jobs: jobs) }
-    private var backAction: (() -> Void)? {
+    private var backAction: RecordBack? {
         guard !editing.isSaving else { return nil }
-        return back
+        return RecordBack(title: RecordBack.jobTitle, action: back)
     }
 
     private func back() { editing.requestNavigation(tasks.close) }

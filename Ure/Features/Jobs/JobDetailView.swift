@@ -3,6 +3,7 @@ import SwiftUI
 struct JobDetailView: View {
     @Environment(JobState.self) private var jobs
     @Environment(WorkshopEditing.self) private var editing
+    @Environment(WorkshopNavigation.self) private var navigation
     @Environment(MaterialState.self) private var material
     @Environment(JobTaskState.self) private var tasks
     @Environment(PartState.self) private var parts
@@ -20,21 +21,24 @@ struct JobDetailView: View {
             } else {
                 ContentUnavailableView(
                     "Job unavailable", systemImage: "wrench.and.screwdriver",
-                    description: Text("Return to the watch to choose another job."))
+                    description: Text("Choose another job."))
             }
         }
         .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button("Back to Watch", systemImage: "chevron.left", action: backToWatch)
-                    .accessibilityIdentifier("backToWatch")
-                    .disabled(editing.isSaving)
+            // In Jobs the list holds the job, so only a job opened from its watch goes back.
+            if navigation.selectedSection != .jobs {
+                ToolbarItem(placement: .navigation) {
+                    Button(RecordBack.watchTitle, systemImage: "chevron.left", action: backToWatch)
+                        .accessibilityIdentifier("backToWatch")
+                        .disabled(editing.isSaving)
+                }
             }
         }
     }
 
-    private var backAction: (() -> Void)? {
-        guard !editing.isSaving else { return nil }
-        return backToWatch
+    private var backAction: RecordBack? {
+        guard !editing.isSaving, navigation.selectedSection != .jobs else { return nil }
+        return RecordBack(title: RecordBack.watchTitle, action: backToWatch)
     }
 
     private func backToWatch() { editing.requestNavigation(jobs.close) }
@@ -46,6 +50,7 @@ struct JobDetailView: View {
 // and a Done job stays editable.
 private struct JobPage: View {
     @Environment(JobState.self) private var jobs
+    @Environment(WorkshopEditing.self) private var editing
     @Environment(WatchState.self) private var watches
     @Environment(CaliberState.self) private var calibers
     @Environment(WorkshopNavigation.self) private var navigation
@@ -56,6 +61,9 @@ private struct JobPage: View {
             VStack(alignment: .leading, spacing: PageLayout.sectionSpacing) {
                 if let facts = jobs.facts(for: job.id) {
                     JobHeader(job: job, facts: facts).zIndex(1)
+                }
+                if job.watchID == nil {
+                    JobWatchFacts(job: job, isEditable: isEditable).zIndex(2)
                 }
                 if let error = jobs.saveError {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
@@ -79,6 +87,8 @@ private struct JobPage: View {
     private var caliber: CaliberRecord? {
         calibers.caliber(watches.watches.first { $0.id == job.watchID }?.caliberID)
     }
+
+    private var isEditable: Bool { editing.canWrite(.job(job.id)) && !jobs.isSaving }
 }
 
 // The cover, the state with when the job opened, the title, the line that links the watch and
@@ -93,7 +103,8 @@ private struct JobHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: JobPageLayout.headerSpacing) {
             HStack(alignment: .center, spacing: JobPageLayout.headerSpacing) {
-                JobCover(job: job)
+                // A job without a watch has no cover yet, as on "6 New job".
+                if job.watchID != nil { JobCover(job: job) }
                 VStack(alignment: .leading, spacing: PageLayout.titleSpacing) {
                     HStack(spacing: JobPageLayout.stateSpacing) {
                         JobStatePopUp(job: job, isEditable: isEditable)
@@ -229,11 +240,12 @@ private struct JobLinks: View {
     }
 
     private func openWatch() {
+        guard let watchID = job.watchID else { return }
         editing.requestNavigation {
             editing.closeChildren()
             jobs.close()
             watches.searchText = ""
-            watches.select(job.watchID)
+            watches.select(watchID)
             navigation.selection = .watches
         }
     }
