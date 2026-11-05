@@ -91,7 +91,7 @@ nonisolated struct MaterialMigrationTests {
         let package = fixture.directory.appending(path: "before-material.watchbackup")
         let legacy = try LegacyMaterialFixture.package(at: package, sources: fixture)
         let staged = try await coordinator.stageRestore(from: package)
-        #expect(staged.summary.appliedMigrations == ["v20-material"])
+        #expect(staged.summary.appliedMigrations == ["v20-material", "v21-caliber-facts"])
         #expect(staged.summary.counts["libraryItem"] == LegacyMaterialFixture.items.count - 1)
         let result = try await coordinator.activateRestore(staged)
         #expect(result.outcome == .restored)
@@ -145,21 +145,13 @@ nonisolated struct MaterialMigrationTests {
                 kind: "Link", title: "Listing", sourceURL: "https://example.com",
                 sourceDescription: "",
                 notes: "", photoStage: nil, caption: nil) == nil)
-        #expect(MaterialMigration.appending(["A"], to: "") == "From the old record\n\nA")
-        #expect(
-            MaterialMigration.appending(["A"], to: "Text") == "Text\n\nFrom the old record\n\nA")
-        #expect(
-            MaterialMigration.appending(["A"], to: "Text\n") == "Text\n\nFrom the old record\n\nA")
-        #expect(
-            MaterialMigration.appending(["A", "B"], to: "Text\n\n")
-                == "Text\n\nFrom the old record\n\nA\n\nB")
-        #expect(MaterialMigration.appending([], to: "Text ") == "Text ")
     }
 }
 
 // Puts a current library back to the schema before v20, with the item fields that v20 drops.
 nonisolated enum MaterialMigrationFixture {
     static func restoreItemFields(in db: Database) throws {
+        try CaliberMigrationFixture.restoreCaliberFields(in: db)
         let covers = try Row.fetchAll(
             db, sql: "SELECT id, coverPhotoID FROM watch WHERE coverPhotoID IS NOT NULL")
         try db.execute(sql: "DROP TRIGGER watch_cover_insert")

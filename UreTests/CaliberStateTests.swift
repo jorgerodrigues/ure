@@ -5,6 +5,8 @@ import Testing
 @testable import Ure
 
 struct CaliberStateTests {
+    private let unitedStates = Locale(identifier: "en_US")
+
     @Test(.timeLimit(.minutes(1)))
     func unavailableLibraryShowsLoadErrorAndRetryRecovers() async throws {
         let fixture = WatchFixture()
@@ -25,187 +27,224 @@ struct CaliberStateTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func committedChangesRefreshListAndDetailWithoutReplacingAnOpenDraft() async throws {
+    func newCaliberIsSelectedWithTheCursorInItsName() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
-        let service = CaliberService(coordinator: coordinator)
-        let state = CaliberState(service: service)
+        let state = CaliberState(service: CaliberService(coordinator: coordinator))
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { !state.isLoading }
-        var draft = CaliberDraft()
-        draft.designation = "Saved caliber"
-        let saved = try await service.save(draft, editing: nil)
-        try await waitUntil { state.calibers.contains(saved) }
-        state.select(saved.id)
-        state.edit()
-        state.draft?.designation = "Keep my draft"
-        draft.designation = "Committed update"
-        let updated = try await service.save(draft, editing: saved.id)
-        try await waitUntil { state.selectedCaliber == updated }
-        #expect(state.draft?.designation == "Keep my draft")
-        state.searchText = "committed"
-        #expect(state.filteredCalibers == [updated])
-        state.cancel()
-        #expect(state.selectedCaliber == updated)
+        state.searchText = "Nothing matches"
+        #expect(await state.create())
+        let caliber = try #require(state.selectedCaliber)
+        #expect(caliber.designation == "New Caliber" && state.nameToFocus == caliber.id)
+        #expect(state.searchText.isEmpty && state.filteredCalibers == [caliber])
+        #expect(state.facts(for: caliber.id)?.name.text == "New Caliber")
+        state.nameFocused()
+        #expect(state.nameToFocus == nil)
+        try await waitUntil { state.calibers.count == 1 }
+        #expect(try await coordinator.read(CaliberQueries.fetchAll) == [caliber])
         observation.cancel()
         await observation.value
         try await coordinator.close()
     }
 
-    @Test
-    func cancelDiscardsNewAndEditedDraftsWithoutWriting() async throws {
+    @Test(.timeLimit(.minutes(1)))
+    func everyFactSavesWithoutAButtonAndShowsInTheRegionFormat() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
-        let state = CaliberState(service: CaliberService(coordinator: coordinator))
-        state.create()
-        state.draft?.designation = "Unsaved"
-        state.cancel()
-        #expect(state.draft == nil)
-        #expect(!state.hasUnsavedChanges)
-        #expect(try await coordinator.read(CaliberQueries.fetchAll).isEmpty)
-        state.create()
-        state.draft?.designation = "Saved"
-        #expect(await state.save())
-        let saved = try #require(state.selectedCaliber)
-        state.edit()
-        state.draft?.designation = "Unsaved edit"
-        state.cancel()
-        #expect(state.selectedCaliber == saved)
-        #expect(try await coordinator.read(CaliberQueries.fetchAll) == [saved])
-        try await coordinator.close()
-    }
-
-    @Test
-    func stayDiscardAndSaveProtectPendingNavigation() async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        let state = CaliberState(service: CaliberService(coordinator: coordinator))
-        var navigated = false
-        state.create()
-        state.draft?.designation = "Draft caliber"
-        state.requestNavigation { navigated = true }
-        #expect(state.showsUnsavedChanges)
-        #expect(!navigated)
-        state.stay()
-        #expect(state.draft?.designation == "Draft caliber")
-        #expect(!navigated)
-        state.requestNavigation { navigated = true }
-        await state.saveAndContinue()
-        #expect(navigated)
-        #expect(state.draft == nil)
-        #expect(state.selectedCaliber?.designation == "Draft caliber")
-        #expect(!state.showsUnsavedChanges)
-        state.edit()
-        state.draft?.designation = "Discarded edit"
-        navigated = false
-        state.requestNavigation { navigated = true }
-        state.discardAndContinue()
-        #expect(navigated)
-        #expect(state.selectedCaliber?.designation == "Draft caliber")
+        let gate = PauseGate()
+        let service = CaliberService(coordinator: coordinator)
+        let state = CaliberState(service: service, locale: unitedStates, pause: gate.pause)
+        let observation = Task { await state.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { !state.isLoading }
+        #expect(await state.create())
+        let id = try #require(state.selectedID)
+        let facts = try #require(state.facts(for: id))
+        let typed: [(FactField, String, String)] = [
+            (facts.name, "552", "552"), (facts.maker, " Omega ", "Omega"),
+            (facts.winding, "auto", "Automatic"), (facts.beatRate, "19800", "19,800 vph"),
+            (facts.jewels, "24 jewels", "24"), (facts.powerReserve, "50h", "50 h"),
+            (facts.liftAngle, "52.5", "52.5°"),
+        ]
+        for (field, text, shown) in typed {
+            field.beginEditing()
+            field.change(to: text, undoManager: nil)
+            #expect(state.hasUnsavedFacts)
+            field.endEditing()
+            try await waitUntil { field.text == shown && !field.hasUnsavedChanges }
+        }
+        let saved = try #require(try await coordinator.read(CaliberQueries.fetchAll).first)
+        #expect(saved.designation == "552" && saved.manufacturer == "Omega")
+        #expect(saved.winding == .automatic && saved.beatRate == 19_800)
+        #expect(saved.jewelCount == 24 && saved.powerReserve == 50 && saved.liftAngle == 52.5)
+        try await waitUntil { state.selectedCaliber == saved }
         #expect(
-            try await coordinator.read(CaliberQueries.fetchAll).first?.designation
-                == "Draft caliber")
-        try await coordinator.close()
-    }
+            state.makers == [FactSuggestion(text: "Omega", detail: "1 caliber")]
+                && !state.hasUnsavedFacts)
 
-    @Test
-    func failedSaveKeepsDraftAndCancelsClosureUntilRetrySucceeds() async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        try await coordinator.mutate { db, _, _ in
-            try db.execute(
-                sql: """
-                    CREATE TRIGGER failCaliberInsert BEFORE INSERT ON caliber
-                    BEGIN SELECT RAISE(ABORT, 'fixture disk failure'); END
-                    """)
-        }
-        let state = CaliberState(service: CaliberService(coordinator: coordinator))
-        state.create()
-        state.draft?.designation = "Keep this draft"
-        let draft = state.draft
-        var closed = false
-        var cancelled = false
-        state.requestNavigation({ closed = true }, onCancel: { cancelled = true })
-        await state.saveAndContinue()
-        #expect(!closed)
-        #expect(cancelled)
-        #expect(state.draft == draft)
-        #expect(state.saveError != nil)
-        #expect(!state.isSaving)
-        #expect(try await coordinator.read(CaliberQueries.fetchAll).isEmpty)
-        try await coordinator.mutate { db, _, _ in
-            try db.execute(sql: "DROP TRIGGER failCaliberInsert")
-        }
-        state.requestNavigation { closed = true }
-        await state.saveAndContinue()
-        #expect(closed)
-        #expect(state.selectedCaliber?.designation == "Keep this draft")
-        #expect(state.saveError == nil)
-        try await coordinator.close()
-    }
-
-    @Test
-    func validationErrorsKeepTheDraftAndClearAfterCorrection() async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        let state = CaliberState(service: CaliberService(coordinator: coordinator))
-        state.create()
-        state.draft?.beatRate = "-18"
-        #expect(!(await state.save()))
-        #expect(state.fieldErrors[.designation] != nil)
-        #expect(state.fieldErrors[.beatRate] != nil)
-        #expect(state.draft?.beatRate == "-18")
-        state.draft?.designation = "Caliber"
-        state.draft?.beatRate = "18"
-        #expect(await state.save())
-        #expect(state.fieldErrors.isEmpty)
-        #expect(state.saveError == nil)
+        facts.jewels.beginEditing()
+        facts.jewels.change(to: "2", undoManager: nil)
+        _ = try await service.update(id, .jewels(17))
+        _ = try await service.update(id, .maker("Omega SA"))
+        try await waitUntil { facts.maker.text == "Omega SA" }
+        #expect(facts.jewels.text == "2")
+        facts.jewels.endEditing()
+        try await waitUntil { !facts.jewels.hasUnsavedChanges }
+        #expect(try await coordinator.read(CaliberQueries.fetchAll).first?.jewelCount == 2)
+        observation.cancel()
+        await observation.value
         try await coordinator.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func repeatedSaveAndNavigationCannotInterruptAPendingWrite() async throws {
+    func invalidNumberStaysOnScreenAndTheCaliberKeepsItsLastGoodValue() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
-        let started = AsyncStream<Void>.makeStream()
-        let gate = DispatchSemaphore(value: 0)
-        defer { gate.signal() }
-        let blocker = Task {
-            try await coordinator.mutate { _, _, _ in
-                started.continuation.yield(())
-                gate.wait()
-            }
+        let service = CaliberService(coordinator: coordinator)
+        let caliber = try await service.update(
+            try await service.create(named: "552").id, .beatRate(19_800))
+        let state = CaliberState(service: service, locale: unitedStates, pause: PauseGate().pause)
+        let observation = Task { await state.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { state.calibers == [caliber] }
+        let field = try #require(state.facts(for: caliber.id)?.beatRate)
+        #expect(field.text == "19,800 vph")
+        field.beginEditing()
+        field.change(to: "19,80", undoManager: nil)
+        field.endEditing()
+        #expect(field.problem == "Enter a number, such as 28,800 vph.")
+        #expect(field.text == "19,80" && state.hasUnsavedFacts)
+        #expect(await !state.saveAllFacts())
+        #expect(try await coordinator.read(CaliberQueries.fetchAll) == [caliber])
+        _ = try await service.update(caliber.id, .name("552 Elaboré"))
+        try await waitUntil { state.calibers.first?.designation == "552 Elaboré" }
+        #expect(field.text == "19,80")
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func undoChangesASavedFactBackAndRedoSavesItAgain() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let service = CaliberService(coordinator: coordinator)
+        let caliber = try await service.create(named: "552")
+        let state = CaliberState(service: service, locale: unitedStates, pause: PauseGate().pause)
+        let observation = Task { await state.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { state.calibers == [caliber] }
+        let field = try #require(state.facts(for: caliber.id)?.liftAngle)
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        field.beginEditing()
+        undo.beginUndoGrouping()
+        field.change(to: "52", undoManager: undo)
+        undo.endUndoGrouping()
+        field.endEditing()
+        try await waitUntil { field.text == "52°" && !field.hasUnsavedChanges }
+        #expect(try await coordinator.read(CaliberQueries.fetchAll).first?.liftAngle == 52)
+        #expect(undo.undoMenuItemTitle == "Undo Lift Angle")
+        undo.undo()
+        try await waitUntil { field.text.isEmpty && !field.hasUnsavedChanges }
+        #expect(try await coordinator.read(CaliberQueries.fetchAll).first?.liftAngle == nil)
+        undo.redo()
+        try await waitUntil { field.text == "52°" && !field.hasUnsavedChanges }
+        #expect(try await coordinator.read(CaliberQueries.fetchAll).first?.liftAngle == 52)
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func archivingWaitsForFactsStillSavingAndThenStopsChanges() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let service = CaliberService(coordinator: coordinator)
+        let caliber = try await service.create(named: "552")
+        let state = CaliberState(service: service, locale: unitedStates, pause: PauseGate().pause)
+        let observation = Task { await state.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { state.calibers == [caliber] }
+        state.select(caliber.id)
+        let maker = try #require(state.facts(for: caliber.id)?.maker)
+        maker.beginEditing()
+        maker.change(to: "Omega", undoManager: nil)
+        #expect(await state.toggleArchive())
+        let archived = try #require(try await coordinator.read(CaliberQueries.fetchAll).first)
+        #expect(archived.manufacturer == "Omega" && archived.archivedAt != nil)
+        #expect(!maker.hasUnsavedChanges && maker.saveError == nil)
+        await #expect(throws: ArchiveError.archived) {
+            try await service.update(caliber.id, .maker("Changed while archived"))
         }
-        var iterator = started.stream.makeAsyncIterator()
-        _ = await iterator.next()
-        let state = CaliberState(service: CaliberService(coordinator: coordinator))
-        state.create()
-        state.draft?.designation = "One caliber"
-        let saving = Task { await state.save() }
-        try await waitUntil { state.isSaving }
-        #expect(!(await state.save()))
+        #expect(await state.toggleArchive())
+        let beatRate = try #require(state.facts(for: caliber.id)?.beatRate)
+        beatRate.beginEditing()
+        beatRate.change(to: "fast", undoManager: nil)
+        beatRate.endEditing()
+        #expect(await !state.toggleArchive())
+        #expect(state.saveError != nil && beatRate.text == "fast")
+        #expect(try await coordinator.read(CaliberQueries.fetchAll).first?.archivedAt == nil)
+        beatRate.beginEditing()
+        beatRate.change(to: "28800", undoManager: nil)
+        #expect(await state.toggleArchive())
+        let saved = try #require(try await coordinator.read(CaliberQueries.fetchAll).first)
+        #expect(saved.beatRate == 28_800 && saved.archivedAt != nil && state.saveError == nil)
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func factsSaveWhenLeavingOrQuittingWithoutTheDraftQuestion() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let service = CaliberService(coordinator: coordinator)
+        let caliber = try await service.create(named: "552")
+        let calibers = CaliberState(
+            service: service, locale: unitedStates, pause: PauseGate().pause)
+        let editing = WorkshopEditing(
+            watches: WatchState(service: WatchService(coordinator: coordinator)),
+            calibers: calibers, jobs: JobState(service: JobService(coordinator: coordinator)),
+            notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
+            material: MaterialState(service: MaterialService(coordinator: coordinator)),
+            tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
+            parts: PartState(service: PartService(coordinator: coordinator)))
+        let observation = Task { await calibers.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { calibers.calibers == [caliber] }
+        let facts = try #require(calibers.facts(for: caliber.id))
+        facts.name.beginEditing()
+        facts.name.change(to: "552 typed before leaving", undoManager: nil)
+        #expect(editing.hasUnsavedFields && !editing.hasUnsavedChanges)
         var navigated = false
-        state.requestNavigation { navigated = true }
-        state.cancel()
-        #expect(!navigated)
-        #expect(state.draft?.designation == "One caliber")
-        gate.signal()
-        try await blocker.value
-        #expect(await saving.value)
-        #expect(try await coordinator.read(CaliberQueries.fetchAll).count == 1)
+        editing.requestNavigation { navigated = true }
+        #expect(navigated && !editing.showsUnsavedChanges)
+        try await waitUntil { !facts.name.hasUnsavedChanges }
+        #expect(
+            try await coordinator.read(CaliberQueries.fetchAll).first?.designation
+                == "552 typed before leaving")
+        facts.powerReserve.beginEditing()
+        facts.powerReserve.change(to: "42", undoManager: nil)
+        #expect(await editing.saveAllFields())
+        #expect(try await coordinator.read(CaliberQueries.fetchAll).first?.powerReserve == 42)
+        #expect(!editing.hasUnsavedFields)
+        observation.cancel()
+        await observation.value
         try await coordinator.close()
     }
 

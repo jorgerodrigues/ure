@@ -4,7 +4,8 @@ import Observation
 // One text field that saves as you type. A change saves after a pause in typing, when focus
 // leaves, and when the app asks for every field to save. Each burst of typing is one Undo step,
 // and Undo and Redo save again. Esc puts back the text the field had when focus entered it.
-// Undo never offers back a text the field does not accept, such as a blank title.
+// A text the field does not accept, such as a blank title or a number it cannot read, stays on
+// screen but never saves, so the record keeps the last text it accepted. Undo never offers it back.
 @Observable
 final class AutosaveField {
     static let typingPause: Duration = .milliseconds(500)
@@ -93,6 +94,7 @@ final class AutosaveField {
                 saveError = nil
                 return true
             }
+            guard accepts(text) else { return false }
             let value = text
             let task = Task {
                 let succeeded = await write(value)

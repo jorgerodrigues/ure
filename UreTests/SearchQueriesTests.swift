@@ -13,10 +13,8 @@ nonisolated struct SearchQueriesTests {
         let coordinator = LibraryCoordinator(
             root: fixture.root, dependencies: LibraryDependencies(now: { date }))
         _ = try await coordinator.open()
-        var caliberDraft = CaliberDraft()
-        caliberDraft.designation = "ÉТА 0012/Å"
-        let caliber = try await CaliberService(coordinator: coordinator).save(
-            caliberDraft, editing: nil)
+        let caliber = try await CaliberService(coordinator: coordinator).create(
+            named: "ÉТА 0012/Å")
         var watchDraft = WatchDraft()
         watchDraft.name = "Straße 時計"
         watchDraft.brand = "ΜΆΡΚΑ"
@@ -94,10 +92,8 @@ nonisolated struct SearchQueriesTests {
         editedWatch.name = "Corrected watch"
         editedWatch.serial = "0099-new"
         _ = try await WatchService(coordinator: restarted).save(editedWatch, editing: watch.id)
-        var editedCaliber = CaliberDraft(caliber: caliber)
-        editedCaliber.designation = "Corrected caliber"
-        _ = try await CaliberService(coordinator: restarted).save(
-            editedCaliber, editing: caliber.id)
+        _ = try await CaliberService(coordinator: restarted).update(
+            caliber.id, .name("Corrected caliber"))
         var editedJob = JobDraft(job: job)
         editedJob.title = "Corrected repair"
         _ = try await JobService(coordinator: restarted).save(
@@ -208,20 +204,18 @@ nonisolated struct SearchQueriesTests {
     }
 
     @Test
-    func duplicateCaliberDesignationsUseTheirVariantsInResultsAndOwnedContext() async throws {
+    func duplicateCaliberNamesUseTheirMakersInResultsAndOwnedContext() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let date = Date(timeIntervalSince1970: 1_700_000_000)
         let coordinator = fixture.coordinator(dependencies: LibraryDependencies(now: { date }))
         _ = try await coordinator.open()
         var labels: [UUID: String] = [:]
-        for variant in ["Elaboré", "Top"] {
-            var draft = CaliberDraft()
-            draft.designation = "ETA 2824-2"
-            draft.variant = variant
-            let caliber = try await CaliberService(coordinator: coordinator).save(
-                draft, editing: nil)
-            labels[caliber.id] = caliber.label
+        let service = CaliberService(coordinator: coordinator)
+        for maker in ["ETA", "Sellita"] {
+            let created = try await service.create(named: "2824-2")
+            let caliber = try await service.update(created.id, .maker(maker))
+            labels[caliber.id] = caliber.title
             try await RecordNotesService(coordinator: coordinator).save(
                 "Service interval", for: .caliber(caliber.id))
             _ = try await MaterialFixture.link(

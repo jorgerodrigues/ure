@@ -10,34 +10,61 @@ struct MaterialSectionView: View {
     @State private var showsImporter = false
     let owner: LibraryItemOwner
     var caliber: CaliberRecord?
+    var style = RecordSectionStyle.form
 
     var body: some View {
-        Section("Material") {
-            if material.isLoading {
-                ProgressView("Loading material…")
-            } else if let error = material.loadError {
-                Label(error, systemImage: "exclamationmark.triangle")
-                Button("Retry", action: retry)
-            } else {
-                MaterialTiles(owner: owner, isEditable: editing.canWrite(owner))
-                if editing.canWrite(owner) {
-                    MaterialDropStrip(choose: chooseFiles, drop: addDropped, paste: paste)
-                        .disabled(editing.isSaving)
-                } else {
-                    Text(readOnlyMessage).foregroundStyle(.secondary)
-                }
-                MaterialImportProgress(owner: owner)
-                if let error = material.errors[owner] {
-                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
-                }
-                if let caliber {
-                    CaliberMaterialChips(caliber: caliber, page: owner)
+        Group {
+            switch style {
+            case .form:
+                Section("Material") { content }
+            case .page:
+                VStack(alignment: .leading, spacing: PageLayout.headingSpacing) {
+                    PageSectionHeading(title: "Material", detail: counts)
+                    content
                 }
             }
         }
         .fileImporter(
             isPresented: $showsImporter, allowedContentTypes: [.item],
             allowsMultipleSelection: true, onCompletion: pickedFiles)
+    }
+
+    // How much material there is, such as "2 PDFs · 1 photo · 1 link".
+    private var counts: String? {
+        let records = material.records(for: owner)
+        let parts: [(LibraryItemKind, String, String)] = [
+            (.document, "PDF", "PDFs"), (.photo, "photo", "photos"), (.link, "link", "links"),
+        ]
+        let text = parts.compactMap { kind, one, many -> String? in
+            let count = records.filter { $0.item.kind == kind }.count
+            if count == 0 { return nil }
+            return count == 1 ? "1 \(one)" : "\(count) \(many)"
+        }
+        return text.isEmpty ? nil : text.joined(separator: " · ")
+    }
+
+    @ViewBuilder private var content: some View {
+        if material.isLoading {
+            ProgressView("Loading material…")
+        } else if let error = material.loadError {
+            Label(error, systemImage: "exclamationmark.triangle")
+            Button("Retry", action: retry)
+        } else {
+            MaterialTiles(owner: owner, isEditable: editing.canWrite(owner))
+            if editing.canWrite(owner) {
+                MaterialDropStrip(choose: chooseFiles, drop: addDropped, paste: paste)
+                    .disabled(editing.isSaving)
+            } else {
+                Text(readOnlyMessage).foregroundStyle(.secondary)
+            }
+            MaterialImportProgress(owner: owner)
+            if let error = material.errors[owner] {
+                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+            }
+            if let caliber {
+                CaliberMaterialChips(caliber: caliber, page: owner)
+            }
+        }
     }
 
     private var readOnlyMessage: String {
@@ -255,7 +282,7 @@ private struct CaliberMaterialChips: View {
         let records = material.records(for: .caliber(caliber.id))
         if !records.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                Text("From \(caliber.materialName):")
+                Text("From \(caliber.title):")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 ChipFlowLayout(spacing: 6) {
@@ -265,7 +292,7 @@ private struct CaliberMaterialChips: View {
                 }
             }
             .accessibilityElement(children: .contain)
-            .accessibilityLabel("Material from \(caliber.materialName)")
+            .accessibilityLabel("Material from \(caliber.title)")
         }
     }
 }
@@ -384,13 +411,5 @@ extension LibraryItem {
             style = style.year()
         }
         return "\(kind.title) · \(createdAt.formatted(style))"
-    }
-}
-
-extension CaliberRecord {
-    // The caliber's maker and designation, such as "Omega 552".
-    var materialName: String {
-        guard let manufacturer, !manufacturer.isEmpty else { return label }
-        return "\(manufacturer) \(label)"
     }
 }

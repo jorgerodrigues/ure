@@ -43,5 +43,6 @@ final class WorkshopSession {
         bench.clearForRestore()
         notes.discardUndo()
         material.discardUndo()
+        calibers.discardUndo()
     }
 }

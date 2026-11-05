@@ -42,17 +42,16 @@ struct ArchiveStateTests {
         #expect(await editing.calibers.toggleArchive())
         try await SearchEditingFixture.waitUntil { editing.calibers.filteredCalibers.count == 1 }
         #expect(editing.canWrite(LibraryItemOwner.caliber(caliber.id)))
-        editing.calibers.edit()
-        editing.calibers.draft?.designation = "Keep caliber correction"
+        let name = try #require(editing.calibers.facts(for: caliber.id)?.name)
+        name.beginEditing()
+        name.change(to: "Keep caliber correction", undoManager: nil)
         editing.archive.open(.watch(watch.id), editing: editing)
         #expect(
-            editing.showsUnsavedChanges && editing.archive.selectedTarget == .caliber(caliber.id))
-        editing.stay()
-        #expect(editing.calibers.draft?.designation == "Keep caliber correction")
-        editing.archive.open(.watch(watch.id), editing: editing)
-        await editing.saveAndContinue()
-        #expect(editing.archive.selectedTarget == .watch(watch.id))
-        #expect(editing.calibers.draft == nil)
+            !editing.showsUnsavedChanges && editing.archive.selectedTarget == .watch(watch.id))
+        try await SearchEditingFixture.waitUntil { !name.hasUnsavedChanges }
+        #expect(
+            try await coordinator.read(CaliberQueries.fetchAll).first?.designation
+                == "Keep caliber correction")
         #expect(await editing.watches.toggleArchive())
         try await SearchEditingFixture.waitUntil { editing.watches.filteredWatches.count == 1 }
         editing.archive.searchText = job.title.uppercased()

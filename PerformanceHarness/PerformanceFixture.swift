@@ -22,8 +22,8 @@ nonisolated enum PerformanceFixture {
             for index in 0..<50 {
                 try db.execute(
                     sql: """
-                        INSERT INTO caliber (id, designation, movementType, createdAt, updatedAt, archivedAt)
-                        VALUES (?, ?, 'Unknown', ?, ?, ?)
+                        INSERT INTO caliber (id, designation, createdAt, updatedAt, archivedAt)
+                        VALUES (?, ?, ?, ?, ?)
                         """,
                     arguments: [
                         try id(1, index).uuidString, "Synthetic caliber \(index)", date, date,

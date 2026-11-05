@@ -634,6 +634,25 @@ nonisolated enum LibrarySchema {
                 try SearchKey.backfill(table, fields: fields, in: db)
             }
         }
+        migrator.registerMigration("v21-caliber-facts", foreignKeyChecks: .immediate) { db in
+            try CaliberMigration.preserveRemovedFields(in: db)
+            try db.alter(table: "caliber") { table in
+                table.add(column: "winding", .text)
+                    .check(sql: "winding IN ('Manual', 'Automatic', 'Quartz')")
+            }
+            try db.execute(
+                sql: """
+                    UPDATE caliber SET winding = movementType
+                    WHERE movementType IN ('Manual', 'Automatic', 'Quartz')
+                    """)
+            try db.alter(table: "caliber") { table in
+                for column in ["variant", "movementType", "specificationNotes", "sourceNote"] {
+                    table.drop(column: column)
+                }
+            }
+            try SearchKey.backfill(
+                "caliber", fields: ["designation", "manufacturer", "notes"], in: db)
+        }
         return migrator
     }
 }

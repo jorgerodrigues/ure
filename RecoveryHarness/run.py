@@ -19,7 +19,7 @@ WORKER = Path(sys.argv[1]).resolve()
 RUN = REPO / ".build/recovery-runs" / str(uuid.uuid4())
 GENERATION = "00000000-0000-4000-8000-000000000001"
 VERSIONS = ("v10-documents", "v15-part-procurement")
-CURRENT_MIGRATION = "v20-material"
+CURRENT_MIGRATION = "v21-caliber-facts"
 # Columns that a later migration removes on purpose.
 REMOVED_COLUMNS = {
     "partLink": {
@@ -28,12 +28,18 @@ REMOVED_COLUMNS = {
     },
     "partRequirement": {"supplierSnapshot"},
     "libraryItem": {"sourceURL", "sourceDescription", "notes", "photoStage", "caption"},
+    "caliber": {"variant", "specificationNotes", "sourceNote", "movementType"},
 }
 # Library item fields that v20 writes into the owner's notes, with the label before each value.
 MOVED_INTO_NOTES = (
     ("photoStage", "Stage: "), ("caption", "Caption: "), ("sourceDescription", "Source description: "),
     ("notes", "Notes: "),
 )
+# Caliber fields that v21 writes into the caliber's notes, with the label before each value.
+CALIBER_INTO_NOTES = (
+    ("variant", "Variant: "), ("specificationNotes", "Specification notes: "), ("sourceNote", "Source note: "),
+)
+WINDINGS = ("Manual", "Automatic", "Quartz")
 # Tables that a later migration joins into the notes text of the record that owns each row.
 JOINED_INTO_NOTES = {"note"}
 NOTE_OWNERS = (("watchID", "watch"), ("jobID", "job"), ("caliberID", "caliber"))
@@ -157,11 +163,27 @@ def material_preserved(rows, after):
             require(kind_title + " · " + row["title"] in notes, "libraryItem: title in owner notes")
 
 
+def calibers_preserved(rows, after):
+    calibers = {row["id"]: row for row in after["tables"]["caliber"]}
+    for row in rows:
+        kept = calibers[row["id"]]
+        expected = row["movementType"] if row["movementType"] in WINDINGS else None
+        require(kept["winding"] == expected, "caliber: winding kept, Unknown and Other cleared")
+        if row["movementType"] == "Other":
+            require("Movement type: Other" in kept["notes"], "caliber: Other in notes")
+        for column, label in CALIBER_INTO_NOTES:
+            value = row[column] or ""
+            if value.strip():
+                require(label + value.rstrip() in kept["notes"], f"caliber: {column} in notes")
+
+
 def preserved(before, after):
     require(before["originals"] == after["originals"], "Original and technical PDF bytes preserved")
     for table, rows in before["tables"].items():
         if table == "libraryItem" and rows and "sourceURL" in rows[0]:
             material_preserved(rows, after)
+        if table == "caliber" and rows and "movementType" in rows[0]:
+            calibers_preserved(rows, after)
         if table in JOINED_INTO_NOTES:
             require(table not in after["tables"], f"{table}: joined into record notes")
             for note in rows:

@@ -67,11 +67,8 @@ nonisolated struct JobServiceTests {
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
-        var caliberDraft = CaliberDraft()
-        caliberDraft.designation = "0012–Å"
-        caliberDraft.variant = "0002-A"
-        let caliber = try await CaliberService(coordinator: coordinator).save(
-            caliberDraft, editing: nil)
+        let calibers = CaliberService(coordinator: coordinator)
+        let caliber = try await calibers.create(named: "0012–Å")
         var watchDraft = fixture.completeDraft
         watchDraft.caliberID = caliber.id
         let watch = try await WatchService(coordinator: coordinator).save(
@@ -81,15 +78,13 @@ nonisolated struct JobServiceTests {
         draft.title = "First repair"
         let first = try await service.save(draft, for: watch.id, editing: nil)
         #expect(first.intakeSnapshot.caliberDesignation == "0012–Å")
-        #expect(first.intakeSnapshot.caliberVariant == "0002-A")
+        #expect(first.intakeSnapshot.caliberVariant == nil)
         watchDraft.name = "Current name"
         watchDraft.serial = "Different serial"
         _ = try await WatchService(coordinator: coordinator).save(
             watchDraft, editing: watch.id, locale: Locale(identifier: "da_DK"))
-        caliberDraft.designation = "Corrected designation"
-        caliberDraft.variant = "B"
-        _ = try await CaliberService(coordinator: coordinator).save(
-            caliberDraft, editing: caliber.id)
+        _ = try await calibers.update(caliber.id, .name("Corrected designation"))
+        _ = try await calibers.update(caliber.id, .maker("Corrected maker"))
         #expect(
             try await coordinator.read { db in try JobQueries.fetch(first.id, in: db) } == first)
         draft = JobDraft(job: first)
@@ -324,9 +319,7 @@ nonisolated struct JobServiceTests {
         defer { fixture.remove() }
         let old = fixture.coordinator()
         let before = try await old.open()
-        var caliberDraft = CaliberDraft()
-        caliberDraft.designation = "0012"
-        let caliber = try await CaliberService(coordinator: old).save(caliberDraft, editing: nil)
+        let caliber = try await CaliberService(coordinator: old).create(named: "0012")
         var watchDraft = fixture.completeDraft
         watchDraft.caliberID = caliber.id
         let watch = try await WatchService(coordinator: old).save(

@@ -64,9 +64,9 @@ nonisolated enum SearchQueries {
                         r.archivedAt IS NOT NULL AS isArchived, r.searchKey
                     FROM watch r
                     UNION ALL
-                    SELECT r.id, 'Caliber', r.designation || coalesce(' · ' || r.variant, ''),
+                    SELECT r.id, 'Caliber', \(caliberTitle("r")),
                         NULL, NULL, r.id, NULL, NULL,
-                        r.designation || coalesce(' · ' || r.variant, ''), r.archivedAt IS NOT NULL, r.searchKey
+                        \(caliberTitle("r")), r.archivedAt IS NOT NULL, r.searchKey
                     FROM caliber r
                     UNION ALL
                     SELECT r.id, 'Job', r.title, w.id, r.id, NULL,
@@ -81,7 +81,7 @@ nonisolated enum SearchQueries {
                     JOIN job j ON j.id = r.jobID JOIN watch w ON w.id = j.watchID
                     UNION ALL
                     SELECT r.id, r.kind, r.title, w.id, j.id, c.id,
-                        w.name, j.title, c.designation || coalesce(' · ' || c.variant, ''),
+                        w.name, j.title, \(caliberTitle("c")),
                         w.archivedAt IS NOT NULL OR j.archivedAt IS NOT NULL
                             OR c.archivedAt IS NOT NULL, r.searchKey
                     FROM libraryItem r
@@ -92,5 +92,10 @@ nonisolated enum SearchQueries {
                 SELECT * FROM results WHERE (? OR isArchived = 0) AND instr(searchKey, ?) > 0
                 ORDER BY kind, title, recordID
                 """, arguments: [includeArchived, key])
+    }
+
+    // A caliber's maker and name in SQL, such as "Omega 552", as CaliberRecord.title gives it.
+    private static func caliberTitle(_ table: String) -> String {
+        "coalesce(nullif(\(table).manufacturer, '') || ' ', '') || \(table).designation"
     }
 }

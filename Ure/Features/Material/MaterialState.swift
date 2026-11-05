@@ -118,9 +118,11 @@ final class MaterialState {
         for field in unsavedTitleFields { field.saveNow() }
     }
 
+    // A blank title never saves, so quitting puts back the title it had instead of asking.
     func saveAllTitles() async -> Bool {
         var succeeded = true
         for field in unsavedTitleFields {
+            if !Self.isTitle(field.text) { field.revert(undoManager: nil) }
             if await !field.flush() { succeeded = false }
         }
         return succeeded

@@ -197,7 +197,7 @@ struct WorkshopView: View {
         didRestoreSelection = true
         guard !editing.hasUnsavedChanges, !editing.isSaving, watches.draft == nil,
             navigation.selectedSection == .workshop, calibers.selectedID == nil,
-            calibers.draft == nil, !jobs.isEditing, tasks.draft == nil, parts.draft == nil,
+            !jobs.isEditing, tasks.draft == nil, parts.draft == nil,
             watches.selectedID == nil, jobs.selectedID == nil,
             let job = jobs.jobs.first(where: { $0.id == bench.jobID })
         else { return }

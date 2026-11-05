@@ -23,7 +23,7 @@ nonisolated enum SearchKey {
             switch self {
             case .watch:
                 ["name", "brand", "model", "caseReference", "serial", "approximateYear", "notes"]
-            case .caliber: ["designation", "manufacturer", "variant", "notes"]
+            case .caliber: ["designation", "manufacturer", "notes"]
             case .job: ["title", "notes"]
             case .libraryItem: ["title"]
             case .partRequirement: ["description", "manufacturerReference"]

@@ -1,14 +1,24 @@
 import Foundation
 import GRDB
 
-nonisolated enum MovementType: String, Codable, CaseIterable, Identifiable, Sendable {
-    case unknown = "Unknown"
+// How a movement is wound. A caliber whose winding nobody has written down has none.
+nonisolated enum Winding: String, Codable, CaseIterable, Identifiable, Sendable {
     case manual = "Manual"
     case automatic = "Automatic"
     case quartz = "Quartz"
-    case other = "Other"
 
     var id: Self { self }
+
+    // A winding written in full or by its first letters, such as "auto", in any case.
+    init?(written text: String) {
+        let typed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !typed.isEmpty,
+            let match = Self.allCases.first(where: { winding in
+                winding.rawValue.range(of: typed, options: [.anchored, .caseInsensitive]) != nil
+            })
+        else { return nil }
+        self = match
+    }
 }
 
 nonisolated struct CaliberRecord: Codable, Equatable, Identifiable, Sendable, FetchableRecord,
@@ -17,25 +27,22 @@ nonisolated struct CaliberRecord: Codable, Equatable, Identifiable, Sendable, Fe
     static let databaseTableName = "caliber"
 
     let id: UUID
-    let designation: String
-    let manufacturer: String?
-    let variant: String?
-    let movementType: MovementType
-    let beatRate: Double?
-    let jewelCount: Double?
-    let powerReserve: Double?
-    let liftAngle: Double?
-    let specificationNotes: String?
-    let sourceNote: String?
+    var designation: String
+    var manufacturer: String?
+    var winding: Winding?
+    var beatRate: Double?
+    var jewelCount: Double?
+    var powerReserve: Double?
+    var liftAngle: Double?
     let createdAt: Date
-    let updatedAt: Date
-
-    var label: String {
-        if let variant { return "\(designation) · \(variant)" }
-        return designation
-    }
-
+    var updatedAt: Date
     var archivedAt: Date? = nil
+
+    // The caliber's maker and name, such as "Omega 552".
+    var title: String {
+        guard let manufacturer, !manufacturer.isEmpty else { return designation }
+        return "\(manufacturer) \(designation)"
+    }
 
     static func databaseUUIDEncodingStrategy(for column: String) -> DatabaseUUIDEncodingStrategy {
         .uppercaseString
@@ -53,7 +60,7 @@ nonisolated struct CaliberRecord: Codable, Equatable, Identifiable, Sendable, Fe
 nonisolated enum CaliberQueries {
     static func fetchAll(_ db: Database) throws -> [CaliberRecord] {
         try CaliberRecord.fetchAll(
-            db, sql: "SELECT * FROM caliber ORDER BY designation COLLATE NOCASE, variant, id")
+            db, sql: "SELECT * FROM caliber ORDER BY designation COLLATE NOCASE, id")
     }
 
     static func fetch(_ id: UUID, in db: Database) throws -> CaliberRecord? {

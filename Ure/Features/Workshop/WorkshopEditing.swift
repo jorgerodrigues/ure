@@ -47,19 +47,23 @@ final class WorkshopEditing {
         material.close()
     }
 
-    // Fields that save as you type, such as notes and material titles. They never ask to be
-    // saved, so they are not drafts.
-    var hasUnsavedFields: Bool { notes.hasUnsavedChanges || material.hasUnsavedTitles }
+    // Fields that save as you type, such as notes, material titles and caliber facts. They
+    // never ask to be saved, so they are not drafts.
+    var hasUnsavedFields: Bool {
+        notes.hasUnsavedChanges || material.hasUnsavedTitles || calibers.hasUnsavedFacts
+    }
 
     func saveFieldsNow() {
         notes.saveNow()
         material.saveTitlesNow()
+        calibers.saveFactsNow()
     }
 
     func saveAllFields() async -> Bool {
         let notesSaved = await notes.saveAll()
         let titlesSaved = await material.saveAllTitles()
-        return notesSaved && titlesSaved
+        let factsSaved = await calibers.saveAllFacts()
+        return notesSaved && titlesSaved && factsSaved
     }
 
     var isSaving: Bool {
@@ -68,8 +72,7 @@ final class WorkshopEditing {
     }
     var canCancelDraft: Bool {
         guard !isSaving, !isNavigationPending else { return false }
-        return parts.draft != nil || tasks.draft != nil
-            || jobs.isEditing || calibers.draft != nil || watches.draft != nil
+        return parts.draft != nil || tasks.draft != nil || jobs.isEditing || watches.draft != nil
     }
 
     func cancelDraft() {
@@ -80,8 +83,6 @@ final class WorkshopEditing {
             tasks.cancel()
         } else if jobs.isEditing {
             jobs.cancel()
-        } else if calibers.draft != nil {
-            calibers.cancel()
         } else {
             watches.cancel()
         }
@@ -102,24 +103,22 @@ final class WorkshopEditing {
         jobs.saveCommand()
     }
     var hasUnsavedChanges: Bool {
-        watches.hasUnsavedChanges || calibers.hasUnsavedChanges || jobs.hasUnsavedChanges
-            || tasks.hasUnsavedChanges || parts.hasUnsavedChanges
+        watches.hasUnsavedChanges || jobs.hasUnsavedChanges || tasks.hasUnsavedChanges
+            || parts.hasUnsavedChanges
     }
     var isNavigationPending: Bool {
-        watches.isNavigationPending || calibers.isNavigationPending || jobs.isNavigationPending
-            || tasks.isNavigationPending || parts.isNavigationPending
+        watches.isNavigationPending || jobs.isNavigationPending || tasks.isNavigationPending
+            || parts.isNavigationPending
     }
 
     var showsUnsavedChanges: Bool {
         get {
-            watches.showsUnsavedChanges || calibers.showsUnsavedChanges || jobs.showsUnsavedChanges
-                || tasks.showsUnsavedChanges || parts.showsUnsavedChanges
+            watches.showsUnsavedChanges || jobs.showsUnsavedChanges || tasks.showsUnsavedChanges
+                || parts.showsUnsavedChanges
         }
         set {
             if watches.isNavigationPending {
                 watches.showsUnsavedChanges = newValue
-            } else if calibers.isNavigationPending {
-                calibers.showsUnsavedChanges = newValue
             } else if jobs.isNavigationPending {
                 jobs.showsUnsavedChanges = newValue
             } else if tasks.isNavigationPending {
@@ -132,7 +131,6 @@ final class WorkshopEditing {
 
     var unsavedChangesTitle: String {
         if watches.isNavigationPending { return "Save changes to this watch?" }
-        if calibers.isNavigationPending { return "Save changes to this caliber?" }
         if jobs.isNavigationPending { return "Save changes to this job?" }
         if tasks.isNavigationPending { return "Save changes to this task?" }
         return "Save changes to this part?"
@@ -146,25 +144,20 @@ final class WorkshopEditing {
         saveFieldsNow()
         watches.requestNavigation(
             {
-                self.calibers.requestNavigation(
+                self.jobs.requestNavigation(
                     {
-                        self.jobs.requestNavigation(
+                        self.tasks.requestNavigation(
                             {
-                                self.tasks.requestNavigation(
-                                    {
-                                        self.parts.requestNavigation(action, onCancel: onCancel)
-                                    }, onCancel: onCancel)
-                            },
-                            onCancel: onCancel)
-                    }, onCancel: onCancel)
+                                self.parts.requestNavigation(action, onCancel: onCancel)
+                            }, onCancel: onCancel)
+                    },
+                    onCancel: onCancel)
             }, onCancel: onCancel)
     }
 
     func stay() {
         if watches.isNavigationPending {
             watches.stay()
-        } else if calibers.isNavigationPending {
-            calibers.stay()
         } else if jobs.isNavigationPending {
             jobs.stay()
         } else if tasks.isNavigationPending {
@@ -177,8 +170,6 @@ final class WorkshopEditing {
     func discardAndContinue() {
         if watches.isNavigationPending {
             watches.discardAndContinue()
-        } else if calibers.isNavigationPending {
-            calibers.discardAndContinue()
         } else if jobs.isNavigationPending {
             jobs.discardAndContinue()
         } else if tasks.isNavigationPending {
@@ -195,8 +186,6 @@ final class WorkshopEditing {
     func saveAndContinue() async {
         if watches.isNavigationPending {
             await watches.saveAndContinue()
-        } else if calibers.isNavigationPending {
-            await calibers.saveAndContinue()
         } else if jobs.isNavigationPending {
             guard canSaveJob else { jobs.stay(); return }
             await jobs.saveAndContinue()
