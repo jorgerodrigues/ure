@@ -36,17 +36,20 @@ struct CaliberListView: View {
                     ForEach(calibers.filteredCalibers) { caliber in
                         CaliberRow(caliber: caliber, watchCount: watchCount(caliber.id))
                             .tag(caliber.id)
+                            .listRowSeparator(.hidden)
                     }
                     if !calibers.archivedCalibers.isEmpty {
                         ArchivedSectionHeader(
                             count: calibers.archivedCalibers.count,
                             isExpanded: $calibers.showsArchived
                         )
+                        .listRowSeparator(.hidden)
                         .accessibilityIdentifier("archivedCalibers")
                         if calibers.showsArchived {
                             ForEach(calibers.archivedCalibers) { caliber in
                                 CaliberRow(caliber: caliber, watchCount: watchCount(caliber.id))
                                     .tag(caliber.id)
+                                    .listRowSeparator(.hidden)
                             }
                         }
                     }

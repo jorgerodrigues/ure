@@ -31,17 +31,18 @@ struct WatchListView: View {
             } else {
                 List(selection: selection) {
                     ForEach(watches.filteredWatches) { watch in
-                        WatchRow(watch: watch).tag(watch.id)
+                        WatchRow(watch: watch).tag(watch.id).listRowSeparator(.hidden)
                     }
                     if !watches.archivedWatches.isEmpty {
                         ArchivedSectionHeader(
                             count: watches.archivedWatches.count,
                             isExpanded: $watches.showsArchived
                         )
+                        .listRowSeparator(.hidden)
                         .accessibilityIdentifier("archivedWatches")
                         if watches.showsArchived {
                             ForEach(watches.archivedWatches) { watch in
-                                WatchRow(watch: watch).tag(watch.id)
+                                WatchRow(watch: watch).tag(watch.id).listRowSeparator(.hidden)
                             }
                         }
                     }

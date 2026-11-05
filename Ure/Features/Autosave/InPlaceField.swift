@@ -278,7 +278,7 @@ struct FactPopUpChoice: Identifiable {
 // A fact that is one of a few values, such as a winding or a watch's caliber, as a pop-up
 // button with the same label, fill and prompt as a typed fact. A choice saves at once and can be
 // undone. A fact that names a record, such as a caliber, can open it from an arrow after its
-// name.
+// name. A fact that can't change reads as plain text, like a typed fact at rest.
 struct FactPopUp: View {
     @Environment(\.undoManager) private var undoManager
     let field: FactField
@@ -292,25 +292,31 @@ struct FactPopUp: View {
         VStack(alignment: .leading, spacing: InPlaceLayout.labelSpacing) {
             FactLabel(text: field.label, tone: FactTone(field))
             HStack(spacing: InPlaceLayout.openSpacing) {
-                Menu {
-                    ForEach(choices) { choice in
-                        FactChoice(title: choice.title, value: choice.value, choose: choose)
+                Group {
+                    if isEditable {
+                        Menu {
+                            ForEach(choices) { choice in
+                                FactChoice(title: choice.title, value: choice.value, choose: choose)
+                            }
+                            Divider()
+                            FactChoice(title: "None", value: "", choose: choose)
+                        } label: {
+                            FactPopUpLabel(
+                                text: shownText, prompt: field.prompt, showsIndicator: !opensRecord)
+                        }
+                        .menuStyle(.button)
+                        .menuIndicator(.hidden)
+                        .buttonStyle(.plain)
+                    } else {
+                        FactPopUpLabel(text: shownText, prompt: field.prompt, showsIndicator: false)
+                            .accessibilityElement(children: .ignore)
                     }
-                    Divider()
-                    FactChoice(title: "None", value: "", choose: choose)
-                } label: {
-                    FactPopUpLabel(
-                        text: shownText, prompt: field.prompt, showsIndicator: !opensRecord)
                 }
-                .menuStyle(.button)
-                .menuIndicator(.hidden)
-                .buttonStyle(.plain)
                 .fixedSize()
                 .padding(.horizontal, InPlaceLayout.inset)
                 .frame(height: InPlaceLayout.boxHeight)
                 .background(fill, in: RoundedRectangle(cornerRadius: InPlaceLayout.cornerRadius))
                 .onHover(perform: hover)
-                .disabled(!isEditable)
                 .accessibilityLabel(field.label)
                 .accessibilityValue(shownText)
                 .accessibilityIdentifier(identifier)
