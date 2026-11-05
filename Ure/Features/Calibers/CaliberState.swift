@@ -9,7 +9,7 @@ final class CaliberState {
     private let service: CaliberService
     @ObservationIgnored private let locale: Locale
     @ObservationIgnored private let pause: (Duration) async throws -> Void
-    @ObservationIgnored private let archiving = ArchiveUndo()
+    @ObservationIgnored private let archiving = ChangeUndo<Bool>()
     private(set) var calibers: [CaliberRecord] = []
     private(set) var selectedID: UUID?
     private(set) var isLoading = true
@@ -143,12 +143,13 @@ final class CaliberState {
         guard !isSaving, let record = selectedCaliber else { return false }
         let id = record.id
         let archived = record.archivedAt == nil
-        let write: ArchiveUndo.Write = { [weak self] archived in
+        let write: ChangeUndo<Bool>.Write = { [weak self] archived in
             await self?.writeArchive(id, archived: archived) ?? false
         }
         guard await archiving.perform(archived, write: write) else { return false }
         archiving.registerUndo(
-            setting: !archived, actionName: archived ? "Archive Caliber" : "Unarchive Caliber",
+            setting: !archived, redoing: archived,
+            actionName: archived ? "Archive Caliber" : "Unarchive Caliber",
             undoManager: undoManager, write: write)
         return true
     }

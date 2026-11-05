@@ -61,7 +61,7 @@ struct JobTaskStateTests {
         #expect(editing.hasUnsavedChanges && editing.showsUnsavedChanges)
         editing.stay()
         #expect(!navigated)
-        try await JobTaskFixture.failEvents(coordinator)
+        try await JobTaskFixture.failWrites(coordinator, on: "jobTask")
         var cancelled = false
         editing.requestNavigation({ navigated = true }, onCancel: { cancelled = true })
         await editing.saveAndContinue()
@@ -70,15 +70,12 @@ struct JobTaskStateTests {
         #expect(state.saveError != nil)
         #expect(!editing.isNavigationPending)
         #expect(try await coordinator.read(JobTaskQueries.fetchAll).isEmpty)
-        #expect(try await coordinator.read(ActivityQueries.fetchAll).isEmpty)
-        try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failTaskEvent")
-        }
+        try await JobTaskFixture.allowWrites(coordinator, on: "jobTask")
         editing.requestNavigation { navigated = true }
         await editing.saveAndContinue()
         #expect(navigated && !editing.hasUnsavedChanges)
         #expect(state.selectedTask?.title == "Keep this task")
         #expect(try await coordinator.read(JobTaskQueries.fetchAll).count == 1)
-        #expect(try await coordinator.read(ActivityQueries.fetchAll).count == 1)
         state.edit(jobs: jobs)
         state.draft?.title = "Discard this correction"
         editing.requestNavigation(state.close)
@@ -126,13 +123,12 @@ struct JobTaskStateTests {
         try await blocker.value
         #expect(await saving.value)
         #expect(try await coordinator.read(JobTaskQueries.fetchAll).count == 1)
-        #expect(try await coordinator.read(ActivityQueries.fetchAll).count == 1)
         for observation in observations { observation.cancel(); await observation.value }
         try await coordinator.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func observedChangesRefreshReadStateAndRejectStaleClosedJobEditor() async throws {
+    func observedChangesRefreshReadStateAndRejectAStaleArchivedJobEditor() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -152,16 +148,18 @@ struct JobTaskStateTests {
             external, for: job.id, editing: saved.id)
         try await waitUntil { state.selectedTask == updated }
         #expect(state.draft?.detail == "Keep my draft" && state.draft?.status == .toDo)
-        var closure = JobTransitionDraft(stage: .completed)
-        closure.outcome = "Serviced"
-        closure.unfinishedTasksReason = "Owner will handle inspection"
-        let closed = try await JobService(coordinator: coordinator).transition(
-            job.id, using: closure)
-        try await waitUntil { jobs.jobs.contains(closed) }
+        // A Done job's tasks still change. Only an archived job's do not.
+        _ = try await JobService(coordinator: coordinator).setStage(job.id, to: .done)
+        try await waitUntil { jobs.jobs.contains { $0.id == job.id && $0.stage == .done } }
+        #expect(state.canWrite(job.id, jobs: jobs) && state.canSave(jobs: jobs))
+        try await coordinator.mutate { db, _, _ in
+            try db.execute(sql: "UPDATE job SET archivedAt = 1")
+        }
+        try await waitUntil { jobs.jobs.contains { $0.id == job.id && $0.archivedAt != nil } }
         #expect(!state.canWrite(job.id, jobs: jobs) && !state.canSave(jobs: jobs))
         #expect(!(await state.save()))
         #expect(state.draft?.detail == "Keep my draft")
-        #expect(state.saveError == JobError.closedJob.localizedDescription)
+        #expect(state.saveError == ArchiveError.archived.localizedDescription)
         #expect(try await coordinator.read(JobTaskQueries.fetchAll) == [updated])
         state.cancel()
         state.edit(jobs: jobs)
@@ -169,59 +167,6 @@ struct JobTaskStateTests {
         #expect(state.draft == nil)
         #expect(state.selectedTask == updated)
         for observation in observations { observation.cancel(); await observation.value }
-        try await coordinator.close()
-    }
-
-    @Test(.timeLimit(.minutes(1)))
-    func jobClosureSaveGateRequiresTaskSummaryAcrossCommandsAndNavigation() async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        let tasks = JobTaskState(service: JobTaskService(coordinator: coordinator))
-        let jobs = JobState(service: JobService(coordinator: coordinator))
-        let editing = makeEditing(coordinator, tasks: tasks, jobs: jobs)
-        #expect(tasks.isLoading)
-        await tasks.observe()
-        #expect(tasks.loadError != nil)
-        _ = try await coordinator.open()
-        let job = try await JobTaskFixture.job(coordinator)
-        let jobObservation = Task { await jobs.observe() }
-        defer { jobObservation.cancel() }
-        try await waitUntil { !jobs.isLoading }
-        jobs.open(job)
-        jobs.beginAction(.transition)
-        #expect(editing.canSaveJob)
-        jobs.cancel()
-        jobs.beginAction(.transition)
-        jobs.actionDraft?.transition.stage = .completed
-        jobs.actionDraft?.transition.outcome = "Serviced"
-        #expect(jobs.canSave && !editing.canSaveJob)
-        editing.saveJobCommand()
-        var navigated = false
-        editing.requestNavigation { navigated = true }
-        await editing.saveAndContinue()
-        #expect(!navigated && !editing.isNavigationPending)
-        #expect(jobs.actionDraft?.transition.stage == .completed)
-        #expect(try await coordinator.read(JobQueries.fetchAll) == [job])
-        #expect(try await coordinator.read(ActivityQueries.fetchAll).isEmpty)
-        let taskObservation = Task { await tasks.observe() }
-        defer { taskObservation.cancel() }
-        try await waitUntil { !tasks.isLoading && tasks.loadError == nil }
-        #expect(!editing.canSaveJob)
-        let partObservation = Task { await editing.parts.observe() }
-        defer { partObservation.cancel() }
-        try await waitUntil { !editing.parts.isLoading && editing.parts.loadError == nil }
-        #expect(editing.canSaveJob)
-        editing.requestNavigation { navigated = true }
-        await editing.saveAndContinue()
-        #expect(navigated)
-        #expect(jobs.selectedJob?.stage == .completed)
-        jobObservation.cancel()
-        taskObservation.cancel()
-        await jobObservation.value
-        await taskObservation.value
-        partObservation.cancel()
-        await partObservation.value
         try await coordinator.close()
     }
 
@@ -286,7 +231,7 @@ struct JobTaskStateTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func failedMovesKeepVisibleOrderAndRejectClosedJobsWithStaleState() async throws {
+    func failedMovesKeepVisibleOrderAndRejectArchivedJobsWithStaleState() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -315,17 +260,18 @@ struct JobTaskStateTests {
         #expect(state.records(for: job.id).map(\.id) == [b.id, a.id])
         #expect(state.reorderError == nil && state.selectedTask?.id == a.id)
         for observation in observations { observation.cancel(); await observation.value }
-        var closure = JobTransitionDraft(stage: .completed)
-        closure.outcome = "Done"
-        _ = try await JobService(coordinator: coordinator).transition(job.id, using: closure)
+        try await coordinator.mutate { db, _, _ in
+            try db.execute(sql: "UPDATE job SET archivedAt = 1")
+        }
         let previous = state.records(for: job.id)
         #expect(state.canMove(a.id, for: job.id, to: .up, jobs: jobs))
         #expect(!(await state.move(a.id, for: job.id, to: .up, jobs: jobs)))
         #expect(state.records(for: job.id) == previous)
-        #expect(state.reorderError?.contains(JobError.closedJob.localizedDescription) == true)
+        #expect(
+            state.reorderError?.contains(ArchiveError.archived.localizedDescription) == true)
         let observation = Task { await jobs.observe() }
         defer { observation.cancel() }
-        try await waitUntil { jobs.jobs.contains { $0.id == job.id && !$0.stage.isOpen } }
+        try await waitUntil { jobs.jobs.contains { $0.id == job.id && $0.archivedAt != nil } }
         #expect(!state.canReorder(job.id, jobs: jobs))
         #expect(!state.canMove(a.id, for: job.id, to: .up, jobs: jobs))
         observation.cancel()
@@ -407,13 +353,12 @@ struct JobTaskStateTests {
         try await waitUntil { state.linkedParts(for: waiting.id).contains(arrived.record) }
         #expect(state.availability(for: waiting.id) == .waitingForParts)
         #expect(state.draft == beforeDraft)
-        try await JobTaskFixture.failEvents(coordinator)
+        try await JobTaskFixture.failWrites(coordinator, on: "partRequirement")
         await #expect(throws: DatabaseError.self) {
             try await TaskPartFixture.change(second, to: .arrived, using: parts)
         }
         #expect(state.availability(for: waiting.id) == .waitingForParts)
-        try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failTaskEvent")
-        }
+        try await JobTaskFixture.allowWrites(coordinator, on: "partRequirement")
         let otherArrived = try await TaskPartFixture.change(second, to: .arrived, using: parts)
         try await waitUntil { state.availability(for: waiting.id) == .partsAvailable }
         #expect(state.selectedTask == waiting && state.draft == beforeDraft)

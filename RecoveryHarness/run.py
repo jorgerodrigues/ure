@@ -19,7 +19,7 @@ WORKER = Path(sys.argv[1]).resolve()
 RUN = REPO / ".build/recovery-runs" / str(uuid.uuid4())
 GENERATION = "00000000-0000-4000-8000-000000000001"
 VERSIONS = ("v10-documents", "v15-part-procurement")
-CURRENT_MIGRATION = "v22-watch-owner"
+CURRENT_MIGRATION = "v23-job-states"
 # Columns that a later migration removes on purpose.
 REMOVED_COLUMNS = {
     "partLink": {
@@ -30,7 +30,12 @@ REMOVED_COLUMNS = {
     "libraryItem": {"sourceURL", "sourceDescription", "notes", "photoStage", "caption"},
     "caliber": {"variant", "specificationNotes", "sourceNote", "movementType"},
     "watch": {"condition", "conditionNote", "waterResistance", "specificationNotes"},
-    "job": {"ownerName", "ownerEmail", "ownerPhone"},
+    "job": {
+        "ownerName", "ownerEmail", "ownerPhone", "stage", "reportedProblem", "agreedScope",
+        "intakeCondition", "intakeSnapshot", "waitingReason", "outcome", "recommendations",
+        "cancellationReason", "startedAt", "completedAt", "cancelledAt", "unfinishedTasksReason",
+        "unfinishedPartsReason",
+    },
 }
 # Library item fields that v20 writes into the owner's notes, with the label before each value.
 MOVED_INTO_NOTES = (
@@ -49,8 +54,21 @@ WATCH_INTO_NOTES = (
 )
 # Job owner fields that v22 moves to the watch, with the label each older owner gets in notes.
 OWNER_COLUMNS = (("ownerName", "Owner: "), ("ownerEmail", "Email: "), ("ownerPhone", "Phone: "))
+# Job fields that v23 writes into the job's notes, with the label before each value.
+JOB_INTO_NOTES = (
+    ("agreedScope", "Agreed scope: "), ("intakeCondition", "Intake condition: "), ("outcome", "Outcome: "),
+    ("recommendations", "Recommendations: "), ("unfinishedTasksReason", "Unfinished tasks: "),
+    ("unfinishedPartsReason", "Unresolved parts: "),
+)
+# The state v23 gives each of the six old stages.
+JOB_STATES = {
+    "Planned": "In progress", "In progress": "In progress", "Ready": "In progress", "Waiting": "Waiting",
+    "Completed": "Done", "Cancelled": "Done",
+}
 # Tables that a later migration joins into the notes text of the record that owns each row.
 JOINED_INTO_NOTES = {"note"}
+# Tables that a later migration removes after writing their typed reasons into job notes.
+REMOVED_TABLES = {"activityEvent"}
 NOTE_OWNERS = (("watchID", "watch"), ("jobID", "job"), ("caliberID", "caliber"))
 RESULTS = []
 
@@ -218,6 +236,23 @@ def watches_preserved(rows, before, after):
                     require(label + value in kept["notes"], f"watch: older {column} in notes")
 
 
+def jobs_preserved(rows, after):
+    jobs = {row["id"]: row for row in after["tables"]["job"]}
+    for row in rows:
+        kept = jobs[row["id"]]
+        require(kept["stage"] == JOB_STATES[row["stage"]], "job: stage becomes its state")
+        require(kept["problem"] == row["reportedProblem"], "job: problem kept")
+        waiting = row["waitingReason"] if row["stage"] == "Waiting" else None
+        require(kept["waitingFor"] == waiting, "job: waiting reason becomes what it waits for")
+        require((kept["doneAt"] is not None) == (kept["stage"] == "Done"), "job: done date set for done jobs")
+        for column, label in JOB_INTO_NOTES:
+            value = row.get(column) or ""
+            if value.strip():
+                require(label + value.rstrip() in kept["notes"], f"job: {column} in notes")
+        if row["stage"] == "Cancelled":
+            require("Cancelled" in kept["notes"], "job: cancellation in notes")
+
+
 def preserved(before, after):
     require(before["originals"] == after["originals"], "Original and technical PDF bytes preserved")
     for table, rows in before["tables"].items():
@@ -227,6 +262,11 @@ def preserved(before, after):
             material_preserved(rows, after)
         if table == "caliber" and rows and "movementType" in rows[0]:
             calibers_preserved(rows, after)
+        if table == "job" and rows and "intakeSnapshot" in rows[0]:
+            jobs_preserved(rows, after)
+        if table in REMOVED_TABLES:
+            require(table not in after["tables"], f"{table}: removed after its reasons moved into notes")
+            continue
         if table in JOINED_INTO_NOTES:
             require(table not in after["tables"], f"{table}: joined into record notes")
             for note in rows:

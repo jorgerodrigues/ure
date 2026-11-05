@@ -11,36 +11,74 @@ struct WorkshopEditingTests {
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
-        let watch = try await WatchService(coordinator: coordinator).make("Bench watch")
+        let job = try await JobTaskFixture.job(coordinator)
         let session = WorkshopSession(
             coordinator: coordinator, configuration: AppConfiguration(libraryRoot: fixture.root))
         let editing = session.editing
         let observations = [
             Task { await session.watches.observe() }, Task { await session.jobs.observe() },
+            Task { await session.tasks.observe() },
         ]
         defer { observations.forEach { $0.cancel() } }
-        try await waitUntil { !session.watches.isLoading && !session.jobs.isLoading }
+        try await waitUntil {
+            !session.watches.isLoading && !session.jobs.isLoading && !session.tasks.isLoading
+        }
         #expect(!editing.canCancelDraft)
-        session.jobs.start(for: watch.id)
+        // Starting a job saves it at once, so there is no draft to cancel.
+        session.jobs.open(job)
+        #expect(!editing.hasUnsavedChanges && !editing.canCancelDraft)
+        session.tasks.create(for: job.id, jobs: session.jobs)
         #expect(!editing.hasUnsavedChanges && editing.canCancelDraft)
         editing.cancelDraft()
-        #expect(session.jobs.draft == nil)
-        session.jobs.start(for: watch.id)
-        session.jobs.draft?.title = "Keep this draft"
+        #expect(session.tasks.draft == nil)
+        session.tasks.create(for: job.id, jobs: session.jobs)
+        session.tasks.draft?.title = "Keep this draft"
         var navigated = false
         editing.requestNavigation { navigated = true }
         #expect(!editing.canCancelDraft)
         editing.cancelDraft()
         #expect(!navigated && editing.isNavigationPending)
-        #expect(editing.unsavedChangesTitle == "Save changes to this job?")
-        #expect(session.jobs.draft?.title == "Keep this draft")
+        #expect(editing.unsavedChangesTitle == "Save changes to this task?")
+        #expect(session.tasks.draft?.title == "Keep this draft")
         editing.stay()
         #expect(editing.canCancelDraft)
         editing.cancelDraft()
-        #expect(session.jobs.draft == nil)
-        #expect(try await coordinator.read(JobQueries.fetchAll).isEmpty)
+        #expect(session.tasks.draft == nil)
+        #expect(try await coordinator.read(JobTaskQueries.fetchAll).isEmpty)
         observations.forEach { $0.cancel() }
         for observation in observations { await observation.value }
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func jobFactsSaveWhenLeavingOrQuittingWithoutTheDraftQuestion() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        let jobs = JobState(service: JobService(coordinator: coordinator), pause: PauseGate().pause)
+        let editing = MaterialEditingFixture.editing(coordinator, jobs: jobs)
+        let observation = Task { await jobs.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { jobs.jobs.count == 1 }
+        let facts = try #require(jobs.facts(for: job.id))
+        facts.title.beginEditing()
+        facts.title.change(to: "Full service", undoManager: nil)
+        #expect(editing.hasUnsavedFields && !editing.hasUnsavedChanges)
+        var navigated = false
+        editing.requestNavigation { navigated = true }
+        #expect(navigated && !editing.showsUnsavedChanges)
+        try await waitUntil { !facts.title.hasUnsavedChanges }
+        facts.problem.beginEditing()
+        facts.problem.change(to: "Stops overnight.", undoManager: nil)
+        #expect(await editing.saveAllFields())
+        #expect(!editing.hasUnsavedFields)
+        let saved = try #require(
+            try await coordinator.read { try JobQueries.fetch(job.id, in: $0) })
+        #expect(saved.title == "Full service" && saved.problem == "Stops overnight.")
+        observation.cancel()
+        await observation.value
         try await coordinator.close()
     }
 

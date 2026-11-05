@@ -32,7 +32,7 @@ nonisolated struct JobTaskService: Sendable {
         -> JobTaskRecord
     {
         try await coordinator.mutate { db, _, dependencies in
-            _ = try JobService.requireOpenJob(jobID, in: db)
+            _ = try JobService.requireJob(jobID, in: db)
             let now = Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
             var existing: JobTaskRecord?
             if let id {
@@ -84,24 +84,6 @@ nonisolated struct JobTaskService: Sendable {
             for partID in draft.partIDs.subtracting(savedPartIDs) {
                 try TaskPart(taskID: record.id, partID: partID).insert(db)
             }
-            if let existing {
-                let prior = JobTaskValue(task: existing)
-                let next = JobTaskValue(task: record)
-                if prior.status != next.status || prior.waitingReason != next.waitingReason
-                    || prior.skippedReason != next.skippedReason
-                {
-                    try ActivityQueries.insert(
-                        jobID: jobID, kind: .taskStatusChanged, prior: .task(prior),
-                        next: .task(next),
-                        in: db, dependencies: dependencies)
-                }
-            } else if record.status == .done {
-                try ActivityQueries.insert(
-                    jobID: jobID, kind: .taskStatusChanged,
-                    prior: .task(JobTaskValue(newTask: record)),
-                    next: .task(JobTaskValue(task: record)),
-                    in: db, dependencies: dependencies)
-            }
             return record
         }
     }
@@ -110,7 +92,7 @@ nonisolated struct JobTaskService: Sendable {
         -> [JobTaskRecord]
     {
         try await coordinator.mutate { db, _, _ in
-            _ = try JobService.requireOpenJob(jobID, in: db)
+            _ = try JobService.requireJob(jobID, in: db)
             guard let task = try JobTaskQueries.fetch(id, in: db) else {
                 throw JobTaskError.missingRecord
             }

@@ -35,26 +35,21 @@ nonisolated struct PartsOverviewTests {
                 _ = try await service.save(edit, for: job.id, editing: part.id)
                 if stage.isOpen { expected.insert(part.id) }
             }
-            var transition = JobTransitionDraft(stage: stage)
-            transition.waitingReason = "Awaiting parts"
-            transition.outcome = "Reviewed"
-            transition.cancellationReason = "Stopped"
-            transition.unfinishedPartsReason = "Retained for history"
-            _ = try await JobService(coordinator: coordinator).transition(job.id, using: transition)
+            _ = try await JobService(coordinator: coordinator).setStage(job.id, to: stage)
         }
         let rows = try await coordinator.read(PartsOverviewQueries.fetch)
-        #expect(rows.count == 20 && Set(rows.map(\.id)) == expected)
-        #expect(Set(rows.map { $0.job.stage }) == [.planned, .inProgress, .waiting, .ready])
+        #expect(rows.count == 10 && Set(rows.map(\.id)) == expected)
+        #expect(Set(rows.map { $0.job.stage }) == [.inProgress, .waiting])
         for row in rows {
             #expect(row.part.jobID == row.job.id && row.job.watchID == row.watch.id)
             #expect(row.watch.name == "Watch \(row.job.stage.rawValue) Å時計")
             #expect(row.part.quantity == 7 && row.part.description == "Mainspring Å時計")
         }
         for status in PartStatus.allCases {
-            #expect(rows.filter { $0.part.status == status }.count == 4)
+            #expect(rows.filter { $0.part.status == status }.count == 2)
         }
         #expect(rows.map(\.id) == rows.map(\.id).sorted { $0.uuidString < $1.uuidString })
-        #expect(try await coordinator.read(PartQueries.fetchAll).count == 30)
+        #expect(try await coordinator.read(PartQueries.fetchAll).count == 15)
         try await coordinator.close()
         let restarted = fixture.coordinator()
         _ = try await restarted.open()

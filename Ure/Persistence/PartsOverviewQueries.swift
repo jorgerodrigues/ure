@@ -12,11 +12,7 @@ nonisolated struct OverviewPart: Equatable, Identifiable, Sendable {
 
 nonisolated enum PartsOverviewQueries {
     private static let openJobs =
-        """
-        SELECT job.id FROM job
-        WHERE job.stage IN ('Planned', 'In progress', 'Waiting', 'Ready')
-          AND job.archivedAt IS NULL
-        """
+        "SELECT job.id FROM job WHERE \(JobQueries.openStages) AND job.archivedAt IS NULL"
 
     static func fetch(_ db: Database) throws -> [OverviewPart] {
         let rows = try Row.fetchAll(

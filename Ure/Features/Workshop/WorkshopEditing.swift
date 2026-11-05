@@ -33,10 +33,9 @@ final class WorkshopEditing {
                 && calibers.calibers.contains { $0.id == id && $0.archivedAt == nil }
         case .job(let id):
             guard !jobs.isLoading, jobs.loadError == nil,
-                let job = jobs.jobs.first(where: { $0.id == id }), job.stage.isOpen,
-                job.archivedAt == nil
+                let job = jobs.jobs.first(where: { $0.id == id }), job.archivedAt == nil
             else { return false }
-            // An open job stays open to work on when its watch is archived.
+            // A job stays open to work on when it is Done and when its watch is archived.
             return !watches.isLoading && watches.loadError == nil
                 && watches.watches.contains { $0.id == job.watchID }
         }
@@ -48,11 +47,11 @@ final class WorkshopEditing {
         material.close()
     }
 
-    // Fields that save as you type, such as notes, material titles and the facts on watch and
-    // caliber pages. They never ask to be saved, so they are not drafts.
+    // Fields that save as you type, such as notes, material titles and the facts on watch,
+    // caliber and job pages. They never ask to be saved, so they are not drafts.
     var hasUnsavedFields: Bool {
         notes.hasUnsavedChanges || material.hasUnsavedTitles || calibers.hasUnsavedFacts
-            || watches.hasUnsavedFacts
+            || watches.hasUnsavedFacts || jobs.hasUnsavedFacts
     }
 
     func saveFieldsNow() {
@@ -60,6 +59,7 @@ final class WorkshopEditing {
         material.saveTitlesNow()
         calibers.saveFactsNow()
         watches.saveFactsNow()
+        jobs.saveFactsNow()
     }
 
     func saveAllFields() async -> Bool {
@@ -67,7 +67,9 @@ final class WorkshopEditing {
         let titlesSaved = await material.saveAllTitles()
         let caliberFactsSaved = await calibers.saveAllFacts()
         let watchFactsSaved = await watches.saveAllFacts()
+        let jobFactsSaved = await jobs.saveAllFacts()
         return notesSaved && titlesSaved && caliberFactsSaved && watchFactsSaved
+            && jobFactsSaved
     }
 
     var isSaving: Bool {
@@ -76,49 +78,26 @@ final class WorkshopEditing {
     }
     var canCancelDraft: Bool {
         guard !isSaving, !isNavigationPending else { return false }
-        return parts.draft != nil || tasks.draft != nil || jobs.isEditing
+        return parts.draft != nil || tasks.draft != nil
     }
 
     func cancelDraft() {
         guard canCancelDraft else { return }
         if parts.draft != nil {
             parts.cancel()
-        } else if tasks.draft != nil {
-            tasks.cancel()
         } else {
-            jobs.cancel()
+            tasks.cancel()
         }
     }
 
-    var canSaveJob: Bool {
-        guard jobs.canSave else { return false }
-        if let draft = jobs.actionDraft, draft.action == .transition, !draft.transition.stage.isOpen
-        {
-            return !tasks.isLoading && tasks.loadError == nil
-                && !parts.isLoading && parts.loadError == nil
-        }
-        return true
-    }
-
-    func saveJobCommand() {
-        guard canSaveJob else { return }
-        jobs.saveCommand()
-    }
-    var hasUnsavedChanges: Bool {
-        jobs.hasUnsavedChanges || tasks.hasUnsavedChanges || parts.hasUnsavedChanges
-    }
-    var isNavigationPending: Bool {
-        jobs.isNavigationPending || tasks.isNavigationPending || parts.isNavigationPending
-    }
+    // Task and part editors keep Save and Cancel until W039 and W040 replace them.
+    var hasUnsavedChanges: Bool { tasks.hasUnsavedChanges || parts.hasUnsavedChanges }
+    var isNavigationPending: Bool { tasks.isNavigationPending || parts.isNavigationPending }
 
     var showsUnsavedChanges: Bool {
-        get {
-            jobs.showsUnsavedChanges || tasks.showsUnsavedChanges || parts.showsUnsavedChanges
-        }
+        get { tasks.showsUnsavedChanges || parts.showsUnsavedChanges }
         set {
-            if jobs.isNavigationPending {
-                jobs.showsUnsavedChanges = newValue
-            } else if tasks.isNavigationPending {
+            if tasks.isNavigationPending {
                 tasks.showsUnsavedChanges = newValue
             } else {
                 parts.showsUnsavedChanges = newValue
@@ -127,7 +106,6 @@ final class WorkshopEditing {
     }
 
     var unsavedChangesTitle: String {
-        if jobs.isNavigationPending { return "Save changes to this job?" }
         if tasks.isNavigationPending { return "Save changes to this task?" }
         return "Save changes to this part?"
     }
@@ -138,20 +116,12 @@ final class WorkshopEditing {
             return
         }
         saveFieldsNow()
-        jobs.requestNavigation(
-            {
-                self.tasks.requestNavigation(
-                    {
-                        self.parts.requestNavigation(action, onCancel: onCancel)
-                    }, onCancel: onCancel)
-            },
-            onCancel: onCancel)
+        tasks.requestNavigation(
+            { self.parts.requestNavigation(action, onCancel: onCancel) }, onCancel: onCancel)
     }
 
     func stay() {
-        if jobs.isNavigationPending {
-            jobs.stay()
-        } else if tasks.isNavigationPending {
+        if tasks.isNavigationPending {
             tasks.stay()
         } else {
             parts.stay()
@@ -159,9 +129,7 @@ final class WorkshopEditing {
     }
 
     func discardAndContinue() {
-        if jobs.isNavigationPending {
-            jobs.discardAndContinue()
-        } else if tasks.isNavigationPending {
+        if tasks.isNavigationPending {
             tasks.discardAndContinue()
         } else {
             parts.discardAndContinue()
@@ -173,10 +141,7 @@ final class WorkshopEditing {
     }
 
     func saveAndContinue() async {
-        if jobs.isNavigationPending {
-            guard canSaveJob else { jobs.stay(); return }
-            await jobs.saveAndContinue()
-        } else if tasks.isNavigationPending {
+        if tasks.isNavigationPending {
             await tasks.saveAndContinue()
         } else {
             await parts.saveAndContinue()

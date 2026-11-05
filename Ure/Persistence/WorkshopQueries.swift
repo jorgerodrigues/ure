@@ -13,11 +13,7 @@ nonisolated struct WorkshopJob: Equatable, Identifiable, Sendable {
 
 nonisolated enum WorkshopQueries {
     private static let openJobs =
-        """
-        SELECT job.id FROM job
-        WHERE job.stage IN ('Planned', 'In progress', 'Waiting', 'Ready')
-          AND job.archivedAt IS NULL
-        """
+        "SELECT job.id FROM job WHERE \(JobQueries.openStages) AND job.archivedAt IS NULL"
 
     static func fetch(_ db: Database) throws -> [WorkshopJob] {
         let jobs = try JobRecord.fetchAll(db, sql: "SELECT * FROM job WHERE id IN (\(openJobs))")

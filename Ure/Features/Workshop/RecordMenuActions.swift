@@ -4,8 +4,6 @@ struct RecordMenuActions {
     var edit: (() -> Void)?
     var remove: (() -> Void)?
     var exportOriginal: (() -> Void)?
-    var changeStage: (() -> Void)?
-    var reopen: (() -> Void)?
 }
 
 private struct RecordMenuActionsKey: FocusedValueKey {

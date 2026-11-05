@@ -6,7 +6,7 @@ import Testing
 
 nonisolated struct ChildRemovalTests {
     @Test
-    func removedTaskClearsLinksAndCompactsOrderButKeepsPartsAndActivity() async throws {
+    func removedTaskClearsLinksAndCompactsOrderButKeepsParts() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -20,7 +20,6 @@ nonisolated struct ChildRemovalTests {
         draft.partIDs = [part.id]
         let removed = try await tasks.save(draft, for: job.id, editing: nil)
         let survivor = try await tasks.save(JobTaskFixture.draft(.toDo), for: job.id, editing: nil)
-        let events = try await coordinator.read(ActivityQueries.fetchAll)
         let removal = ChildRemovalService(coordinator: coordinator)
         await #expect(throws: RemovalError.scopeMismatch) {
             try await removal.removeTask(removed.id, for: other.id, confirmedPartIDs: [part.id])
@@ -52,12 +51,6 @@ nonisolated struct ChildRemovalTests {
             try await coordinator.read { try TaskPartQueries.linked(to: removed.id, in: $0) }
                 .isEmpty)
         #expect(try await coordinator.read { try PartQueries.fetch(part.id, in: $0) } == part)
-        #expect(try await coordinator.read(ActivityQueries.fetchAll) == events)
-        let timeline = try await coordinator.read { try JobTimelineQueries.fetch(job.id, in: $0) }
-        #expect(
-            timeline.contains {
-                $0.subject == removed.title && $0.source == nil && $0.unavailableSource != nil
-            })
         try await coordinator.close()
     }
 }

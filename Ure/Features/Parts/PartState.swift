@@ -43,7 +43,7 @@ final class PartState {
 
     func canWrite(_ jobID: UUID, jobs: JobState) -> Bool {
         !isLoading && loadError == nil && !jobs.isLoading && jobs.loadError == nil
-            && jobs.jobs.contains { $0.id == jobID && $0.stage.isOpen }
+            && jobs.jobs.contains { $0.id == jobID && $0.archivedAt == nil }
     }
 
     func canSave(jobs: JobState) -> Bool {

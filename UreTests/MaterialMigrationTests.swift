@@ -91,7 +91,7 @@ nonisolated struct MaterialMigrationTests {
         let staged = try await coordinator.stageRestore(from: package)
         #expect(
             staged.summary.appliedMigrations == [
-                "v20-material", "v21-caliber-facts", "v22-watch-owner",
+                "v20-material", "v21-caliber-facts", "v22-watch-owner", "v23-job-states",
             ])
         #expect(staged.summary.counts["libraryItem"] == LegacyMaterialFixture.items.count - 1)
         let result = try await coordinator.activateRestore(staged)
@@ -476,11 +476,8 @@ nonisolated enum LegacyMaterialFixture {
                     (?, 'Field watch', NULL, NULL, '', 10, 13)
                 """,
             arguments: [watchID.uuidString, caliberID.uuidString, quietWatchID.uuidString])
-        let snapshot = try String(
-            decoding: JSONEncoder().encode(
-                JobIntakeSnapshot(
-                    watchName: "Seamaster", brand: "Omega", model: nil, caseReference: nil,
-                    serial: nil, caliberDesignation: "552", caliberVariant: nil)), as: UTF8.self)
+        let snapshot =
+            #"{"version":1,"watchName":"Seamaster","brand":"Omega","caliberDesignation":"552"}"#
         try db.execute(
             sql: """
                 INSERT INTO job (id, watchID, title, stage, intakeSnapshot, notes, createdAt,

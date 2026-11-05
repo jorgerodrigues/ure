@@ -3,88 +3,69 @@ import XCTest
 
 nonisolated final class JobUITests: XCTestCase {
     @MainActor
-    func testTimelineNotesTransitionsSourceNavigationAndRestart() {
+    func testAStartedJobPutsTheCursorInItsTitleAndSavesInPlace() {
         let app = isolatedApp()
         app.launch()
         defer { app.terminate() }
+        let window = app.windows.firstMatch
         createWatch(app)
         app.buttons["startWatchJob"].click()
-        enter("Repair history", in: "jobTitle", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["showJobActivity"].waitForExistence(timeout: 5))
-        app.buttons["showJobActivity"].click()
-        XCTAssertTrue(app.staticTexts["No activity or job notes yet."].waitForExistence(timeout: 5))
-        app.buttons["backFromActivity"].click()
-        app.buttons["addNote"].click()
-        enter("Inspection finding", in: "noteTitle", app: app)
-        app.buttons["saveNote"].click()
-        XCTAssertTrue(app.buttons["backFromNote"].waitForExistence(timeout: 5))
-        app.buttons["backFromNote"].click()
-        app.buttons["addTask"].click()
-        enter("Inspect escapement", in: "taskTitle", app: app)
-        choose("Done", picker: "taskStatus", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["backFromTask"].waitForExistence(timeout: 5))
-        app.buttons["backFromTask"].click()
-        app.buttons["showJobActivity"].click()
-        XCTAssertTrue(app.staticTexts["Created as Done"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.buttons.matching(identifier: "Open Note: Inspection finding").count, 1)
-        app.buttons["Open Note: Inspection finding"].click()
-        XCTAssertTrue(app.buttons["editNote"].waitForExistence(timeout: 5))
-        app.buttons["editNote"].click()
-        enter("Corrected finding", in: "noteTitle", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["backFromNote"].waitForExistence(timeout: 5))
-        app.buttons["backFromNote"].click()
-        app.buttons["showJobActivity"].click()
-        XCTAssertTrue(app.staticTexts["Corrected finding"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.buttons.matching(identifier: "Open Note: Corrected finding").count, 1)
-        XCTAssertFalse(app.staticTexts["Inspection finding"].exists)
-        app.buttons["Open Task: Inspect escapement"].click()
-        XCTAssertTrue(app.buttons["editTask"].waitForExistence(timeout: 5))
-        app.buttons["backFromTask"].click()
-        app.buttons["changeJobStage"].click()
-        choose("Completed", picker: "jobStage", app: app)
-        enter("Repair checked", in: "jobOutcome", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["reopenJob"].waitForExistence(timeout: 5))
+        let title = app.textFields["jobTitle"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertEqual(title.value as? String, "New Job")
+        XCTAssertEqual(state(app).value as? String, "In progress")
+        window.typeText("Full service")
+        let problem = app.textViews["jobProblem"]
+        problem.click()
+        problem.typeText("Loses about two minutes a day.")
+        window.typeKey(.tab, modifierFlags: [])
         app.terminate()
         app.launch()
-        XCTAssertTrue(app.buttons["showJobActivity"].waitForExistence(timeout: 5))
-        app.buttons["showJobActivity"].click()
-        XCTAssertTrue(app.staticTexts["Planned to Completed"].waitForExistence(timeout: 5))
-        app.buttons["Open Note: Corrected finding"].click()
-        XCTAssertTrue(app.buttons["editNote"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["editNote"].isEnabled)
+        XCTAssertTrue(app.textFields["jobTitle"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.textFields["jobTitle"].value as? String, "Full service")
+        XCTAssertEqual(
+            app.textViews["jobProblem"].value as? String, "Loses about two minutes a day.")
+        XCTAssertTrue(app.buttons["jobWatch"].exists)
+        app.buttons["jobWatch"].click()
+        XCTAssertTrue(app.buttons["watchOpenJob"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["startWatchJob"].exists)
+        capture(app, name: "Watch-with-open-job")
     }
 
     @MainActor
-    func testIntakeHistorySnapshotAndRestart() {
+    func testTheStatePopUpSavesAndUndoPutsBackTheStateBefore() {
         let app = isolatedApp()
         app.launch()
         defer { app.terminate() }
+        let window = app.windows.firstMatch
         createWatch(app)
-        app.buttons["startWatchJob"].click()
-        enter("Inspect movement", in: "jobTitle", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editJob"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Planned"].exists)
-        XCTAssertTrue(app.staticTexts["000042.7-A"].exists)
-        app.buttons["backToWatch"].click()
-        XCTAssertTrue(app.buttons["watchOpenJob"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["startWatchJob"].exists)
-        enter("Renamed watch", in: "watchName", app: app)
-        enter("Changed serial", in: "watchSerial", app: app)
-        app.windows.firstMatch.typeKey(.return, modifierFlags: [])
-        app.buttons["watchOpenJob"].click()
-        XCTAssertTrue(app.buttons["editJob"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Inherited watch"].exists)
-        XCTAssertTrue(app.staticTexts["000042.7-A"].exists)
+        startJob("Full service", app: app)
+        chooseState("Waiting", app: app)
+        let waiting = app.textFields["jobWaitingFor"]
+        XCTAssertTrue(waiting.waitForExistence(timeout: 5))
+        window.typeText("a mainspring")
+        window.typeKey(.tab, modifierFlags: [])
+        chooseState("Done", app: app)
+        XCTAssertFalse(app.textFields["jobWaitingFor"].waitForExistence(timeout: 2))
+        XCTAssertTrue(
+            app.staticTexts.matching(NSPredicate(format: "label CONTAINS ' · Done '")).firstMatch
+                .waitForExistence(timeout: 5))
+        window.typeKey("z", modifierFlags: .command)
+        XCTAssertTrue(app.textFields["jobWaitingFor"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.textFields["jobWaitingFor"].value as? String, "a mainspring")
+        XCTAssertEqual(state(app).value as? String, "Waiting")
+        window.typeKey("z", modifierFlags: [.command, .shift])
+        let done = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == 'Done'"), object: state(app))
+        XCTAssertEqual(XCTWaiter.wait(for: [done], timeout: 5), .completed)
+        enter("Full service and crystal", in: "jobTitle", app: app)
+        window.typeKey(.return, modifierFlags: [])
         app.terminate()
         app.launch()
-        XCTAssertTrue(app.buttons["editJob"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Inspect movement"].exists)
-        XCTAssertTrue(app.staticTexts["000042.7-A"].exists)
+        XCTAssertTrue(app.textFields["jobTitle"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.textFields["jobTitle"].value as? String, "Full service and crystal")
+        XCTAssertEqual(state(app).value as? String, "Done")
+        capture(app, name: "Done-job")
     }
 
     @MainActor
@@ -93,9 +74,7 @@ nonisolated final class JobUITests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         createWatch(app)
-        app.buttons["startWatchJob"].click()
-        enter("Bench repair", in: "jobTitle", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        startJob("Bench repair", app: app)
         XCTAssertTrue(app.buttons["addReference"].waitForExistence(timeout: 5))
         app.buttons["addReference"].click()
         enter("Bench sheet", in: "referenceTitle", app: app)
@@ -128,73 +107,12 @@ nonisolated final class JobUITests: XCTestCase {
     }
 
     @MainActor
-    func testCancelledIntakeAndDirtyNavigation() {
+    func testTaskValidationDraftGuardDoneJobAndRestart() {
         let app = isolatedApp()
         app.launch()
         defer { app.terminate() }
         createWatch(app)
-        app.buttons["startWatchJob"].click()
-        enter("Cancelled intake", in: "jobTitle", app: app)
-        app.buttons["cancelJob"].click()
-        XCTAssertTrue(app.buttons["startWatchJob"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.buttons["startWatchJob"].label, "Start Job")
-        app.buttons["startWatchJob"].click()
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.staticTexts["jobSaveError"].waitForExistence(timeout: 5))
-        enter("Keep my intake", in: "jobTitle", app: app)
-        app.buttons["backToWatch"].click()
-        XCTAssertTrue(app.sheets.buttons["Stay"].waitForExistence(timeout: 3))
-        app.sheets.buttons["Stay"].click()
-        XCTAssertEqual(app.textFields["jobTitle"].value as? String, "Keep my intake")
-        app.windows.firstMatch.typeKey("3", modifierFlags: [.command, .option])
-        XCTAssertTrue(app.sheets.buttons["Discard"].waitForExistence(timeout: 3))
-        app.sheets.buttons["Discard"].click()
-        XCTAssertTrue(app.buttons["addCaliber"].waitForExistence(timeout: 5))
-        openWatches(app)
-        XCTAssertTrue(app.buttons["startWatchJob"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.buttons["startWatchJob"].label, "Start Job")
-    }
-
-    @MainActor
-    func testWaitingClosureAndReopen() {
-        let app = isolatedApp()
-        app.launch()
-        defer { app.terminate() }
-        createWatch(app)
-        app.buttons["startWatchJob"].click()
-        enter("Inspect movement", in: "jobTitle", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["changeJobStage"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Planned"].exists)
-        app.buttons["changeJobStage"].click()
-        choose("Waiting", picker: "jobStage", app: app)
-        app.buttons["saveJobAction"].click()
-        XCTAssertTrue(app.staticTexts["jobActionSaveError"].waitForExistence(timeout: 5))
-        enter("Await inspection", in: "jobWaitingReason", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["changeJobStage"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Await inspection"].exists)
-        app.buttons["changeJobStage"].click()
-        choose("Completed", picker: "jobStage", app: app)
-        enter("Service complete", in: "jobOutcome", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["reopenJob"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["editJob"].exists)
-        app.buttons["reopenJob"].click()
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editJob"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["In progress"].exists)
-    }
-
-    @MainActor
-    func testTaskValidationDraftGuardClosureAndRestart() {
-        let app = isolatedApp()
-        app.launch()
-        defer { app.terminate() }
-        createWatch(app)
-        app.buttons["startWatchJob"].click()
-        enter("Bench repair", in: "jobTitle", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        startJob("Bench repair", app: app)
         XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
         app.buttons["addTask"].click()
         enter("Inspect escapement", in: "taskTitle", app: app)
@@ -210,29 +128,19 @@ nonisolated final class JobUITests: XCTestCase {
         app.windows.firstMatch.typeKey("s", modifierFlags: .command)
         XCTAssertTrue(app.buttons["editTask"].waitForExistence(timeout: 5))
         app.buttons["backFromTask"].click()
-        XCTAssertTrue(app.staticTexts["Planned"].waitForExistence(timeout: 5))
-        app.buttons["changeJobStage"].click()
-        choose("Completed", picker: "jobStage", app: app)
-        enter("Service complete", in: "jobOutcome", app: app)
-        app.buttons["saveJobAction"].click()
-        XCTAssertTrue(app.staticTexts["jobActionSaveError"].waitForExistence(timeout: 5))
-        enter("Owner will handle inspection", in: "jobUnfinishedTasksReason", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["reopenJob"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["addTask"].isEnabled)
+        chooseState("Done", app: app)
+        XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["addTask"].isEnabled)
         app.terminate()
         app.launch()
-        XCTAssertTrue(app.buttons["reopenJob"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Owner will handle inspection"].exists)
+        XCTAssertTrue(state(app).waitForExistence(timeout: 5))
+        XCTAssertEqual(state(app).value as? String, "Done")
         XCTAssertEqual(
             app.buttons.matching(
                 NSPredicate(
                     format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "task-",
                     "Inspect escapement")
             ).count, 1)
-        app.buttons["reopenJob"].click()
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["addTask"].isEnabled)
     }
 
@@ -242,13 +150,11 @@ nonisolated final class JobUITests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         createWatch(app)
-        app.buttons["startWatchJob"].click()
-        enter("Bench order", in: "jobTitle", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        startJob("Bench order", app: app)
         XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
         let progress = app.descendants(matching: .any)["taskProgressSummary"].firstMatch
         XCTAssertTrue(progress.waitForExistence(timeout: 5))
-        XCTAssertEqual(progress.label, "Task progress: No tasks planned. 0 skipped.")
+        XCTAssertEqual(progress.value as? String, "No tasks planned. 0 skipped.")
         for (title, status) in [("Inspect", "Done"), ("Polish", "Skipped"), ("Test", "To do")] {
             app.buttons["addTask"].click()
             enter(title, in: "taskTitle", app: app)
@@ -260,7 +166,7 @@ nonisolated final class JobUITests: XCTestCase {
             app.buttons["backFromTask"].click()
             XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
         }
-        XCTAssertEqual(progress.label, "Task progress: 1 of 2 tasks done, 50 percent. 1 skipped.")
+        XCTAssertEqual(progress.value as? String, "1 of 2 tasks done, 50 percent. 1 skipped.")
         let rows = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "task-"))
         rows.element(boundBy: 0).click()
         XCTAssertTrue(app.buttons["moveTaskDown"].waitForExistence(timeout: 5))
@@ -302,7 +208,7 @@ nonisolated final class JobUITests: XCTestCase {
         app.windows.firstMatch.typeKey("s", modifierFlags: .command)
         XCTAssertTrue(app.buttons["backFromTask"].waitForExistence(timeout: 5))
         app.buttons["backFromTask"].click()
-        XCTAssertEqual(progress.label, "Task progress: 0 of 2 tasks done, 0 percent. 1 skipped.")
+        XCTAssertEqual(progress.value as? String, "0 of 2 tasks done, 0 percent. 1 skipped.")
     }
 
     @MainActor
@@ -311,6 +217,35 @@ nonisolated final class JobUITests: XCTestCase {
         XCTAssertTrue(picker.waitForExistence(timeout: 3))
         picker.click()
         app.menuItems[value].firstMatch.click()
+    }
+
+    // Starts a job from the watch page and types its title over "New Job".
+    @MainActor
+    private func startJob(_ title: String, app: XCUIApplication) {
+        app.buttons["startWatchJob"].click()
+        XCTAssertTrue(app.textFields["jobTitle"].waitForExistence(timeout: 5))
+        app.windows.firstMatch.typeText(title)
+        app.windows.firstMatch.typeKey(.return, modifierFlags: [])
+    }
+
+    @MainActor
+    private func state(_ app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)["jobState"].firstMatch
+    }
+
+    @MainActor
+    private func chooseState(_ value: String, app: XCUIApplication) {
+        XCTAssertTrue(state(app).waitForExistence(timeout: 3))
+        state(app).click()
+        app.menuItems[value].firstMatch.click()
+    }
+
+    @MainActor
+    private func capture(_ app: XCUIApplication, name: String) {
+        let attachment = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     @MainActor

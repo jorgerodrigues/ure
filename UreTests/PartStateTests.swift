@@ -146,17 +146,19 @@ struct PartStateTests {
         try await waitUntil { state.selectedPart == updated }
         #expect(state.draft?.quantity == "1" && state.draft?.manufacturerReference == "Keep 0012/3")
         #expect(state.draft?.links.first?.url == "https://example.org/draft")
-        var closure = JobTransitionDraft(stage: .completed)
-        closure.outcome = "Inspection complete"
-        closure.unfinishedPartsReason = "Owner will source it"
-        let closed = try await JobService(coordinator: coordinator).transition(
-            job.id, using: closure)
-        try await waitUntil { jobs.jobs.contains(closed) }
+        // A Done job's parts still change. Only an archived job's do not.
+        _ = try await JobService(coordinator: coordinator).setStage(job.id, to: .done)
+        try await waitUntil { jobs.jobs.contains { $0.id == job.id && $0.stage == .done } }
+        #expect(state.canSave(jobs: jobs) && state.canWrite(job.id, jobs: jobs))
+        try await coordinator.mutate { db, _, _ in
+            try db.execute(sql: "UPDATE job SET archivedAt = 1")
+        }
+        try await waitUntil { jobs.jobs.contains { $0.id == job.id && $0.archivedAt != nil } }
         #expect(!state.canSave(jobs: jobs) && !state.canWrite(job.id, jobs: jobs))
         #expect(!(await state.save()))
         #expect(state.draft?.manufacturerReference == "Keep 0012/3")
         #expect(state.draft?.links.first?.url == "https://example.org/draft")
-        #expect(state.saveError == JobError.closedJob.localizedDescription)
+        #expect(state.saveError == ArchiveError.archived.localizedDescription)
         state.cancel()
         state.create(for: job.id, jobs: jobs)
         state.edit(jobs: jobs)
@@ -234,15 +236,14 @@ struct PartStateTests {
         #expect(
             state.fieldErrors[.statusReason] != nil && state.draft?.orderReference == "000042–Å")
         state.draft?.statusReason = "Corrected receipt entry"
-        try await JobTaskFixture.failEvents(coordinator)
+        try await JobTaskFixture.failWrites(coordinator, on: "partRequirement")
         let draft = state.draft
         var navigated = false
         editing.requestNavigation { navigated = true }
         await editing.saveAndContinue()
         #expect(!navigated && state.draft == draft && state.saveError != nil)
         #expect(try await coordinator.read(PartQueries.fetchAll) == [installed])
-        try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failTaskEvent")
-        }
+        try await JobTaskFixture.allowWrites(coordinator, on: "partRequirement")
         let started = AsyncStream<Void>.makeStream()
         let gate = DispatchSemaphore(value: 0)
         defer { gate.signal() }
@@ -269,7 +270,6 @@ struct PartStateTests {
         #expect(
             state.selectedPart?.record.installedAt == nil
                 && state.selectedPart?.record.arrivedAt == nil)
-        #expect(try await coordinator.read(ActivityQueries.fetchAll).count == 2)
         state.edit(jobs: jobs)
         state.setStatus(.cancelled)
         state.draft?.statusReason = "Unneeded lot"

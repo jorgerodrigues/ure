@@ -1,52 +1,14 @@
 import Foundation
 import GRDB
 
+// A job is In progress or Waiting while the watch is on the bench, and Done when the work is
+// finished. A Done job stays editable. A watch has at most one job that is not Done.
 nonisolated enum JobStage: String, Codable, CaseIterable, Sendable {
-    case planned = "Planned"
     case inProgress = "In progress"
     case waiting = "Waiting"
-    case ready = "Ready"
-    case completed = "Completed"
-    case cancelled = "Cancelled"
+    case done = "Done"
 
-    var isOpen: Bool { self != .completed && self != .cancelled }
-}
-
-nonisolated struct JobIntakeSnapshot: Codable, Equatable, Sendable {
-    let version: Int
-    let watchName: String
-    let brand: String?
-    let model: String?
-    let caseReference: String?
-    let serial: String?
-    let caliberDesignation: String?
-    let caliberVariant: String?
-
-    init(watch: WatchRecord, caliber: CaliberRecord?) {
-        version = 1
-        watchName = watch.name
-        brand = watch.brand
-        model = watch.model
-        caseReference = watch.caseReference
-        serial = watch.serial
-        caliberDesignation = caliber?.designation
-        // Calibers have had no variant since W035. Older snapshots keep the one they saved.
-        caliberVariant = nil
-    }
-
-    init(
-        watchName: String, brand: String?, model: String?, caseReference: String?, serial: String?,
-        caliberDesignation: String?, caliberVariant: String?
-    ) {
-        version = 1
-        self.watchName = watchName
-        self.brand = brand
-        self.model = model
-        self.caseReference = caseReference
-        self.serial = serial
-        self.caliberDesignation = caliberDesignation
-        self.caliberVariant = caliberVariant
-    }
+    var isOpen: Bool { self != .done }
 }
 
 nonisolated struct JobRecord: Codable, Equatable, Identifiable, Sendable, FetchableRecord,
@@ -56,24 +18,16 @@ nonisolated struct JobRecord: Codable, Equatable, Identifiable, Sendable, Fetcha
 
     let id: UUID
     let watchID: UUID
-    let title: String
+    var title: String
     var stage: JobStage
-    let reportedProblem: String?
-    let agreedScope: String?
-    let intakeCondition: String?
-    let intakeSnapshot: JobIntakeSnapshot
+    var problem: String? = nil
+    // What a waiting job waits for, such as "a mainspring". Only a waiting job has one.
+    var waitingFor: String? = nil
+    // When the job was opened. The page reads it as "Opened 12 October".
     let createdAt: Date
     var updatedAt: Date
-    var waitingReason: String? = nil
-    var outcome: String? = nil
-    var recommendations: String? = nil
-    var cancellationReason: String? = nil
-    var startedAt: Date? = nil
-    var completedAt: Date? = nil
-    var cancelledAt: Date? = nil
-    var unfinishedTasksReason: String? = nil
-    var unfinishedPartsReason: String? = nil
-
+    // When the job was set to Done. Only a done job has one.
+    var doneAt: Date? = nil
     var archivedAt: Date? = nil
 
     static func databaseUUIDEncodingStrategy(for column: String) -> DatabaseUUIDEncodingStrategy {
@@ -90,6 +44,9 @@ nonisolated struct JobRecord: Codable, Equatable, Identifiable, Sendable, Fetcha
 }
 
 nonisolated enum JobQueries {
+    // The jobs that are not Done. A watch has at most one.
+    static let openStages = "stage IN ('In progress', 'Waiting')"
+
     static func fetchAll(_ db: Database) throws -> [JobRecord] {
         try JobRecord.fetchAll(db, sql: "SELECT * FROM job ORDER BY createdAt DESC, id")
     }
@@ -101,29 +58,17 @@ nonisolated enum JobQueries {
 
     static func openJob(for watchID: UUID, in db: Database) throws -> JobRecord? {
         try JobRecord.fetchOne(
-            db,
-            sql: """
-                SELECT * FROM job WHERE watchID = ?
-                AND stage IN ('Planned', 'In progress', 'Waiting', 'Ready')
-                """, arguments: [watchID.uuidString])
+            db, sql: "SELECT * FROM job WHERE watchID = ? AND \(openStages)",
+            arguments: [watchID.uuidString])
     }
 
     static func insert(_ record: JobRecord, in db: Database) throws {
         try record.insert(db)
         try SearchKey.refresh(record.id, table: .job, in: db)
     }
+
     static func update(_ record: JobRecord, in db: Database) throws {
         try record.update(db)
         try SearchKey.refresh(record.id, table: .job, in: db)
-    }
-
-    static func updateWorkflow(_ record: JobRecord, in db: Database) throws {
-        try record.update(
-            db,
-            columns: [
-                "stage", "waitingReason", "outcome", "recommendations", "cancellationReason",
-                "startedAt", "completedAt", "cancelledAt", "updatedAt", "unfinishedTasksReason",
-                "unfinishedPartsReason",
-            ])
     }
 }

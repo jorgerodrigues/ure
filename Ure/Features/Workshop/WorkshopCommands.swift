@@ -55,11 +55,6 @@ struct WorkshopCommands: Commands {
                 .keyboardShortcut("[", modifiers: .command)
                 .disabled(!canUseRecordActions || recordBackAction == nil)
             Divider()
-            Button("Change Job Stage", action: changeStage)
-                .disabled(!canUseRecordActions || recordActions?.changeStage == nil)
-            Button("Reopen Job", action: reopenJob)
-                .disabled(!canUseRecordActions || recordActions?.reopen == nil)
-            Divider()
             Button(archiveTitle, action: toggleArchive)
                 .disabled(!canArchive)
         }
@@ -148,30 +143,21 @@ struct WorkshopCommands: Commands {
         return !editing.watches.isLoading && editing.watches.loadError == nil
     }
 
+    // Only the task and part editors still save with ⌘S.
     private var canSave: Bool {
         guard allowsEditing == true else { return false }
         if editing.isSaving { return false }
         if editing.parts.draft != nil { return editing.parts.canSave(jobs: editing.jobs) }
         if editing.tasks.draft != nil { return editing.tasks.canSave(jobs: editing.jobs) }
-        switch navigation.selectedSection {
-        case .workshop, .watches, .parts: return editing.jobs.isEditing && editing.canSaveJob
-        case .calibers: return false
-        }
+        return false
     }
 
     private func save() {
         guard allowsEditing == true, canSave else { return }
         if editing.parts.draft != nil {
             editing.parts.saveCommand()
-            return
-        }
-        if editing.tasks.draft != nil {
+        } else {
             editing.tasks.saveCommand()
-            return
-        }
-        switch navigation.selectedSection {
-        case .workshop, .watches, .parts: editing.saveJobCommand()
-        case .calibers: break
         }
     }
 
@@ -205,8 +191,6 @@ struct WorkshopCommands: Commands {
     private var canUseRecordActions: Bool {
         allowsEditing == true && !editing.isSaving && !editing.isNavigationPending
     }
-    private func changeStage() { if canUseRecordActions { recordActions?.changeStage?() } }
-    private func reopenJob() { if canUseRecordActions { recordActions?.reopen?() } }
 
     private func openReference() { openWindow(id: "reference") }
 
@@ -215,8 +199,7 @@ struct WorkshopCommands: Commands {
             navigation.selectedSection == .watches || navigation.selectedSection == .workshop
                 || navigation.selectedSection == .parts,
             !editing.isSaving, !editing.hasUnsavedChanges,
-            let task = editing.tasks.selectedTask, editing.jobs.selectedID == task.jobID,
-            !editing.jobs.isEditing
+            let task = editing.tasks.selectedTask, editing.jobs.selectedID == task.jobID
         else { return false }
         return editing.tasks.canMove(task.id, for: task.jobID, to: destination, jobs: editing.jobs)
     }

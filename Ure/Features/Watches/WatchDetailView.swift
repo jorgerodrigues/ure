@@ -7,7 +7,7 @@ struct WatchDetailView: View {
 
     var body: some View {
         if let watch = watches.selectedWatch,
-            jobs.watchID == watch.id, jobs.selectedID != nil || jobs.draft != nil
+            jobs.watchID == watch.id, jobs.selectedID != nil
         {
             JobDetailView()
         } else if let watch = watches.selectedWatch, material.isPresenting(on: .watch(watch.id)) {
@@ -332,6 +332,9 @@ private struct WatchJobs: View {
                         .disabled(editing.isSaving)
                         .accessibilityIdentifier("startWatchJob")
                 }
+                if let error = jobs.saveError, jobs.selectedID == nil {
+                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                }
             }
         }
     }
@@ -350,7 +353,7 @@ private struct WatchJobs: View {
         watch.archivedAt == nil && jobs.openJob(for: watch.id) == nil
     }
 
-    private func startJob() { editing.requestNavigation { jobs.start(for: watch.id) } }
+    private func startJob() { editing.requestNavigation { jobs.startCommand(for: watch.id) } }
     private func retry() { Task { await jobs.observe() } }
 }
 
@@ -402,50 +405,18 @@ private struct WatchJobRow: View {
         return "\(progress.doneCount) of \(progress.countedCount) done"
     }
 
-    // An open job says since when, such as "Since 12 Oct". A closed job says when it closed.
+    // An open job says since when, such as "Since 12 Oct". A done job says when it was done.
     private var date: String {
         if job.stage.isOpen { return "Since \(ArchivedDate.short(job.createdAt))" }
-        return ArchivedDate.short(job.completedAt ?? job.cancelledAt ?? job.updatedAt)
+        return ArchivedDate.short(job.doneAt ?? job.updatedAt)
     }
 
     private func open() { editing.requestNavigation { jobs.open(job) } }
 }
 
-// A job's stage as a small pill. An open stage has the accent colour and a dot. A completed
-// job has a tick.
-struct JobStagePill: View {
-    let stage: JobStage
-
-    var body: some View {
-        HStack(spacing: stage.isOpen ? 6 : 4) {
-            if stage.isOpen {
-                Circle().fill(Color.accentColor).frame(width: 6, height: 6)
-            } else if stage == .completed {
-                Image(systemName: "checkmark").font(.system(size: 8, weight: .bold))
-            }
-            Text(stage.rawValue)
-                .font(.system(size: PageLayout.pillTextSize, weight: .semibold))
-                .lineLimit(1)
-                .fixedSize()
-        }
-        .foregroundStyle(
-            stage.isOpen ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary)
-        )
-        .padding(.horizontal, 9)
-        .frame(height: WatchPageLayout.stagePillHeight)
-        .background(background, in: Capsule())
-    }
-
-    private var background: Color {
-        if stage.isOpen { return Color.accentColor.opacity(0.1) }
-        return Color(nsColor: .quaternarySystemFill)
-    }
-}
-
 // Values from the "4 Watch" artboard on the Paper page "Rework · Simple".
 private enum WatchPageLayout {
     static let pillHeight: CGFloat = 24
-    static let stagePillHeight: CGFloat = 22
     static let listSpacing: CGFloat = 8
     static let listHeadingBottom: CGFloat = 4
     static let rowHeight: CGFloat = 48

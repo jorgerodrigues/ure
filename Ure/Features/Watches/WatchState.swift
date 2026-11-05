@@ -10,7 +10,7 @@ final class WatchState {
     private let service: WatchService
     @ObservationIgnored private let locale: Locale
     @ObservationIgnored private let pause: (Duration) async throws -> Void
-    @ObservationIgnored private let archiving = ArchiveUndo()
+    @ObservationIgnored private let archiving = ChangeUndo<Bool>()
     private(set) var watches: [WatchRecord] = []
     private(set) var selectedID: UUID?
     private(set) var isLoading = true
@@ -117,12 +117,13 @@ final class WatchState {
         guard !isSaving, let record = selectedWatch else { return false }
         let id = record.id
         let archived = record.archivedAt == nil
-        let write: ArchiveUndo.Write = { [weak self] archived in
+        let write: ChangeUndo<Bool>.Write = { [weak self] archived in
             await self?.writeArchive(id, archived: archived) ?? false
         }
         guard await archiving.perform(archived, write: write) else { return false }
         archiving.registerUndo(
-            setting: !archived, actionName: archived ? "Archive Watch" : "Unarchive Watch",
+            setting: !archived, redoing: archived,
+            actionName: archived ? "Archive Watch" : "Unarchive Watch",
             undoManager: undoManager, write: write)
         return true
     }

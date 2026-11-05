@@ -13,6 +13,8 @@ nonisolated struct JobTaskProgressTests {
             #expect(progress.fraction == nil && progress.percentage == nil)
             #expect(progress.accessibilitySummary == "No tasks planned. \(statuses.count) skipped.")
         }
+        #expect(try progress([]).summary == "No tasks planned")
+        #expect(try progress([.skipped, .skipped]).summary == "No tasks planned · 2 skipped")
     }
 
     @Test
@@ -22,6 +24,8 @@ nonisolated struct JobTaskProgressTests {
         #expect(progress.skippedCount == 1)
         #expect(progress.fraction == 0.4 && progress.percentage == 40)
         #expect(progress.accessibilitySummary == "2 of 5 tasks done, 40 percent. 1 skipped.")
+        #expect(progress.summary == "2 of 5 done · 40% · 1 skipped")
+        #expect(try self.progress([.done, .toDo]).summary == "1 of 2 done · 50%")
     }
 
     @Test

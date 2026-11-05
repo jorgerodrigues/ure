@@ -98,8 +98,8 @@ private struct WorkshopJobRow: View {
                 Text(
                     "\(row.progress.skippedCount) skipped · \(row.unresolvedPartCount) unresolved parts"
                 )
-                if let reason = row.job.waitingReason {
-                    Text("Waiting: \(reason)")
+                if let waitingFor = row.job.waitingFor {
+                    Text("Waiting for \(waitingFor)")
                 }
             }
             .font(.subheadline)

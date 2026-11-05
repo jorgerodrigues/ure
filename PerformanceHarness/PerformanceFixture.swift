@@ -45,20 +45,18 @@ nonisolated enum PerformanceFixture {
                     let jobIndex = index * 2 + history
                     let jobID = try id(3, jobIndex).uuidString
                     let open = history == 0 && index < 450
-                    let stages = ["Planned", "In progress", "Waiting", "Ready"]
-                    let stage = open ? stages[index % 4] : "Completed"
+                    let stages = ["In progress", "Waiting"]
+                    let stage = open ? stages[index % 2] : "Done"
                     try db.execute(
                         sql: """
-                            INSERT INTO job (id, watchID, title, stage, intakeSnapshot, waitingReason,
-                                outcome, completedAt, createdAt, updatedAt)
-                            VALUES (?, ?, ?, ?, json_object('version', 1, 'watchName', ?), ?, ?, ?, ?, ?)
+                            INSERT INTO job (id, watchID, title, stage, problem, waitingFor, doneAt,
+                                createdAt, updatedAt)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """,
                         arguments: [
                             jobID, watchID, "Synthetic job \(jobIndex)", stage,
-                            "Synthetic watch \(index)",
-                            stage == "Waiting" ? "Mainspring on order" : nil,
-                            open ? nil : "Retained repair", open ? nil : date, date,
-                            date + Double(jobIndex),
+                            "Loses time on the bench.", stage == "Waiting" ? "A mainspring" : nil,
+                            open ? nil : date, date, date + Double(jobIndex),
                         ])
                     for position in 0..<10 {
                         let status = ["To do", "Doing", "Waiting", "Done", "Skipped"][position % 5]

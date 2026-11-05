@@ -63,7 +63,7 @@ struct JobTaskDetailView: View {
                         }
                     }
                     if !tasks.canWrite(jobID, jobs: jobs) {
-                        Section { Text("Reopen a closed job to change its tasks.") }
+                        Section { Text("This job is archived, so its tasks can’t change.") }
                     }
                 }
                 .formStyle(.grouped)

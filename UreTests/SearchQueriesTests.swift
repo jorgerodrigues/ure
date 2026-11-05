@@ -23,10 +23,8 @@ nonisolated struct SearchQueriesTests {
         ] {
             watch = try await watches.update(watch.id, fact)
         }
-        var jobDraft = JobDraft()
-        jobDraft.title = "Réparation"
-        let job = try await JobService(coordinator: coordinator).save(
-            jobDraft, for: watch.id, editing: nil)
+        let job = try await JobService(coordinator: coordinator).start(
+            for: watch.id, title: "Réparation")
         try await RecordNotesService(coordinator: coordinator).save(
             "Finding\nCafé e\u{301} 100%_ [brackets] 'quotes' \"double\" \\path '; DROP TABLE watch;--",
             for: .job(job.id))
@@ -94,10 +92,8 @@ nonisolated struct SearchQueriesTests {
         _ = try await restartedWatches.update(watch.id, .serial("0099-new"))
         _ = try await CaliberService(coordinator: restarted).update(
             caliber.id, .name("Corrected caliber"))
-        var editedJob = JobDraft(job: job)
-        editedJob.title = "Corrected repair"
-        _ = try await JobService(coordinator: restarted).save(
-            editedJob, for: watch.id, editing: job.id)
+        _ = try await JobService(coordinator: restarted).update(
+            job.id, .title("Corrected repair"))
         let material = MaterialService(coordinator: restarted)
         try await material.rename(reference.id, to: "Corrected link", for: .caliber(caliber.id))
         try await material.rename(photo.id, to: "Corrected caption", for: .watch(watch.id))

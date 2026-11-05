@@ -678,6 +678,75 @@ nonisolated enum LibrarySchema {
                     "contact", "notes",
                 ], in: db)
         }
+        migrator.registerMigration("v23-job-states", foreignKeyChecks: .deferred) { db in
+            // Deferred checks keep each job's tasks, parts, material and watch cover while the
+            // job table is rebuilt with three states.
+            try JobMigration.preserveRemovedFields(in: db, locale: .current, timeZone: .current)
+            try db.drop(table: "activityEvent")
+            try db.execute(sql: "DROP TRIGGER watch_cover_insert")
+            try db.execute(sql: "DROP TRIGGER watch_cover_update")
+            try db.create(table: "job_new") { table in
+                table.column("id", .text).primaryKey()
+                table.column("watchID", .text).notNull().references("watch", onDelete: .restrict)
+                table.column("title", .text).notNull().check(sql: "length(trim(title)) > 0")
+                table.column("stage", .text).notNull()
+                    .check(sql: "stage IN ('In progress', 'Waiting', 'Done')")
+                table.column("problem", .text)
+                table.column("waitingFor", .text)
+                for column in ["createdAt", "updatedAt"] {
+                    table.column(column, .double).notNull()
+                }
+                table.column("doneAt", .double)
+                table.column("searchKey", .text).notNull().defaults(to: "")
+                table.column("archivedAt", .double)
+                table.column("notes", .text).notNull().defaults(to: "")
+                table.check(sql: "stage = 'Waiting' OR waitingFor IS NULL")
+                table.check(sql: "(stage = 'Done') = (doneAt IS NOT NULL)")
+            }
+            try db.execute(
+                sql: """
+                    INSERT INTO job_new
+                        (id, watchID, title, stage, problem, waitingFor, createdAt, updatedAt,
+                         doneAt, searchKey, archivedAt, notes)
+                    SELECT id, watchID, title,
+                        CASE
+                            WHEN stage = 'Waiting' THEN 'Waiting'
+                            WHEN stage IN ('Completed', 'Cancelled') THEN 'Done'
+                            ELSE 'In progress'
+                        END,
+                        reportedProblem, CASE WHEN stage = 'Waiting' THEN waitingReason END,
+                        createdAt, updatedAt,
+                        CASE stage
+                            WHEN 'Completed' THEN COALESCE(completedAt, cancelledAt, updatedAt)
+                            WHEN 'Cancelled' THEN COALESCE(cancelledAt, completedAt, updatedAt)
+                        END,
+                        searchKey, archivedAt, notes
+                    FROM job
+                    """)
+            try db.drop(table: "job")
+            try db.rename(table: "job_new", to: "job")
+            try db.create(index: "job_watchID", on: "job", columns: ["watchID"])
+            try db.execute(
+                sql: """
+                    CREATE UNIQUE INDEX job_one_open_per_watch ON job(watchID)
+                    WHERE stage IN ('In progress', 'Waiting')
+                    """)
+            try db.create(index: "job_searchKey", on: "job", columns: ["searchKey"])
+            try db.create(index: "job_archivedAt", on: "job", columns: ["archivedAt"])
+            for operation in ["INSERT", "UPDATE"] {
+                try db.execute(
+                    sql: """
+                        CREATE TRIGGER watch_cover_\(operation.lowercased()) BEFORE \(operation) ON watch
+                        WHEN NEW.coverPhotoID IS NOT NULL AND NOT EXISTS (
+                            SELECT 1 FROM libraryItem AS item
+                            LEFT JOIN job ON job.id = item.jobID
+                            WHERE item.id = NEW.coverPhotoID AND item.kind = 'Photo'
+                              AND (item.watchID = NEW.id OR job.watchID = NEW.id))
+                        BEGIN SELECT RAISE(ABORT, 'Invalid watch cover'); END
+                        """)
+            }
+            try SearchKey.backfill("job", fields: ["title", "notes"], in: db)
+        }
         return migrator
     }
 }

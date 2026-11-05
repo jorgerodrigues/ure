@@ -35,32 +35,29 @@ struct WorkshopOverviewStateTests {
         try await waitUntil { workshop.rows.first?.unresolvedPartCount == 1 }
         var arrived = PartDraft(part: part)
         arrived.status = .arrived
-        try await JobTaskFixture.failEvents(coordinator)
+        try await JobTaskFixture.failWrites(coordinator, on: "partRequirement")
         await #expect(throws: DatabaseError.self) {
             try await parts.save(arrived, for: job.id, editing: part.id)
         }
         #expect(workshop.rows.first?.unresolvedPartCount == 1)
-        try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failTaskEvent")
-        }
+        try await JobTaskFixture.allowWrites(coordinator, on: "partRequirement")
         _ = try await parts.save(arrived, for: job.id, editing: part.id)
         try await waitUntil { workshop.rows.first?.unresolvedPartCount == 0 }
-        var waiting = JobTransitionDraft(stage: .waiting)
-        waiting.waitingReason = "Awaiting review Å時計"
         let jobs = JobService(coordinator: coordinator)
-        _ = try await jobs.transition(job.id, using: waiting)
-        try await waitUntil { workshop.rows.first?.job.waitingReason == waiting.waitingReason }
+        _ = try await jobs.setStage(job.id, to: .waiting)
+        _ = try await jobs.update(job.id, .waitingFor("A review Å時計"))
+        try await waitUntil { workshop.rows.first?.job.waitingFor == "A review Å時計" }
         _ = try await WatchService(coordinator: coordinator).update(
             job.watchID, .name("Updated watch"))
         try await waitUntil { workshop.rows.first?.watch.name == "Updated watch" }
-        var closure = JobTransitionDraft(stage: .completed)
-        closure.outcome = "Reviewed"
-        closure.unfinishedTasksReason = "Kept for history"
-        let closed = try await jobs.transition(job.id, using: closure)
+        let closed = try await jobs.setStage(job.id, to: .done).job
         try await waitUntil { workshop.rows.isEmpty }
-        #expect(workshop.selectionMessage(for: closed)?.contains("watch history") == true)
+        #expect(
+            workshop.selectionMessage(for: closed)
+                == "This job is done. It stays on its watch’s page.")
         #expect(try await coordinator.read { try JobQueries.fetch(job.id, in: $0) } == closed)
-        _ = try await jobs.reopen(job.id, using: JobTransitionDraft(stage: .ready))
-        try await waitUntil { workshop.rows.first?.job.stage == .ready }
+        _ = try await jobs.setStage(job.id, to: .inProgress)
+        try await waitUntil { workshop.rows.first?.job.stage == .inProgress }
         observation.cancel()
         await observation.value
         try await coordinator.close()
@@ -75,9 +72,9 @@ struct WorkshopOverviewStateTests {
         _ = try await coordinator.open()
         let first = try await JobTaskFixture.job(coordinator)
         let second = try await JobTaskFixture.job(coordinator)
-        var waiting = JobTransitionDraft(stage: .waiting)
-        waiting.waitingReason = "Awaiting mainspring"
-        _ = try await JobService(coordinator: coordinator).transition(second.id, using: waiting)
+        _ = try await JobService(coordinator: coordinator).setStage(second.id, to: .waiting)
+        _ = try await JobService(coordinator: coordinator).update(
+            second.id, .waitingFor("A mainspring"))
         let task = try await JobTaskService(coordinator: coordinator).save(
             JobTaskFixture.draft(.toDo), for: first.id, editing: nil)
         let editing = makeEditing(coordinator)
@@ -98,7 +95,7 @@ struct WorkshopOverviewStateTests {
         #expect(workshop.filteredRows.map(\.id) == [second.id])
         #expect(workshop.selectionMessage(for: editing.jobs.selectedJob) != nil)
         #expect(editing.jobs.selectedID == first.id)
-        workshop.stageFilter = .planned
+        workshop.searchText = "crystal"
         #expect(workshop.filteredRows.isEmpty)
         workshop.clearFilters()
         #expect(workshop.selectionMessage(for: editing.jobs.selectedJob) == nil)
@@ -131,11 +128,9 @@ struct WorkshopOverviewStateTests {
         #expect(saved?.title == "Keep my draft")
         workshop.open(UUID(), editing: editing)
         #expect(workshop.navigationError != nil && editing.jobs.selectedID == second.id)
-        var closure = JobTransitionDraft(stage: .cancelled)
-        closure.cancellationReason = "No longer needed"
-        _ = try await JobService(coordinator: coordinator).transition(second.id, using: closure)
+        _ = try await JobService(coordinator: coordinator).setStage(second.id, to: .done)
         try await waitUntil {
-            workshop.rows.count == 1 && editing.jobs.selectedJob?.stage == .cancelled
+            workshop.rows.count == 1 && editing.jobs.selectedJob?.stage == .done
         }
         workshop.open(second.id, editing: editing)
         #expect(workshop.navigationError != nil && editing.jobs.selectedID == second.id)

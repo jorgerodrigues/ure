@@ -19,6 +19,15 @@ nonisolated struct JobTaskProgress: Equatable, Sendable {
         return doneCount * 100 / countedCount
     }
 
+    // The checklist heading's summary, such as "6 of 10 done · 60%", with the skipped tasks
+    // counted apart, such as "· 1 skipped".
+    var summary: String {
+        var parts = ["No tasks planned"]
+        if let percentage { parts = ["\(doneCount) of \(countedCount) done", "\(percentage)%"] }
+        if skippedCount > 0 { parts.append("\(skippedCount) skipped") }
+        return parts.joined(separator: " · ")
+    }
+
     var accessibilitySummary: String {
         guard let percentage else { return "No tasks planned. \(skippedCount) skipped." }
         return

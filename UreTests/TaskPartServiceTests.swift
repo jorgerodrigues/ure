@@ -43,15 +43,12 @@ nonisolated struct TaskPartServiceTests {
         let links = try await coordinator.read(TaskPartQueries.fetchAll)
         #expect(Set(links.map(\.partID)) == [first.id, second.id])
         #expect(links.allSatisfy { $0.taskID == waiting.id })
-        let events = try await coordinator.read(ActivityQueries.fetchAll)
-        #expect(events.allSatisfy { $0.kind == .partStatusChanged })
         try await coordinator.close()
         let reopened = fixture.coordinator()
         _ = try await reopened.open()
         #expect(try await reopened.read(TaskPartQueries.fetchAll) == links)
         #expect(try await reopened.read(JobTaskQueries.fetchAll) == [waiting])
         #expect(try await reopened.read(JobQueries.fetchAll) == [job])
-        #expect(try await reopened.read(ActivityQueries.fetchAll) == events)
         let savedParts = try await reopened.read(PartQueries.fetchAll)
         #expect(savedParts.contains(installed) && savedParts.contains(cancelled))
         #expect(try await TaskPartFixture.availability(waiting.id, in: reopened) == .needsReview)
@@ -177,15 +174,14 @@ nonisolated struct TaskPartServiceTests {
         #expect(try await coordinator.read(TaskPartQueries.fetchAll) == links)
         try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failTaskPart")
         }
-        try await JobTaskFixture.failEvents(coordinator)
+        try await JobTaskFixture.failWrites(coordinator, on: "jobTask")
         draft.status = .done
         await #expect(throws: DatabaseError.self) {
             try await service.save(draft, for: job.id, editing: waiting.id)
         }
         #expect(try await coordinator.read(JobTaskQueries.fetchAll) == [waiting])
         #expect(try await coordinator.read(TaskPartQueries.fetchAll) == links)
-        try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failTaskEvent")
-        }
+        try await JobTaskFixture.allowWrites(coordinator, on: "jobTask")
         for link in [
             links[0], TaskPart(taskID: waiting.id, partID: UUID()),
             TaskPart(taskID: UUID(), partID: first.id),
@@ -194,21 +190,18 @@ nonisolated struct TaskPartServiceTests {
                 try await coordinator.mutate { db, _, _ in try link.insert(db) }
             }
         }
-        var closure = JobTransitionDraft(stage: .completed)
-        closure.outcome = "Owner collected watch"
-        closure.unfinishedTasksReason = "Owner will arrange service"
-        closure.unfinishedPartsReason = "Parts no longer required by owner"
-        _ = try await JobService(coordinator: coordinator).transition(job.id, using: closure)
-        await #expect(throws: JobError.closedJob) {
-            try await service.save(draft, for: job.id, editing: waiting.id)
-        }
+        // A Done job keeps its links, and its tasks can still change them.
+        _ = try await JobService(coordinator: coordinator).setStage(job.id, to: .done)
         #expect(try await coordinator.read(JobTaskQueries.fetchAll) == [waiting])
         #expect(try await coordinator.read(TaskPartQueries.fetchAll) == links)
+        draft.partIDs = [first.id]
+        _ = try await service.save(draft, for: job.id, editing: waiting.id)
+        #expect(try await coordinator.read(TaskPartQueries.fetchAll).map(\.partID) == [first.id])
         try await coordinator.close()
     }
 
     @Test
-    func forwardMigrationPreservesTasksProcurementHistoryCoversAndOriginalBytes() async throws {
+    func forwardMigrationPreservesTasksProcurementCoversAndOriginalBytes() async throws {
         let fixture = ImportFixture()
         defer { fixture.remove() }
         let coordinator = LibraryCoordinator(root: fixture.root)
@@ -231,7 +224,6 @@ nonisolated struct TaskPartServiceTests {
         let photo = try await material.importFiles([source], for: .job(job.id))[0].outcome.get()
         try await material.setCover(photo.id, for: job.watchID)
         let watch = try #require(try await coordinator.read(WatchQueries.fetchAll).first)
-        let events = try await coordinator.read(ActivityQueries.fetchAll)
         try await coordinator.mutate { db, _, _ in try TaskPartMigrationFixture.removeLinks(in: db)
         }
         try await coordinator.close()
@@ -240,7 +232,6 @@ nonisolated struct TaskPartServiceTests {
         #expect(after.generationID != before.generationID && after.manifest == before.manifest)
         #expect(try await reopened.read(JobTaskQueries.fetchAll) == tasks)
         #expect(try await reopened.read(PartQueries.fetchAll) == [ordered])
-        #expect(try await reopened.read(ActivityQueries.fetchAll) == events)
         #expect(try await reopened.read(JobQueries.fetchAll) == [job])
         #expect(try await reopened.read(WatchQueries.fetchAll) == [watch])
         #expect(try await reopened.read(MaterialQueries.fetchAll) == [photo])

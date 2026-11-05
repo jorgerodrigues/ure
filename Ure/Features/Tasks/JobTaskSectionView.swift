@@ -1,5 +1,7 @@
 import SwiftUI
 
+// The job's tasks under the Checklist heading with the task progress, in their current rows
+// until W039 makes the checklist.
 struct JobTaskSectionView: View {
     @Environment(JobTaskState.self) private var tasks
     @Environment(JobState.self) private var jobs
@@ -7,32 +9,49 @@ struct JobTaskSectionView: View {
     let jobID: UUID
 
     var body: some View {
-        Section("Tasks") {
-            if tasks.isLoading {
-                ProgressView("Loading tasks…")
-            } else if let error = tasks.loadError {
+        VStack(alignment: .leading, spacing: JobSectionLayout.spacing) {
+            PageSectionHeading(title: "Checklist", detail: progress)
+                .padding(.bottom, JobSectionLayout.headingBottom)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Checklist")
+                .accessibilityValue(tasks.progress(for: jobID).accessibilitySummary)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("taskProgressSummary")
+            content
+                .buttonStyle(.borderless)
+        }
+    }
+
+    private var progress: String? {
+        guard !tasks.isLoading, tasks.loadError == nil else { return nil }
+        return tasks.progress(for: jobID).summary
+    }
+
+    @ViewBuilder private var content: some View {
+        if tasks.isLoading {
+            ProgressView("Loading tasks…")
+        } else if let error = tasks.loadError {
+            Label(error, systemImage: "exclamationmark.triangle")
+            Button("Retry", action: retry)
+        } else {
+            Button("Add Task", systemImage: "plus", action: create)
+                .disabled(editing.isSaving || !tasks.canWrite(jobID, jobs: jobs))
+                .accessibilityIdentifier("addTask")
+            if let error = tasks.reorderError {
                 Label(error, systemImage: "exclamationmark.triangle")
-                Button("Retry", action: retry)
+                    .accessibilityIdentifier("taskReorderError")
+            }
+            if tasks.records(for: jobID).isEmpty {
+                Text("No tasks planned.").foregroundStyle(.secondary)
             } else {
-                Button("Add Task", systemImage: "plus", action: create)
-                    .disabled(editing.isSaving || !tasks.canWrite(jobID, jobs: jobs))
-                    .accessibilityIdentifier("addTask")
-                if let error = tasks.reorderError {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                        .accessibilityIdentifier("taskReorderError")
-                }
-                if tasks.records(for: jobID).isEmpty {
-                    Text("No tasks planned.").foregroundStyle(.secondary)
-                } else {
-                    ForEach(tasks.records(for: jobID)) { task in JobTaskRow(task: task) }
-                    if tasks.canReorder(jobID, jobs: jobs) {
-                        Text("Drag tasks into order. Drop here to move a task to the end.")
-                            .font(.caption).foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .dropDestination(
-                                for: String.self, isEnabled: !editing.isSaving, action: dropAtEnd)
-                    }
+                ForEach(tasks.records(for: jobID)) { task in JobTaskRow(task: task) }
+                if tasks.canReorder(jobID, jobs: jobs) {
+                    Text("Drag tasks into order. Drop here to move a task to the end.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .dropDestination(
+                            for: String.self, isEnabled: !editing.isSaving, action: dropAtEnd)
                 }
             }
         }
@@ -72,7 +91,9 @@ private struct JobTaskRow: View {
                 Text(task.status.rawValue).foregroundStyle(.secondary)
                     .frame(width: 80, alignment: .trailing)
             }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .disabled(editing.isSaving)
         .accessibilityIdentifier("task-\(task.id.uuidString)")
         .contextMenu {
@@ -113,4 +134,11 @@ private struct JobTaskRow: View {
         guard canMove(destination) else { return }
         tasks.moveCommand(task.id, for: task.jobID, to: destination, jobs: jobs)
     }
+}
+
+// Values from the "2 Job" artboard on the Paper page "Rework · Simple": the Parts and Checklist
+// headings sit 4 pt above their rows, which are 8 pt apart.
+enum JobSectionLayout {
+    static let spacing: CGFloat = 8
+    static let headingBottom: CGFloat = 4
 }

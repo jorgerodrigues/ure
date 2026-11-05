@@ -50,7 +50,7 @@ struct JobTaskEditorView: View {
             }
             if !tasks.canWrite(jobID, jobs: jobs) {
                 Section {
-                    Text("Task editing is unavailable. Reopen a closed job to change its tasks.")
+                    Text("This job is archived, so its tasks can’t change.")
                 }
             }
             if let error = tasks.saveError {

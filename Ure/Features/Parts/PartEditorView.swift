@@ -39,7 +39,7 @@ struct PartEditorView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             if !parts.canWrite(jobID, jobs: jobs) {
-                Section { Text("Reopen a closed job to change its parts.") }
+                Section { Text("This job is archived, so its parts can’t change.") }
             }
             if let error = parts.saveError {
                 Section {

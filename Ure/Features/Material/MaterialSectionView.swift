@@ -70,7 +70,7 @@ struct MaterialSectionView: View {
     }
 
     private var readOnlyMessage: String {
-        if case .job = owner { return "Reopen the job to add or change its material." }
+        if case .job = owner { return "This job is archived, so its material can’t change." }
         return "Unarchive this record to add or change its material."
     }
 

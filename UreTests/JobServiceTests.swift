@@ -1,138 +1,87 @@
 import Foundation
 import GRDB
+import Synchronization
 import Testing
 
 @testable import Ure
 
 nonisolated struct JobServiceTests {
     @Test
-    func minimalAndCompleteIntakesSurviveRestart() async throws {
+    func aStartedJobIsInProgressWithItsOpenedDateAndSurvivesRestart() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let date = Date(timeIntervalSince1970: 1_700_000_000)
         let coordinator = fixture.coordinator(dependencies: LibraryDependencies(now: { date }))
         _ = try await coordinator.open()
         let watch = try await makeWatch(coordinator)
-        var draft = JobDraft()
-        draft.title = "  Inspect inherited watch  "
-        let first = try await JobService(coordinator: coordinator).save(
-            draft, for: watch.id, editing: nil)
-        #expect(first.title == "Inspect inherited watch")
-        #expect(first.stage == .planned)
-        #expect(first.reportedProblem == nil)
-        #expect(first.createdAt == date)
-        #expect(first.intakeSnapshot.version == 1)
-        #expect(first.intakeSnapshot.watchName == watch.name)
-        #expect(first.intakeSnapshot.serial == "000042.7-A")
-        #expect(first.intakeSnapshot.caliberDesignation == nil)
+        let service = JobService(coordinator: coordinator)
+        let first = try await service.start(for: watch.id)
+        #expect(first.title == "New Job" && first.stage == .inProgress)
+        #expect(first.createdAt == date && first.updatedAt == date)
+        #expect(first.problem == nil && first.waitingFor == nil && first.doneAt == nil)
         let other = try await makeWatch(coordinator)
-        draft.reportedProblem = "Stops overnight.\nCheck after winding."
-        draft.agreedScope = "Inspection only"
-        draft.intakeCondition = "Disassembled on arrival"
-        let second = try await JobService(coordinator: coordinator).save(
-            draft, for: other.id, editing: nil)
-        #expect(second.reportedProblem == draft.reportedProblem)
-        #expect(second.agreedScope == draft.agreedScope)
-        #expect(second.intakeCondition == draft.intakeCondition)
-        let snapshotText = try await coordinator.read { db in
-            try String.fetchOne(
-                db, sql: "SELECT intakeSnapshot FROM job WHERE id = ?",
-                arguments: [first.id.uuidString])
-        }
-        let text = try #require(snapshotText)
-        let snapshot = try JSONDecoder().decode(JobIntakeSnapshot.self, from: Data(text.utf8))
-        #expect(snapshot == first.intakeSnapshot)
+        let second = try await service.start(for: other.id, title: "  Inspect inherited watch  ")
+        #expect(second.title == "Inspect inherited watch")
         try await coordinator.close()
         let reopened = fixture.coordinator()
         _ = try await reopened.open()
-        let records = try await reopened.read(JobQueries.fetchAll)
-        #expect(records.count == 2)
-        #expect(records.contains(first))
-        #expect(records.contains(second))
+        #expect(
+            try await reopened.read(JobQueries.fetchAll).sorted { $0.title < $1.title }
+                == [first, second].sorted { $0.title < $1.title })
         try await reopened.close()
     }
 
     @Test
-    func watchAndCaliberChangesDoNotRewriteIntakeAndCorrectionsStayLocal() async throws {
+    func eachFactSavesOnItsOwnAndABlankTitleCommitsNothing() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
+        let created = Date(timeIntervalSince1970: 1_700_000_000)
+        let clock = Mutex(created)
+        let coordinator = fixture.coordinator(
+            dependencies: LibraryDependencies(now: { clock.withLock { $0 } }))
         _ = try await coordinator.open()
-        let calibers = CaliberService(coordinator: coordinator)
-        let caliber = try await calibers.create(named: "0012–Å")
-        let watch = try await WatchFixture.completeWatch(coordinator, caliberID: caliber.id)
+        let watch = try await makeWatch(coordinator)
         let service = JobService(coordinator: coordinator)
-        var draft = JobDraft()
-        draft.title = "First repair"
-        let first = try await service.save(draft, for: watch.id, editing: nil)
-        #expect(first.intakeSnapshot.caliberDesignation == "0012–Å")
-        #expect(first.intakeSnapshot.caliberVariant == nil)
-        let watches = WatchService(coordinator: coordinator)
-        _ = try await watches.update(watch.id, .name("Current name"))
-        _ = try await watches.update(watch.id, .serial("Different serial"))
-        _ = try await calibers.update(caliber.id, .name("Corrected designation"))
-        _ = try await calibers.update(caliber.id, .maker("Corrected maker"))
-        #expect(
-            try await coordinator.read { db in try JobQueries.fetch(first.id, in: db) } == first)
-        draft = JobDraft(job: first)
-        draft.reportedProblem = "Corrected intake note"
-        let edited = try await service.save(draft, for: watch.id, editing: first.id)
-        #expect(edited.intakeSnapshot == first.intakeSnapshot)
-        #expect(edited.createdAt == first.createdAt)
-        draft.intake?.serial = "000042.7-B"
-        let corrected = try await service.save(draft, for: watch.id, editing: first.id)
-        #expect(corrected.intakeSnapshot.serial == "000042.7-B")
-        #expect(
-            try await coordinator.read { db in try WatchQueries.fetch(watch.id, in: db)?.serial }
-                == "Different serial")
-        #expect(
-            try await coordinator.read { db in
-                try CaliberQueries.fetch(caliber.id, in: db)?.designation
-            } == "Corrected designation")
+        let job = try await service.start(for: watch.id)
+        let edited = created.addingTimeInterval(60)
+        clock.withLock { $0 = edited }
+        _ = try await service.update(job.id, .title("  Full service  "))
+        let problem = "Loses about two minutes a day.\nThe crown feels gritty when winding."
+        let saved = try await service.update(job.id, .problem("\n\(problem)  \n"))
+        #expect(saved.title == "Full service" && saved.problem == problem)
+        #expect(saved.updatedAt == edited && saved.createdAt == created)
+        #expect(try await coordinator.read { try JobQueries.fetch(job.id, in: $0) } == saved)
+
+        clock.withLock { $0 = edited.addingTimeInterval(60) }
+        #expect(try await service.update(job.id, .problem(problem)) == saved)
+        await #expect(throws: JobValidationError(message: "Write a title for this job.")) {
+            try await service.update(job.id, .title(" \n "))
+        }
+        await #expect(throws: JobError.notWaiting) {
+            try await service.update(job.id, .waitingFor("A mainspring"))
+        }
+        #expect(try await service.update(job.id, .waitingFor("  ")) == saved)
+        let cleared = try await service.update(job.id, .problem(" \n "))
+        #expect(cleared.problem == nil)
+        await #expect(throws: JobError.missingRecord) {
+            try await service.update(UUID(), .title("Missing"))
+        }
         try await coordinator.close()
     }
 
     @Test
-    func invalidTitlesAndSnapshotNamesCommitNothing() async throws {
+    func concurrentStartsCommitExactlyOneOpenJob() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let watch = try await makeWatch(coordinator)
         let service = JobService(coordinator: coordinator)
-        var draft = JobDraft()
-        draft.title = " \n "
-        await #expect(throws: JobValidationError.self) {
-            try await service.save(draft, for: watch.id, editing: nil)
-        }
-        #expect(try await coordinator.read(JobQueries.fetchAll).isEmpty)
-        draft.title = "Repair"
-        let first = try await service.save(draft, for: watch.id, editing: nil)
-        draft = JobDraft(job: first)
-        draft.intake?.watchName = " \n "
-        await #expect(throws: JobValidationError.self) {
-            try await service.save(draft, for: watch.id, editing: first.id)
-        }
-        #expect(try await coordinator.read(JobQueries.fetchAll) == [first])
-        try await coordinator.close()
-    }
-
-    @Test
-    func concurrentCreatesCommitExactlyOneOpenJob() async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        let watch = try await makeWatch(coordinator)
-        let service = JobService(coordinator: coordinator)
-        var draft = JobDraft()
-        draft.title = "One repair"
-        let intake = draft
         let successes = try await withThrowingTaskGroup(of: Int.self) { group in
             for _ in 0..<2 {
                 group.addTask {
                     do {
-                        _ = try await service.save(intake, for: watch.id, editing: nil)
+                        _ = try await service.start(for: watch.id)
                         return 1
                     } catch let error as JobError {
                         guard case .openJobExists = error else { throw error }
@@ -145,123 +94,124 @@ nonisolated struct JobServiceTests {
             return count
         }
         #expect(successes == 1)
-        #expect(try await coordinator.read(JobQueries.fetchAll).count == 1)
+        let open = try #require(try await coordinator.read(JobQueries.fetchAll).first)
+        await #expect(throws: JobError.openJobExists(open)) {
+            try await service.start(for: watch.id)
+        }
+        #expect(try await coordinator.read(JobQueries.fetchAll) == [open])
         try await coordinator.close()
     }
 
-    @Test(arguments: [JobStage.planned, .inProgress, .waiting, .ready])
+    @Test(arguments: [JobStage.inProgress, .waiting])
     func databaseRejectsAnotherOpenJobEvenWithoutServiceValidation(stage: JobStage) async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let watch = try await makeWatch(coordinator)
-        var draft = JobDraft()
-        draft.title = "First repair"
-        let first = try await JobService(coordinator: coordinator).save(
-            draft, for: watch.id, editing: nil)
-        try await coordinator.mutate { db, _, _ in
-            try db.execute(
-                sql: "UPDATE job SET stage = ? WHERE id = ?",
-                arguments: [stage.rawValue, first.id.uuidString])
-        }
-        let duplicate = try draft.record(
-            id: UUID(), watchID: watch.id, stage: .planned, snapshot: first.intakeSnapshot,
+        let first = try await JobService(coordinator: coordinator).start(for: watch.id)
+        _ = try await JobService(coordinator: coordinator).setStage(first.id, to: stage)
+        let duplicate = JobRecord(
+            id: UUID(), watchID: watch.id, title: "Second repair", stage: .inProgress,
             createdAt: first.createdAt, updatedAt: first.updatedAt)
         await #expect(throws: DatabaseError.self) {
             try await coordinator.mutate { db, _, _ in try JobQueries.insert(duplicate, in: db) }
         }
-        #expect(try await coordinator.read(JobQueries.fetchAll).count == 1)
+        let done = JobRecord(
+            id: UUID(), watchID: watch.id, title: "Earlier repair", stage: .done,
+            createdAt: first.createdAt, updatedAt: first.updatedAt, doneAt: first.createdAt)
+        try await coordinator.mutate { db, _, _ in try JobQueries.insert(done, in: db) }
+        #expect(try await coordinator.read(JobQueries.fetchAll).count == 2)
         try await coordinator.close()
     }
 
     @Test
-    func closedHistoryAllowsANewJobButRejectsIntakeEdits() async throws {
+    func databaseKeepsTheDoneDateAndTheWaitingTextWithTheirStates() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let watch = try await makeWatch(coordinator)
-        let service = JobService(coordinator: coordinator)
-        var draft = JobDraft()
-        draft.title = "Earlier repair"
-        let first = try await service.save(draft, for: watch.id, editing: nil)
-        try await coordinator.mutate { db, _, _ in
-            try db.execute(
-                sql: "UPDATE job SET stage = 'Completed' WHERE id = ?",
-                arguments: [first.id.uuidString])
-        }
-        await #expect(throws: JobError.closedJob) {
-            try await service.save(draft, for: watch.id, editing: first.id)
-        }
-        draft.title = "Later repair"
-        let second = try await service.save(draft, for: watch.id, editing: nil)
-        try await coordinator.mutate { db, _, _ in
-            try db.execute(
-                sql: "UPDATE job SET stage = 'Cancelled' WHERE id = ?",
-                arguments: [second.id.uuidString])
-        }
-        _ = try await service.save(draft, for: watch.id, editing: nil)
-        #expect(try await coordinator.read(JobQueries.fetchAll).count == 3)
-        #expect(
-            try await coordinator.read { db in
-                try JobQueries.fetch(first.id, in: db)?.intakeSnapshot
-            } == first.intakeSnapshot)
-        try await coordinator.close()
-    }
-
-    @Test
-    func unavailableAndWrongWatchEditsCannotCreateOrMoveRecords() async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        let watch = try await makeWatch(coordinator)
-        let other = try await makeWatch(coordinator)
-        let service = JobService(coordinator: coordinator)
-        var draft = JobDraft()
-        draft.title = "Repair"
-        await #expect(throws: JobError.unavailableWatch) {
-            try await service.save(draft, for: UUID(), editing: nil)
-        }
-        await #expect(throws: JobError.missingRecord) {
-            try await service.save(draft, for: watch.id, editing: UUID())
-        }
-        let first = try await service.save(draft, for: watch.id, editing: nil)
-        await #expect(throws: JobError.missingRecord) {
-            try await service.save(draft, for: other.id, editing: first.id)
-        }
-        await #expect(throws: DatabaseError.self) {
-            try await coordinator.mutate { db, _, _ in
-                try db.execute(sql: "UPDATE job SET watchID = ?", arguments: [UUID().uuidString])
+        let job = try await JobService(coordinator: coordinator).start(for: watch.id)
+        for sql in [
+            "UPDATE job SET stage = 'Done'", "UPDATE job SET doneAt = 1",
+            "UPDATE job SET waitingFor = 'A mainspring'", "UPDATE job SET stage = 'Planned'",
+        ] {
+            await #expect(throws: DatabaseError.self) {
+                try await coordinator.mutate { db, _, _ in try db.execute(sql: sql) }
             }
         }
-        #expect(try await coordinator.read(JobQueries.fetchAll) == [first])
+        #expect(try await coordinator.read(JobQueries.fetchAll) == [job])
         try await coordinator.close()
     }
 
     @Test
-    func futureSnapshotCannotBeOverwrittenByAnEdit() async throws {
+    func startingNeedsAWatchThatIsInTheLibraryAndNotArchived() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let watch = try await makeWatch(coordinator)
-        var draft = JobDraft()
-        draft.title = "Repair"
         let service = JobService(coordinator: coordinator)
-        let first = try await service.save(draft, for: watch.id, editing: nil)
-        try await coordinator.mutate { db, _, _ in
-            try db.execute(
-                sql: "UPDATE job SET intakeSnapshot = json_set(intakeSnapshot, '$.version', 2)")
+        await #expect(throws: JobError.unavailableWatch) {
+            try await service.start(for: UUID())
         }
-        await #expect(throws: JobError.unsupportedSnapshot) {
-            try await service.save(draft, for: watch.id, editing: first.id)
+        _ = try await ArchiveService(coordinator: coordinator).setWatch(watch.id, archived: true)
+        await #expect(throws: ArchiveError.archived) {
+            try await service.start(for: watch.id)
         }
+        #expect(try await coordinator.read(JobQueries.fetchAll).isEmpty)
+        await #expect(throws: JobValidationError.self) {
+            try await service.start(for: try await makeWatch(coordinator).id, title: " ")
+        }
+        #expect(try await coordinator.read(JobQueries.fetchAll).isEmpty)
+        try await coordinator.close()
+    }
+
+    @Test
+    func aDoneJobTakesEditsWithItsTasksPartsNotesAndMaterial() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let watch = try await makeWatch(coordinator)
+        let service = JobService(coordinator: coordinator)
+        let job = try await service.start(for: watch.id, title: "Full service")
+        let tasks = JobTaskService(coordinator: coordinator)
+        let first = try await tasks.save(JobTaskFixture.draft(.toDo), for: job.id, editing: nil)
+        let parts = PartService(coordinator: coordinator)
+        let part = try await parts.save(PartFixture.draft(), for: job.id, editing: nil)
+        let done = try await service.setStage(job.id, to: .done).job
+        #expect(done.stage == .done)
+
+        let renamed = try await service.update(job.id, .title("Full service and crystal"))
+        #expect(renamed.stage == .done && renamed.doneAt == done.doneAt)
+        _ = try await service.update(job.id, .problem("Crystal cracked at the bench."))
+        var task = JobTaskDraft(task: first)
+        task.status = .done
+        let ticked = try await tasks.save(task, for: job.id, editing: first.id)
+        #expect(ticked.status == .done)
+        let second = try await tasks.save(JobTaskFixture.draft(.doing), for: job.id, editing: nil)
+        _ = try await tasks.move(second.id, for: job.id, to: .up)
+        var order = PartDraft(part: part)
+        order.status = .ordered
+        order.orderReference = "PO-12"
         #expect(
-            try await coordinator.read { db in
-                try JobQueries.fetch(first.id, in: db)?.intakeSnapshot.version
-            } == 2)
+            try await parts.save(order, for: job.id, editing: part.id).record.status == .ordered)
+        try await RecordNotesService(coordinator: coordinator).save(
+            "Fitted a new crystal after it was done.", for: .job(job.id))
+        let link = try await MaterialService(coordinator: coordinator).addLink(
+            try #require(URL(string: "https://example.org/crystal")), for: .job(job.id))
+        #expect(link.jobID == job.id)
+        let left = try await ChildRemovalService(coordinator: coordinator).removeTask(
+            ticked.id, for: job.id, confirmedPartIDs: [])
+        #expect(left.map(\.id) == [second.id])
+        let saved = try #require(
+            try await coordinator.read { try JobQueries.fetch(job.id, in: $0) })
+        #expect(saved.stage == .done && saved.problem == "Crystal cracked at the bench.")
+        #expect(
+            try await RecordNotesService(coordinator: coordinator).text(for: .job(job.id))
+                == "Fitted a new crystal after it was done.")
         try await coordinator.close()
     }
 
@@ -275,10 +225,8 @@ nonisolated struct JobServiceTests {
         let values = try await coordinator.jobValues()
         var iterator = values.makeAsyncIterator()
         #expect(try await iterator.next() == [])
-        var draft = JobDraft()
-        draft.title = "Saved job"
         let service = JobService(coordinator: coordinator)
-        let first = try await service.save(draft, for: watch.id, editing: nil)
+        let first = try await service.start(for: watch.id, title: "Saved job")
         #expect(try await iterator.next() == [first])
         try await coordinator.mutate { db, _, _ in
             try db.execute(
@@ -286,16 +234,16 @@ nonisolated struct JobServiceTests {
                     "CREATE TRIGGER failJobUpdate BEFORE UPDATE ON job BEGIN SELECT RAISE(ABORT, 'fixture disk failure'); END"
             )
         }
-        draft = JobDraft(job: first)
-        draft.title = "Failed edit"
         await #expect(throws: DatabaseError.self) {
-            try await service.save(draft, for: watch.id, editing: first.id)
+            try await service.update(first.id, .title("Failed edit"))
+        }
+        await #expect(throws: DatabaseError.self) {
+            try await service.setStage(first.id, to: .done)
         }
         #expect(try await coordinator.read(JobQueries.fetchAll) == [first])
         try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failJobUpdate")
         }
-        draft.title = "Committed edit"
-        let last = try await service.save(draft, for: watch.id, editing: first.id)
+        let last = try await service.update(first.id, .title("Committed edit"))
         #expect(try await iterator.next() == [last])
         try await coordinator.close()
     }

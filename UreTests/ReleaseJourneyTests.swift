@@ -40,12 +40,10 @@ nonisolated struct ReleaseJourneyTests {
         let retainedAssets = try await coordinator.read(FileAssetQueries.fetchAll)
         let watch = try await WatchService(coordinator: coordinator).make("Release bench – Å時計")
         #expect(watch.brand == nil && watch.caliberID == nil && watch.owner == nil)
-        var jobDraft = JobDraft()
-        jobDraft.title = "Inspect movement"
         let jobs = JobService(coordinator: coordinator)
-        let job = try await jobs.save(jobDraft, for: watch.id, editing: nil)
-        try await RecordNotesService(coordinator: coordinator).save(
-            "Finding: unknown specifications. Keep 00042-A/7.", for: .job(job.id))
+        let job = try await jobs.start(for: watch.id, title: "Inspect movement")
+        let notes = RecordNotesService(coordinator: coordinator)
+        try await notes.save("Finding: unknown specifications. Keep 00042-A/7.", for: .job(job.id))
         var partDraft = PartFixture.draft()
         partDraft.manufacturerReference = "0012-A"
         var link = PartLinkDraft()
@@ -60,9 +58,8 @@ nonisolated struct ReleaseJourneyTests {
         let linkedPart = try await parts.save(edit, for: job.id, editing: initialPart.id)
         #expect(linkedPart.record.manufacturerReference == "0012-A")
         #expect(linkedPart.links.map(\.url) == [link.url, secondLink.url])
-        var waitingJob = JobTransitionDraft(stage: .waiting)
-        waitingJob.waitingReason = "Need spring"
-        _ = try await jobs.transition(job.id, using: waitingJob)
+        _ = try await jobs.setStage(job.id, to: .waiting)
+        #expect(try await jobs.update(job.id, .waitingFor("A spring")).waitingFor == "A spring")
         let tasks = JobTaskService(coordinator: coordinator)
         #expect(try await progress(job.id, coordinator).fraction == nil)
         var taskDraft = JobTaskFixture.draft(.waiting)
@@ -91,13 +88,15 @@ nonisolated struct ReleaseJourneyTests {
         let photo = try #require(added.first?.asset)
         let pdf = try #require(added.last?.asset)
         try FileManager.default.removeItem(at: fixture.sources)
-        var completion = JobTransitionDraft(stage: .completed)
-        completion.outcome = "Inspected; unresolved work documented"
-        completion.unfinishedTasksReason = "Assembly remains for the next repair"
-        let completed = try await jobs.transition(job.id, using: completion)
-        jobDraft.title = "Follow-up repair"
-        let followup = try await jobs.save(jobDraft, for: watch.id, editing: nil)
-        #expect(followup.id != completed.id && followup.intakeSnapshot == job.intakeSnapshot)
+        let outcome =
+            "Finding: unknown specifications. Keep 00042-A/7.\n\n"
+            + "Inspected. Assembly remains for the next repair."
+        try await notes.save(outcome, for: .job(job.id))
+        let completed = try await jobs.setStage(job.id, to: .done).job
+        #expect(completed.stage == .done && completed.waitingFor == nil)
+        let followup = try await jobs.start(for: watch.id, title: "Follow-up repair")
+        #expect(followup.id != completed.id && followup.stage == .inProgress)
+        #expect(try await notes.text(for: .job(completed.id)) == outcome)
         try await coordinator.close()
         coordinator = LibraryCoordinator(root: fixture.root)
         _ = try await coordinator.open()

@@ -1,6 +1,6 @@
 # Ure
 
-A native Mac app for watch repair and restoration. The current implementation includes the native shell, recoverable library, watch records, shared caliber records, job intake with repair history, one notes text per record, and photos, PDFs and links as material on each record. Further repair features follow in the [planning backlog](docs/planning/issues.md).
+A native Mac app for watch repair and restoration. The current implementation includes the native shell, recoverable library, watch records, shared caliber records, jobs you write on with three states and repair history, one notes text per record, and photos, PDFs and links as material on each record. Further repair features follow in the [planning backlog](docs/planning/issues.md).
 
 Start with the [local handover guide](docs/handover.md). The [release acceptance report](docs/planning/release-acceptance.md) records executed checks and remaining native and minimum-OS gates. First-release acceptance is still pending.
 
@@ -57,21 +57,21 @@ Local runs use ad-hoc signing. No Apple developer account is required. App Sandb
 
 The main window contains Workshop, Watches, Calibers, and Parts. Use **Option-Command-1** through **Option-Command-4** to select a section. **Command-comma** opens Settings. Startup creates or reopens the local library. Workshop shows open jobs. Watches and Calibers each have a list and a page you write on, with archived records folded away at the end of the list. Parts shows requirements from open jobs.
 
-Use **Option-Command-E** to edit the displayed job, task, or part, **Command-S** to save, and **Command-period** to cancel editing. **Command-[** returns to the owner through the draft guard. The Record menu also has removal, job stage, reopening, and archive actions. These commands follow the displayed record and its permissions. Editing commands are disabled in the read-only reference window. **Pin Reference** is also in the View menu.
+Use **Option-Command-E** to edit the displayed task or part, **Command-S** to save, and **Command-period** to cancel editing. **Command-[** returns to the owner through the draft guard. The Record menu also has removal and archive actions. These commands follow the displayed record and its permissions. Editing commands are disabled in the read-only reference window. **Pin Reference** is also in the View menu.
 
 Focus a photo and use the arrow keys to pan. Fit and Zoom controls remain available by keyboard. Use **Option-Command-Left Arrow** and **Option-Command-Right Arrow** for the previous or next photo or PDF page. Plain arrows remain available for text, lists, and photo panning. Reference content scrolls so long titles, filenames, and notes do not hide its actions.
 
 ## Workshop overview
 
-Workshop groups open jobs under Planned, In progress, Waiting, and Ready. Each row shows the saved watch name and cover thumbnail, job title, task counts and rounded-down percentage, skipped count, waiting reason, and number of Needed or Ordered part requirements. Each requirement counts once, regardless of its quantity or task links. Empty and all-skipped task lists show **No tasks planned**.
+Workshop groups open jobs under In progress and Waiting. Each row shows the saved watch name and cover thumbnail, job title, task counts and rounded-down percentage, skipped count, what a waiting job waits for, and number of Needed or Ordered part requirements. Each requirement counts once, regardless of its quantity or task links. Empty and all-skipped task lists show **No tasks planned**.
 
-Rows within each group put the latest saved job, task, or part change first. Watch identity and cover edits refresh the labels and thumbnail. Text search matches watch identity, job title, and waiting reason. The stage filter works together with text search. **Clear Filters** restores all open jobs.
+Rows within each group put the latest saved job, task, or part change first. Watch identity and cover edits refresh the labels and thumbnail. Text search matches watch identity, job title, and what a waiting job waits for. The stage filter works together with text search. **Clear Filters** restores all open jobs.
 
-Select a row to open that exact watch and job in Workshop. The existing editors, Command-S, draft protection, activity navigation, and pinned reference tools work there. Filters retain the selected detail and show a message when its row is excluded. Closing removes the job from the open list and keeps its readable detail and watch history. Reopening returns it to the applicable group. Loading failures show an error and Retry.
+Select a row to open that exact watch and job in Workshop. The job page, draft protection for tasks and parts, and pinned reference tools work there. Filters retain the selected detail and show a message when its row is excluded. Setting a job to Done removes it from the open list and keeps it on its watch's page. Setting it back returns it to its group. Loading failures show an error and Retry.
 
 ## Search
 
-Use **Search Library** in the toolbar or **Shift-Command-F** for global search. Results group watches, calibers, jobs, parts, links, photos, and PDFs. A photo or PDF opens in its viewer, and a link opens its record. A word in a record's notes finds that watch, caliber, or job. Each result names its watch, job, or shared caliber. Selecting it opens the exact saved record through the existing draft guard. Closed jobs remain searchable. Search always includes archived watches and calibers and their owned records, and marks them as archived.
+Use **Search Library** in the toolbar or **Shift-Command-F** for global search. Results group watches, calibers, jobs, parts, links, photos, and PDFs. A photo or PDF opens in its viewer, and a link opens its record. A word in a record's notes finds that watch, caliber, or job. Each result names its watch, job, or shared caliber. Selecting it opens the exact saved record through the existing draft guard. Done jobs remain searchable. Search always includes archived watches and calibers and their owned records, and marks them as archived.
 
 Search matches saved watch identity, the watch's owner and contact, caliber designation, job titles, the notes of watches, calibers, and jobs, part descriptions, manufacturer references, and material titles. It preserves leading zeros and punctuation. Unicode case matching uses the same rule in every local filter. SQL characters such as `%`, `_`, and quotes are literal search text. PDF contents and text within images are not indexed.
 
@@ -79,9 +79,9 @@ The normal Watches, Calibers, Workshop, and Parts lists have local search. Job h
 
 ## Archive and removal
 
-Use **Archive Watch** or **Archive Caliber** in the Record menu, or right-click the record in its list. Any watch can be archived, even one with an open job, and that job stays in Workshop and can still change. **Command-Z** undoes an archive or an unarchive. Archived watches and calibers fold away in the **Archived** section at the end of their list, and their page offers **Unarchive** in the toolbar. They stay in search. Existing watch links to archived calibers stay readable. Archived records reject changes until restored. Closed jobs require Reopen, and their watch must first be unarchived.
+Use **Archive Watch** or **Archive Caliber** in the Record menu, or right-click the record in its list. Any watch can be archived, even one with an open job, and that job stays in Workshop and can still change. **Command-Z** undoes an archive or an unarchive. Archived watches and calibers fold away in the **Archived** section at the end of their list, and their page offers **Unarchive** in the toolbar. They stay in search. Existing watch links to archived calibers stay readable. Archived records reject changes until restored.
 
-Tasks have a **Remove** action in saved detail. Removal requires confirmation. Task confirmation lists its part links. Parts and historical activity summaries stay saved. Part link removal stays in the part editor and commits with **Save**. Part requirements use **Cancelled** rather than deletion.
+Tasks have a **Remove** action in saved detail. Removal requires confirmation. Task confirmation lists its part links. Parts stay saved. Part link removal stays in the part editor and commits with **Save**. Part requirements use **Cancelled** rather than deletion.
 
 Material is removed at once, and **Command-Z** brings it back. See [Material](#material). There is no permanent watch or job deletion.
 
@@ -89,7 +89,7 @@ Material is removed at once, and **Command-Z** brings it back. See [Material](#m
 
 Parts shows requirements from open jobs in every procurement status. Each row names its watch, job, stage, manufacturer reference, quantity, and status. The most recently saved parts appear first. Filter by Needed, Ordered, Arrived, Installed, or Cancelled. Text search matches the part description, manufacturer reference, watch identity, or job title. Text and status filters combine.
 
-Select a row to open that exact part in its job. Part links open only through their explicit **Open** buttons. **Edit Part**, **Save**, **Cancel**, and **Command-S** use the existing procurement service and draft protection. Committed changes refresh both the overview and job list. Filters retain the selected detail and show a message when excluded. Closing removes the job's parts from the overview and keeps them readable in watch history. **Clear Filters** resets text and status. Loading failures show an error and Retry. Bench references and job activity remain available in Parts.
+Select a row to open that exact part in its job. Part links open only through their explicit **Open** buttons. **Edit Part**, **Save**, **Cancel**, and **Command-S** use the existing procurement service and draft protection. Committed changes refresh both the overview and job list. Filters retain the selected detail and show a message when excluded. Setting a job to Done removes its parts from the overview and keeps them on the job's page. **Clear Filters** resets text and status. Loading failures show an error and Retry. Bench references remain available in Parts.
 
 ## Watch records
 
@@ -105,23 +105,17 @@ Use **Add Caliber** in Calibers or **Command-N** while that section is selected.
 
 Choose a caliber from the watch's caliber pop-up, or choose **None** to clear its link. The arrow after it opens the caliber's page. Several watches can share one caliber. The caliber page lists the watches that use it and opens their records. Clearing one link preserves the caliber and all other watch links. The caliber's notes are shared knowledge in the caliber detail. Technical reference links are available in the caliber detail. Technical files follow in their own issues.
 
-## Job intake and repair history
+## Jobs
 
-Use **Start Job** under a watch's jobs. Only a job title is required. Reported problem, agreed scope, and intake condition are optional. The job shows the owner and contact from its watch. Save creates a Planned job and copies the saved watch identity and exact caliber designation into a versioned intake snapshot. Later watch or caliber edits leave this snapshot unchanged.
+A job is one repair of one watch, and its page is a page you write on, laid out as the "2 Job" artboard. Use **Start Job** under a watch's jobs. It opens a job named "New Job", In progress, and puts the cursor in its title with the title selected, so typing replaces it. There is no Save button. The title, the problem and what a waiting job waits for save as you type, and **Command-Z** undoes each after it saved.
 
-Use **Edit Intake** to correct an open job's intake, including its identity snapshot. Those corrections apply to that job only. Job editing uses Save, Cancel, Command-S, and the existing draft protection. A failed write preserves the draft. Cancelling a new intake creates no history entry.
+The header shows the watch's cover, or the job's first photo when the watch has none. Beside it are the state, the date the job opened and how long ago, such as "Opened 12 October · 23 days", the title, and a line that links the watch and its caliber and names the owner and contact from the watch. The problem follows in the job's own words. Then come the parts, the checklist with its task progress, the material and the notes.
 
-A watch can have several repair jobs, with at most one open job. The open job under the watch's name returns to that job. The database also enforces the rule when save requests compete. The watch's history opens earlier jobs for reading. **Back to Watch** returns to its identity and history. The job's notes, tasks, and parts are available in the job detail.
+A job is In progress, Waiting or Done. Choose the state from the pop-up. The change saves at once, and **Command-Z** puts back the state before, with its dates and waiting text. Choosing Waiting puts the cursor in **Waiting for**, such as "a mainspring". Leaving Waiting clears it. Done records the day the job was done, such as "Opened 12 October · Done 2 November", and leaving Done clears that date. A Done job stays editable, with its tasks, parts, material and notes.
 
-Use **Change Stage** for Planned, In progress, Waiting, Ready, Completed, or Cancelled. Waiting requires a reason. Completed requires an outcome and accepts optional recommendations. Cancelled requires a reason. Ready means ready for final review. Closing locks operational edits. **Reopen Job** selects an open stage and checks that no other job is open for this watch.
+A watch can have several jobs, with at most one that is not Done. The database also enforces the rule when requests compete. A Done job can move back to In progress or Waiting only while its watch has no other open job. Starting a job needs a watch that is not archived. A job of an archived watch can still change, also its state.
 
-The stage form uses Save, Cancel, Command-S, and draft protection. Successful changes retain prior and next values in history. Condition changes saved before W036 stay in that history. Use **Show Activity** to read the saved changes.
-
-## Job activity
-
-Use **Show Activity** in a job to read saved changes, newest first. Equal dates keep a stable order. Notes are not activity entries.
-
-Expand **Previous and new values** to read saved reasons, outcomes, milestones, and order references. **Open Job**, **Open Watch**, **Open Task**, and **Open Part** show surviving sources. Removed tasks or parts keep their historical summaries. Closed sources remain readable. This is a repair history, not a complete audit log.
+Libraries from before W037 had six stages, an intake snapshot, an agreed scope, an intake condition, an outcome, recommendations, a cancellation reason, two explanations for unfinished work, and an activity history. The upgrade makes Planned, In progress and Ready jobs In progress, keeps Waiting jobs Waiting with their reason as what they wait for, and makes Completed and Cancelled jobs Done on the day they closed. It writes the removed values into the job's notes under "From the old record", one line each, such as "Outcome: Serviced, +3 s/d" or "Cancelled: Owner declined the quote". Intake values that the watch no longer holds are written too, such as "Serial at intake: 0012". Reasons typed into the history that no record holds any more follow under "History", each with its date. Then the history goes.
 
 ## Job tasks
 
@@ -129,13 +123,13 @@ Use **Add Task** in a job detail. Enter a title and optional detail and group la
 
 Choose **Required parts** in the task editor to link several parts from the same job. Save commits the selection. Cancel keeps the previous links. Needed and Ordered show **Waiting for parts**. Arrived and Installed satisfy availability. Any cancelled link shows **Needs review**. Once every linked part is available, the label becomes **Parts available**. The task stays Waiting until you change it. Removing the last unresolved link requires a waiting reason or another task status. Procurement saves refresh labels from saved data.
 
-Use **Edit Task**, **Save**, **Cancel**, or **Command-S**. Status changes use the editor. Failed saves keep the draft. Pending saves block duplicate commands. Task drafts use the shared Save, Discard, or Stay guard for record and section changes, window closure, and quitting. Closed-job tasks remain readable. Reopen the job before adding or changing a task. The service also rejects stale saves after closure.
+Use **Edit Task**, **Save**, **Cancel**, or **Command-S**. Status changes use the editor. Failed saves keep the draft. Pending saves block duplicate commands. Task drafts use the shared Save, Discard, or Stay guard for record and section changes, window closure, and quitting. A Done job's tasks still change.
 
-Task completion and reopening save history in the same transaction as the task change. They do not change the job stage. Completing or cancelling a job shows its task summary. If To do, Doing, or Waiting tasks remain, enter a separate explanation. Closing keeps every task's status. The explanation stays with the closed job and its transition history. Reopening clears the current explanation and retains that history.
+Task status changes never change the job's state, and setting a job to Done keeps every task's status.
 
-Tasks keep their saved bench order. New tasks go at the end. Drag a row before another row, or drop below the list to move it to the end. The row menu and task detail offer **Move up** and **Move down**. In a saved task detail, **Option-Command-Up Arrow** and **Option-Command-Down Arrow** run the same actions from the Task menu. Optional group labels stay visible without changing the saved order. Failed moves keep the previous order. Closed jobs disable ordering, and the service rejects stale moves after closure.
+Tasks keep their saved bench order. New tasks go at the end. Drag a row before another row, or drop below the list to move it to the end. The row menu and task detail offer **Move up** and **Move down**. In a saved task detail, **Option-Command-Up Arrow** and **Option-Command-Down Arrow** run the same actions from the Task menu. Optional group labels stay visible without changing the saved order. Failed moves keep the previous order. An archived job disables ordering.
 
-The job header shows Done divided by all non-Skipped tasks, with both counts and a whole percentage. The percentage rounds down, so unfinished work cannot display 100 percent. Skipped tasks have a separate count. Empty and all-skipped lists show **No tasks planned**. Adding or reopening a task updates progress after Save succeeds. Closing a job keeps the saved task statuses and can leave progress below 100 percent. Part links follow in W018.
+The Checklist heading shows Done divided by all non-Skipped tasks, with both counts and a whole percentage. The percentage rounds down, so unfinished work cannot display 100 percent. Skipped tasks have a separate count. Empty and all-skipped lists show **No tasks planned**. Adding or reopening a task updates progress after Save succeeds. A Done job keeps the saved task statuses and can show progress below 100 percent. Part links follow in W018.
 
 ## Required parts
 
@@ -143,13 +137,13 @@ Use **Add Part** in a job detail. Enter a description and a positive whole-numbe
 
 Use **Add link** during creation or editing. Each link holds only a complete HTTP or HTTPS URL. A part can have no links or several links. Each saved link has an explicit **Open** action. Saving, loading, and selecting parts do not fetch external content or open the browser. Removing a saved link requires confirmation and takes effect after Save.
 
-Part editing uses **Save**, **Cancel**, **Command-S**, and the shared draft guard. A failed save keeps all draft fields and links. Pending saves block duplicate writes. Closed-job parts remain readable. Reopen the job before adding or editing a part. The service rejects stale saves after closure. Closing a job shows its parts summary and requires a separate explanation for Needed or Ordered parts. Closing preserves their statuses and saves the explanation in history.
+Part editing uses **Save**, **Cancel**, **Command-S**, and the shared draft guard. A failed save keeps all draft fields and links. Pending saves block duplicate writes. A Done job's parts still change. Setting a job to Done keeps every part's status.
 
-Use **Edit Part** to choose Needed, Ordered, Arrived, Installed, or Cancelled. Save records current milestone dates and the transition history together. Arrived means the whole lot is on hand. Installed means fitted. Installing from Needed, Ordered, or Cancelled requires confirmation that the whole lot is on hand. Save records arrival and installation together. There is no partial-delivery counter.
+Use **Edit Part** to choose Needed, Ordered, Arrived, Installed, or Cancelled. Save records the current milestone dates. Arrived means the whole lot is on hand. Installed means fitted. Installing from Needed, Ordered, or Cancelled requires confirmation that the whole lot is on hand. Save records arrival and installation together. There is no partial-delivery counter.
 
-Ordering saves an optional order reference. Correcting Arrived, Installed, or Cancelled back to Ordered keeps the order reference. Moving back to Needed clears the current order details. Previous values remain in history.
+Ordering saves an optional order reference. Correcting Arrived, Installed, or Cancelled back to Ordered keeps the order reference. Moving back to Needed clears the current order details.
 
-Backward corrections, cancellation, and restoring a cancelled part require a reason. Save clears milestone dates that no longer apply. Cancellation keeps the order reference for reading. Cancel in the editor discards the draft. A status changed by another saved action requires cancelling and reopening the stale editor. Procurement never changes task status or job stage. Use **Show Activity** to read the saved changes.
+Backward corrections, cancellation, and restoring a cancelled part require a reason. Save clears milestone dates that no longer apply. Cancellation keeps the order reference for reading. Cancel in the editor discards the draft. A status changed by another saved action requires cancelling and reopening the stale editor. Procurement never changes task status or job state.
 
 ## Notes
 
@@ -157,7 +151,7 @@ Every watch, caliber, and job has one plain-text **Notes** section. Type in it. 
 
 **Command-Z** undoes a notes change, even after it saved, and **Shift-Command-Z** redoes it. **Esc** puts back the notes as they were when you started typing in them. **Command-D** types today's date. Text preserves Unicode, line breaks, and spacing. No rich text or Markdown rendering is added.
 
-A failed save keeps the text on screen, says that it did not save, and offers **Try Again**. Quitting with notes that did not save asks before it quits. Closed-job and archived notes stay readable but cannot change until the job is reopened or the record is unarchived.
+A failed save keeps the text on screen, says that it did not save, and offers **Try Again**. Quitting with notes that did not save asks before it quits. A Done job's notes still change. Archived notes stay readable but cannot change until the record is unarchived.
 
 Libraries from before W033 had separate note records. The upgrade joins each record's notes into its notes text, oldest first. Each old note starts with its date, kind, and title.
 
@@ -179,17 +173,17 @@ A watch or job page also shows its caliber's material as chips, such as "From Om
 
 Use **Choose Cover** in the watch detail to select a photo from that watch or one of its jobs. **Remove Cover** clears it. Watch rows use the cover thumbnail. Caliber photos stay in the caliber and cannot become a watch cover.
 
-Closed-job and archived material stays readable and exportable. Reopen the job or unarchive the record to add, rename, or remove its material.
+A Done job's material still changes. Archived material stays readable and exportable. Unarchive the record to add, rename, or remove its material.
 
 Libraries from before W034 kept a photo stage, a caption, a PDF's source URL, a source description, and notes on each item. The upgrade writes those values into the owner's notes under "From the old record", each item starting with its kind and title. An Unclassified stage was the default, so it is not written. No original file moves or changes.
 
 ## Bench references
 
-Open a saved job and use **Pin Reference** to choose one saved photo, PDF, or link from that job, its watch, or its current caliber. The pin stays in place while you open notes, material, or intake editors. Switching jobs clears unrelated pins. A watch reference stays for another job on that watch. A caliber reference stays for a job whose watch uses the same caliber.
+Open a saved job and use **Pin Reference** to choose one saved photo, PDF, or link from that job, its watch, or its current caliber. The pin stays in place while you open notes, material, tasks or parts. Switching jobs clears unrelated pins. A watch reference stays for another job on that watch. A caliber reference stays for a job whose watch uses the same caliber.
 
 Use **Toggle Reference Pane** or **Shift-Command-R** to collapse or show the pane. It appears beside the editor when there is room. At narrower widths, widen the window or use **Open Reference Window** with **Option-Command-R**. The reference window has reading, zoom, explicit browser opening, and original export controls. New, Save, and section-changing commands are disabled while that window is active. Closing it leaves the main editor's draft in place.
 
-The app restores the last selected saved job and its valid pin. Pane visibility is a preference. Missing records, changed scope, or unavailable originals clear the pin without removing saved content. References remain readable for closed jobs. External content opens only after **Open in Browser**.
+The app restores the last selected saved job and its valid pin. Pane visibility is a preference. Missing records, changed scope, or unavailable originals clear the pin without removing saved content. References remain readable for Done jobs. External content opens only after **Open in Browser**.
 
 ## Managed original import infrastructure
 

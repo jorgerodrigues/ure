@@ -358,7 +358,7 @@ nonisolated struct MaterialServiceTests {
     }
 
     @Test
-    func closedAndArchivedOwnersRejectChangesAndKeepTheirOriginals() async throws {
+    func archivedOwnersRejectChangesAndKeepTheirOriginals() async throws {
         let fixture = ImportFixture()
         defer { fixture.remove() }
         let coordinator = LibraryCoordinator(root: fixture.root)
@@ -377,9 +377,12 @@ nonisolated struct MaterialServiceTests {
             ).id,
             from: owners[1])
         let job = try #require(try await coordinator.read(JobQueries.fetchAll).first)
-        var closure = JobTransitionDraft(stage: .cancelled)
-        closure.cancellationReason = "Retain files"
-        _ = try await JobService(coordinator: coordinator).transition(job.id, using: closure)
+        // A Done job's material still changes. Only an archived job's does not.
+        _ = try await JobService(coordinator: coordinator).setStage(job.id, to: .done)
+        try await coordinator.mutate { db, _, _ in
+            try db.execute(
+                sql: "UPDATE job SET archivedAt = 1 WHERE id = ?", arguments: [job.id.uuidString])
+        }
         _ = try await ArchiveService(coordinator: coordinator).setWatch(job.watchID, archived: true)
         let caliber = try #require(try await coordinator.read(CaliberQueries.fetchAll).first)
         _ = try await ArchiveService(coordinator: coordinator).setCaliber(

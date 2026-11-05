@@ -1,6 +1,6 @@
 # Watch workshop app specification
 
-Version 0.12. Updated on 5 November 2026. This is the first-release contract for review. The current-platform direction, app foundation, and W002 SQLite/GRDB storage design were approved on 1 October 2026. The user approved the shared caliber design and repair history rule on 2 October 2026. On 24 October 2026 the user removed supplier details, price, currency, and supplier selection from part links. A part link holds only its URL. A watch can have several jobs, with at most one open job. W005 uses the existing Save and Cancel editing pattern. Other proposed defaults are not yet an approved product baseline. PDF report creation is deferred. Parts must accept saved links. On 4 November 2026 the user approved the Rework designed in the Paper page "Rework · Simple", delivered as W033 to W042. W033 replaces separate note records with one notes text per watch, caliber, and job that saves as you type. W035 makes the caliber page a page you write on, with each fact saved in place. W036 does the same for the watch page, moves the owner and contact from the job to the watch, and lets any watch be archived.
+Version 0.13. Updated on 5 November 2026. This is the first-release contract for review. The current-platform direction, app foundation, and W002 SQLite/GRDB storage design were approved on 1 October 2026. The user approved the shared caliber design and repair history rule on 2 October 2026. On 24 October 2026 the user removed supplier details, price, currency, and supplier selection from part links. A part link holds only its URL. A watch can have several jobs, with at most one open job. W005 uses the existing Save and Cancel editing pattern. Other proposed defaults are not yet an approved product baseline. PDF report creation is deferred. Parts must accept saved links. On 4 November 2026 the user approved the Rework designed in the Paper page "Rework · Simple", delivered as W033 to W042. W033 replaces separate note records with one notes text per watch, caliber, and job that saves as you type. W035 makes the caliber page a page you write on, with each fact saved in place. W036 does the same for the watch page, moves the owner and contact from the job to the watch, and lets any watch be archived. W037 gives a job three states, In progress, Waiting and Done, removes the activity history, and makes the job page a page you write on.
 
 Build a native Mac app that keeps a watch's identity, repair work, and supporting evidence together. A watch is a lasting record. A job is one repair or restoration of that watch. A caliber is reusable technical knowledge. All app data stays on the Mac. The user chooses when to open an external link or export a file.
 
@@ -39,7 +39,7 @@ These choices make the draft concrete. They are recommendations, not user approv
 | Persistence | Approved: SQLite through GRDB; photos and PDFs in app-managed files |
 | Minimum system | Approved: macOS 27 on Apple silicon; no older-system compatibility layer |
 | Distribution | Run locally from Xcode first; store distribution and automatic updates are later work |
-| Editing | Approved on 4 November 2026: the Rework moves every record to edit in place with autosave and Undo. W033 starts with notes, W035 does the caliber page, and W036 the watch page. Forms that later Rework stories replace keep Save and Cancel, Cmd-S, and unsaved-draft protection until then |
+| Editing | Approved on 4 November 2026: the Rework moves every record to edit in place with autosave and Undo. W033 starts with notes, W035 does the caliber page, W036 the watch page, and W037 the job page. The task and part editors keep Save and Cancel, Cmd-S, and unsaved-draft protection until W039 and W040 replace them |
 | Notes | Approved on 4 November 2026: one plain-text notes text per watch, caliber, and job that saves as you type; no rich text, Markdown rendering, or note history. Clickable links within text remain proposed |
 | Measurements | Written notes and attached instrument photos in version 1; structured measurement forms later |
 | Parts cost | Not tracked. Supplier price and currency were removed on 24 October 2026; no job accounting or invoice totals |
@@ -79,7 +79,7 @@ Changing one does not change the others. A task count is not an estimate of rema
 
 ### Add a watch and start work
 
-Create a watch with a name only. All other specifications can remain unknown. Add the brand, model, case reference, serial number, caliber, owner, and contact when they are known. Create a job with a title and an intake description. Add the reported fault, the planned scope, and initial photos. The job copies the known identity and caliber label into an intake snapshot.
+Create a watch with a name only. All other specifications can remain unknown. Add the brand, model, case reference, serial number, caliber, owner, and contact when they are known. Start a job and write its title and what is wrong with the watch. Add initial photos. Anything else goes in the job's notes.
 
 ### Plan and source
 
@@ -91,11 +91,11 @@ Open a job. Keep the task list visible beside a pinned photo or technical PDF. Z
 
 ### Pause and resume
 
-Set a job to Waiting and give a reason. The workshop overview shows that reason, unfinished tasks, and parts still required. Return later and open the same job and reference item. Restarting the app retains saved content and the last selected job. Window size and reference selection are preferences, not repair history.
+Set a job to Waiting and say what it waits for. The workshop overview shows that text, unfinished tasks, and parts still required. Return later and open the same job and reference item. Restarting the app retains saved content and the last selected job. Window size and reference selection are preferences, not repair history.
 
 ### Finish and retain history
 
-Record the outcome, work performed, and recommendations. Review unfinished tasks and unresolved parts before completion. Keep these records available for later customer questions. A later repair creates a new job for the same watch. Earlier job snapshots remain unchanged. Report creation can be added in a later release.
+Write the outcome, the work performed, and recommendations in the job's notes, and set the job to Done. Unfinished tasks and unresolved parts keep their status. Keep these records available for later customer questions. A later repair creates a new job for the same watch. A Done job stays editable. Report creation can be added in a later release.
 
 ## 4 Screens and interaction
 
@@ -109,7 +109,7 @@ At a proposed minimum window size of 1000 by 650 points, show the list and detai
 
 ### Workshop
 
-Show open jobs grouped by Planned, In progress, Waiting, and Ready. Each row has a watch thumbnail, watch and job names, stage, task count, waiting reason, and unresolved part count. Filters support stage and text. Default order is most recently updated. An open job stays here when its watch is archived. Completed and cancelled jobs are available on their watch's page and in search.
+Show open jobs grouped by In progress and Waiting. Each row has a watch thumbnail, watch and job names, state, task count, what a waiting job waits for, and unresolved part count. Filters support stage and text. Default order is most recently updated. An open job stays here when its watch is archived. Done jobs are available on their watch's page and in search.
 
 ### Watch detail
 
@@ -119,7 +119,7 @@ The list shows each watch's cover, name, and its brand, year, and open job, such
 
 ### Job detail
 
-The header shows watch identity, job stage, and task progress. Sections are Overview, Tasks, Parts, Notes, and Material. Overview shows intake, outcome, the owner and contact from its watch, and the activity timeline. The reference pane can display a job, watch, or caliber item while another section remains open.
+The job page is a page you write on, laid out as the "2 Job" artboard. It has no editor, Save, or Cancel. The header shows the cover of the job's watch, or the job's first photo when the watch has none. Beside it are the state as a pop-up with the date the job opened and how long ago, such as "Opened 12 October · 23 days", the title, and a line with links to the watch and its caliber and the owner and contact from the watch, such as "Grandfather's Seamaster › · Omega 552 › · Ana Ribeiro, +351 912 480 117". A Done job's line says when it was done, such as "Opened 12 October · Done 2 November". The title is written in place. A waiting job shows **Waiting for** under the header, written in place. Then come the problem in the job's own words, the parts, the checklist with its task progress, the material, and the notes with the date the job was last edited. The parts and the checklist keep their current rows until W039 and W040. Start Job under a watch's jobs makes a job named "New Job", In progress, and puts the cursor in its title with the title selected, so typing replaces it. The reference pane can display a job, watch, or caliber item while another section remains open.
 
 ### Parts overview
 
@@ -127,13 +127,13 @@ Show parts from open jobs. Filter by Needed, Ordered, Arrived, Installed, or Can
 
 ### Caliber detail
 
-The caliber page is a page you write on, laid out as the "5 Caliber" artboard. It has no editor, Save, or Cancel. The header shows the caliber's first photo, its maker and name as the title, such as "Omega 552", and where it is used, such as "In 2 watches · 1 job open". The name in the title is written in place. Then come the facts in three columns: maker, winding, beat rate, jewels, power reserve, and lift angle. Each fact is written in place and saves on its own. Winding is a pop-up. Then come the watches that use the caliber, with their brand, year and open job, its material, and its notes with the date the caliber was last edited. Cmd-N in Calibers makes a caliber named "New Caliber", selects it, and puts the cursor in its name with the name selected, so typing replaces it. The list shows each caliber's maker and name, its winding and how many watches use it, in order of maker and name. Editing shared content affects future viewing from those watches. It does not rewrite job intake snapshots. Archived calibers fold away in an Archived section at the end of the list, as archived watches do, and an archived caliber's page offers Unarchive in the toolbar.
+The caliber page is a page you write on, laid out as the "5 Caliber" artboard. It has no editor, Save, or Cancel. The header shows the caliber's first photo, its maker and name as the title, such as "Omega 552", and where it is used, such as "In 2 watches · 1 job open". The name in the title is written in place. Then come the facts in three columns: maker, winding, beat rate, jewels, power reserve, and lift angle. Each fact is written in place and saves on its own. Winding is a pop-up. Then come the watches that use the caliber, with their brand, year and open job, its material, and its notes with the date the caliber was last edited. Cmd-N in Calibers makes a caliber named "New Caliber", selects it, and puts the cursor in its name with the name selected, so typing replaces it. The list shows each caliber's maker and name, its winding and how many watches use it, in order of maker and name. Editing shared content affects future viewing from those watches. Archived calibers fold away in an Archived section at the end of the list, as archived watches do, and an archived caliber's page offers Unarchive in the toolbar.
 
 ### Save and failure behavior
 
 Notes save as you type. A change saves half a second after typing stops, again when focus leaves the notes, and before the window closes or the app quits. Cmd-Z undoes a notes change, even after it saved, and Shift-Cmd-Z redoes it. Esc puts back the notes as they were when focus entered them. A failed notes save keeps the text on screen, says that it did not save, and offers Try Again. Quitting while a notes save has failed asks before it quits. Leaving the notes asks nothing. The autosave lives in the feature state layer, so later Rework stories reuse it for other fields. Material titles use it too.
 
-A fact on a record page, such as a caliber's beat rate or a watch's owner, saves the same way: half a second after typing stops, when focus leaves the fact, and before the window closes or the app quits. Cmd-Z undoes a fact change after it saved, and Shift-Cmd-Z redoes it. Esc puts back the fact as it was when focus entered it. Tab and Shift-Tab move between facts in reading order, and Return in a one-line fact moves to the next one. Validation runs when focus leaves a fact. A value the fact does not take stays on screen and shows as not valid yet, with a message that says what to enter, such as "Enter a beat rate above 0 vph." As you type a maker, the makers in the library show under the field, and Tab or Return takes the first. The record keeps its last good value until the fact is corrected, and Undo never brings back a value that is not valid. Quitting while a fact is not valid or did not save asks before it quits. Leaving the record asks nothing.
+A fact on a record page, such as a caliber's beat rate, a watch's owner, or a job's title, problem, or waiting text, saves the same way: half a second after typing stops, when focus leaves the fact, and before the window closes or the app quits. Cmd-Z undoes a fact change after it saved, and Shift-Cmd-Z redoes it. Esc puts back the fact as it was when focus entered it. Tab and Shift-Tab move between facts in reading order, and Return in a one-line fact moves to the next one. Validation runs when focus leaves a fact. A value the fact does not take stays on screen and shows as not valid yet, with a message that says what to enter, such as "Enter a beat rate above 0 vph." As you type a maker, the makers in the library show under the field, and Tab or Return takes the first. The record keeps its last good value until the fact is corrected, and Undo never brings back a value that is not valid. Quitting while a fact is not valid or did not save asks before it quits. Leaving the record asks nothing.
 
 Forms that the Rework has not replaced yet show Save and Cancel. Cmd-S saves the active editor. Navigation, window closure, and app termination with an unsaved draft offer Save, Discard, or Stay. A failed save keeps the draft and shows a useful error. Buttons become disabled during their own pending operation. A success state appears only after persistence succeeds. W013 task changes follow the existing Save and Cancel editor pattern. Immediate task-row status actions remain proposed. Failure keeps the draft and the prior saved task state.
 
@@ -149,7 +149,7 @@ Required: ID and display name. Optional: brand, model, case reference, serial, a
 
 Store a cover photo by reference to a photo item belonging to this watch or one of its jobs. Removing that photo clears the cover reference. Archived watches stay in search.
 
-Libraries before W036 also kept a condition, a condition note, a stated water resistance, and specification notes on each watch, and an owner name, email, and phone on each job. The W036 migration gives each watch the owner of its most recent job that names one, with that job's email and phone joined into the contact, such as "ana@example.pt · +351 912 480 117". It writes the watch's removed values into its notes under "From the old record", one line each, such as "Condition: Stopped". Unknown was the default condition, so it is not written. Then it writes each other job whose owner differs, oldest first, as "Job · Full service" followed by "Owner: Ana Ribeiro", "Email: …", and "Phone: …". When the notes already have that heading, the values go under it. Then those fields go. The migration does not change any record's updated time. Activity records keep the conditions they saved.
+Libraries before W036 also kept a condition, a condition note, a stated water resistance, and specification notes on each watch, and an owner name, email, and phone on each job. The W036 migration gives each watch the owner of its most recent job that names one, with that job's email and phone joined into the contact, such as "ana@example.pt · +351 912 480 117". It writes the watch's removed values into its notes under "From the old record", one line each, such as "Condition: Stopped". Unknown was the default condition, so it is not written. Then it writes each other job whose owner differs, oldest first, as "Job · Full service" followed by "Owner: Ana Ribeiro", "Email: …", and "Phone: …". When the notes already have that heading, the values go under it. Then those fields go. The migration does not change any record's updated time. Activity records kept the conditions they saved until W037.
 
 ### Caliber
 
@@ -157,13 +157,15 @@ Required: name, the display designation. Optional: maker, winding, beat rate in 
 
 Numbers accept what you would write on paper, such as "35", "35mm", and "35,0 mm". The Mac's decimal mark separates the fraction. Spaces, the region's grouping mark, and the other of "." and "," group the digits. The last group has three digits and the others two or three, so Indian grouping such as "12,34,567" works too. Digits can be in the region's own script. A unit after the number must be one the fact knows: vph, bph, or A/h for beat rate; jewels, jewel, or j for jewels; h, hr, hrs, hour, or hours for power reserve; and °, deg, degree, or degrees for lift angle. Anything else is not valid yet. Numbers show in the Mac's region format with their unit, such as "28,800 vph" in the United States and "28 800 vph" in Portugal.
 
-Libraries before W035 also kept a variant, a movement type that could be Unknown or Other, specification notes, and a source note. The W035 migration makes Manual, Automatic, and Quartz the winding, and makes Unknown empty. It writes Other, the variant, the specification notes, and the source note into the caliber's notes under "From the old record", one line each, such as "Variant: A/2" and "Movement type: Other". When the notes already have that heading from an earlier migration, the values go under it. Then those fields go. The migration does not change any caliber's updated time. Job intake snapshots keep the variant they saved, and new snapshots have none.
+Libraries before W035 also kept a variant, a movement type that could be Unknown or Other, specification notes, and a source note. The W035 migration makes Manual, Automatic, and Quartz the winding, and makes Unknown empty. It writes Other, the variant, the specification notes, and the source note into the caliber's notes under "From the old record", one line each, such as "Variant: A/2" and "Movement type: Other". When the notes already have that heading from an earlier migration, the values go under it. Then those fields go. The migration does not change any caliber's updated time. Job intake snapshots kept the variant they saved until W037 wrote it into the job's notes.
 
 ### Job
 
-Required: watch ID and title. Optional: reported problem, agreed scope, intake condition text, outcome text, recommendations, and a waiting reason. The owner and contact are on the watch since W036. Intake stores a JSON snapshot of the watch name, brand, model, case reference, serial, and caliber designation and variant. Calibers have had no variant since W035, so new snapshots leave it empty. Its schema has an explicit version. It can be corrected while the job is open. Editing the watch does not change this snapshot.
+Required: watch ID, title, and state. Optional: the problem, what a waiting job waits for, and the date it was done. The owner and contact are on the watch since W036. The opened date is when the job was created. A blank title is not valid, and any other blank text is no value.
 
-Only one job whose stage is Planned, In progress, Waiting, or Ready can exist for a watch. Enforce this rule in both the service and database. Completed and Cancelled are closed stages. Store started, completed, and cancelled times when those transitions occur. Reopening clears the current closure time and keeps the previous transition in history. It must satisfy the one-open-job rule.
+The state is In progress, Waiting, or Done. Only one job that is not Done can exist for a watch. Enforce this rule in both the service and database. Only a waiting job has a waiting text, and only a done job has a done date. The database enforces both.
+
+Libraries before W037 had six stages and kept an intake snapshot, an agreed scope, an intake condition, an outcome, recommendations, a cancellation reason, explanations for unfinished tasks and unresolved parts, and started, completed, and cancelled times, with activity records beside them. The W037 migration makes Planned, In progress, and Ready jobs In progress, keeps Waiting jobs Waiting with their waiting reason as their waiting text, and makes Completed and Cancelled jobs Done, with the time they completed or were cancelled as the done date. It writes the removed values into the job's notes under "From the old record", one line each, such as "Agreed scope: Full service" and "Outcome: Serviced, +3 s/d". A cancelled job's line reads "Cancelled: Owner declined the quote". An intake snapshot value is written only when the watch no longer holds it, such as "Serial at intake: 0012", and a snapshot of another version is written as it was saved. When the notes already have that heading, the values go under it. Then those fields go. The migration does not change any record's updated time.
 
 ### Task
 
@@ -183,7 +185,7 @@ Each line moves as one unit or lot. Partial deliveries and several purchases for
 
 ### Notes
 
-Each watch, caliber, and job has one plain-text notes text. It is empty by default. Text is 15 pt with a 24 pt line height and stops at about 75 characters a line. Cmd-D types today's date in the long date format of the user's locale. Saving notes updates the record's updated time and its search key. Text is not rendered as HTML or Markdown. A closed job's notes and an archived record's notes stay readable and cannot change until the job is reopened or the record is unarchived.
+Each watch, caliber, and job has one plain-text notes text. It is empty by default. Text is 15 pt with a 24 pt line height and stops at about 75 characters a line. Cmd-D types today's date in the long date format of the user's locale. Saving notes updates the record's updated time and its search key. Text is not rendered as HTML or Markdown. A Done job's notes can change. An archived record's notes stay readable and cannot change until the record is unarchived.
 
 Libraries before W033 kept separate note records with a title, body, kind, and occurred date. The W033 migration joins each record's notes into its notes text, oldest first by occurred date and then created time. Each old note starts on its own line with its date, kind, and title, such as "14 October 2026 · Work log · Mainspring", followed by its body. A blank line separates old notes. Then the note table goes. Nothing typed is lost: when a later Rework story removes a field, its migration writes the value into the owning record's notes under "From the old record". A migration adds that heading only when the notes do not have it yet.
 
@@ -199,17 +201,15 @@ A file asset describes an immutable local original: ID, generated relative stora
 
 ### Activity records
 
-ActivityEvent belongs to a job. It stores an event kind, occurrence time, stable local ordering value, and enough prior and next values to explain a status or condition change. Events cover job transitions, task completion and reopening, and procurement transitions. Watch condition changes made through a job before W036 stay readable. Create the event and state update in one database transaction. This is a work history, not a general audit or sync log.
+Libraries before W037 kept activity records for job stage, watch condition, task status, and part status changes, with the values before and after each change. The W037 migration writes the reasons typed into them that no record holds any more into the job's notes, under "History", oldest first and one line each with its date, such as "14 October 2026 · Waiting reason: Waiting for the owner's answer" or "15 October 2026 · Task · Clean the movement · Waiting reason: Mainspring on order". The reasons are waiting, cancellation, and unfinished-work reasons, outcomes, recommendations, condition notes, task waiting and skipped reasons, and part status reasons and order references. A reason that the job, task, or part still holds in the same field is not repeated, and neither is a line the job already has. A value the migration can't read is written as it was saved. Then the activity records go. The job keeps the dates it opened and was done.
 
 ## 6 State and progress rules
 
-### Job transitions
+### Job states
 
-An open job can move between Planned, In progress, Waiting, and Ready. Waiting requires a reason. Ready means the user considers the work ready for final review; it does not imply that every task is done. No task or part action moves the job automatically. An open job can change while its watch is archived. Starting a job, or reopening one, needs a watch that is not archived.
+A job can move between In progress, Waiting, and Done in any order, from a pop-up on its page. A change saves at once. Cmd-Z puts back the state before, with its waiting text and done date, and Shift-Cmd-Z puts back the state it was given. Choosing Waiting puts the cursor in the waiting text, which is optional. Leaving Waiting clears the waiting text. Choosing Done records the day, and leaving Done clears it. The opened date never changes. No task or part action changes the state, and setting a job to Done keeps every task's and part's status, so a Done job can show less than 100 percent task progress.
 
-Complete shows the current task and parts summary. The user enters an outcome. If there are unfinished tasks or parts in Needed or Ordered, completion requires an additional explanation. Keep the unresolved items as they are. Do not silently complete or cancel them. A completed job can therefore show less than 100 percent task progress.
-
-Cancel requires a reason. Completing or cancelling locks operational edits. Reopen explicitly to change tasks, parts, intake, or job notes. Closed jobs remain readable, including their outcomes and unresolved work.
+A Done job stays editable: its title, problem, tasks, parts, material, and notes can change. A job can leave Done only while its watch has no other open job. A job of an archived watch can change, also its state. Starting a job needs a watch that is not archived.
 
 ### Task progress
 
@@ -219,7 +219,7 @@ Count Done tasks divided by all tasks except Skipped. Show both counts and the p
 
 A linked part is unresolved for a task while Needed or Ordered. Arrived and Installed satisfy availability. Cancelled does not satisfy the link; show that the task needs review. Changing a part status updates the task's availability indicators. It never changes the task status. Show Parts available on a waiting task once every linked part is available. The user chooses when to resume.
 
-Users can correct a part status. Moving backwards or cancelling requires a reason. Clear milestone dates that no longer apply to the current status; retain the past transition in history. Installing directly from Needed is allowed only after a confirmation that the part is on hand. Write the resulting arrival and installation milestones together. Cancelling preserves prior procurement details for reference.
+Users can correct a part status. Moving backwards or cancelling requires a reason. Clear milestone dates that no longer apply to the current status. Installing directly from Needed is allowed only after a confirmation that the part is on hand. Write the resulting arrival and installation milestones together. Cancelling preserves prior procurement details for reference.
 
 ## 7 Files and reference use
 
@@ -237,7 +237,7 @@ The bench pane pins one reference at a time. Switching job sections keeps it vis
 
 ## 8 Customer information
 
-Keep the optional owner and contact on the watch, and intake notes, work performed, outcomes, and recommendations in the job. The job page shows the owner and contact from its watch. These records help answer customer questions later. There are no customer records or contact book. Version 1 has no report editor, report preview, report model, or PDF report export. Technical PDF import and reading remain part of the bench reference tools.
+Keep the optional owner and contact on the watch, and the problem, work performed, outcomes, and recommendations in the job. The job page shows the owner and contact from its watch. These records help answer customer questions later. There are no customer records or contact book. Version 1 has no report editor, report preview, report model, or PDF report export. Technical PDF import and reading remain part of the bench reference tools.
 
 ## 9 Architecture
 
@@ -279,7 +279,7 @@ Do not place the live SQLite library in an iCloud Drive or Dropbox folder. File 
 
 ### Archive and removal
 
-Archive is reversible and separate from job completion. Archiving has no rules, as approved on 4 November 2026: any watch can be archived, even one with an open job, and that job stays in Workshop and can still change. Archive Watch and Unarchive Watch are commands in the Record menu and when you right-click a watch in the list. An archived watch's page also offers Unarchive in the toolbar. Cmd-Z undoes an archive or an unarchive, and Shift-Cmd-Z redoes it. Its jobs and their history do not change. Archived watches and calibers are hidden from their lists, fold away in the Archived sections at the end of those lists, and stay in search. An archived record reads normally and cannot change until it is unarchived. A caliber in use can be archived without breaking its existing watch links. Calibers archive the same way, from the Record menu or a right-click. There is no separate Archive section.
+Archive is reversible and separate from job completion. Archiving has no rules, as approved on 4 November 2026: any watch can be archived, even one with an open job, and that job stays in Workshop and can still change. Archive Watch and Unarchive Watch are commands in the Record menu and when you right-click a watch in the list. An archived watch's page also offers Unarchive in the toolbar. Cmd-Z undoes an archive or an unarchive, and Shift-Cmd-Z redoes it. Its jobs do not change. Archived watches and calibers are hidden from their lists, fold away in the Archived sections at the end of those lists, and stay in search. An archived record reads normally and cannot change until it is unarchived. A caliber in use can be archived without breaking its existing watch links. Calibers archive the same way, from the Record menu or a right-click. There is no separate Archive section.
 
 Top-level watch and job deletion is outside version 1. Archive covers their removal from normal views. Child tasks and part links can be removed after confirmation. A task with parts links must list those links in the confirmation. Part requirements use Cancelled to preserve procurement history. Material is removed at once without confirmation, and Cmd-Z brings it back. Removing material clears its selections and cover references. Undo puts the cover back if no other cover was chosen since. Its original file is deleted only when Undo can no longer bring it back, which is the next time the library opens. Retry failed cleanup safely at startup.
 
@@ -318,7 +318,7 @@ The first release passes these journeys:
 3. Import local files, remove their source copies, disconnect networking, and use the photos and PDF in the bench pane.
 4. Move a job to Waiting. Mark a part Arrived. See task availability change while its status remains Waiting.
 5. Complete, skip, add, and reopen tasks. Verify the defined progress count, including the no-task case.
-6. Complete a job with a documented unresolved item. Start another job on the same watch. Preserve the first job's intake and recorded outcome.
+6. Set a job to Done with an unresolved item written in its notes. Start another job on the same watch. Preserve the first job's notes and state.
 7. Export a backup with photo and technical PDF originals. Restore into an isolated library. Compare records and asset hashes.
 8. Simulate cancellation, disk-full behavior, corrupt backup data, and an interrupted restore. Keep at least one complete usable library.
 9. Use the main workflow by keyboard and inspect VoiceOver labels in both appearances.

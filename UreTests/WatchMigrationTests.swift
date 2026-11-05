@@ -45,7 +45,7 @@ nonisolated struct WatchMigrationTests {
         for old in LegacyWatchFixture.jobs {
             let job = try #require(stored.jobs.first { $0.id == old.id })
             #expect(job.watchID == old.watchID && job.title == old.title)
-            #expect(job.stage.rawValue == old.stage)
+            #expect(job.stage == (old.stage == "Completed" ? .done : JobStage(rawValue: old.stage)))
             #expect(job.updatedAt.timeIntervalSince1970 == old.createdAt)
         }
         // The owner is searchable on the watch, and older owners through the watch's notes.
@@ -74,7 +74,7 @@ nonisolated struct WatchMigrationTests {
         let package = fixture.directory.appending(path: "before-watch-owner.watchbackup")
         try LegacyWatchFixture.package(at: package)
         let staged = try await coordinator.stageRestore(from: package)
-        #expect(staged.summary.appliedMigrations == ["v22-watch-owner"])
+        #expect(staged.summary.appliedMigrations == ["v22-watch-owner", "v23-job-states"])
         #expect(staged.summary.counts["watch"] == LegacyWatchFixture.watches.count)
         #expect(staged.summary.counts["job"] == LegacyWatchFixture.jobs.count)
         let result = try await coordinator.activateRestore(staged)
@@ -141,6 +141,7 @@ nonisolated struct WatchMigrationTests {
 // drops.
 nonisolated enum WatchMigrationFixture {
     static func restoreWatchFields(in db: Database) throws {
+        try JobStateMigrationFixture.restoreJobFields(in: db)
         try db.alter(table: "watch") { table in
             table.add(column: "condition", .text).notNull().defaults(to: "Unknown")
                 .check(
@@ -341,12 +342,9 @@ nonisolated enum LegacyWatchFixture {
     }
 
     private static func insert(_ job: Job, in db: Database) throws {
-        let snapshot = try String(
-            decoding: JSONEncoder().encode(
-                JobIntakeSnapshot(
-                    watchName: job.title, brand: nil, model: nil, caseReference: nil,
-                    serial: nil, caliberDesignation: nil, caliberVariant: nil)),
-            as: UTF8.self)
+        // The intake copies the watch's name, so v23 writes nothing into the job's notes.
+        let watchName = watches.first { $0.id == job.watchID }?.name ?? job.title
+        let snapshot = #"{"version":1,"watchName":"\#(watchName)"}"#
         try db.execute(
             sql: """
                 INSERT INTO job (id, watchID, title, stage, ownerName, ownerEmail, ownerPhone,
