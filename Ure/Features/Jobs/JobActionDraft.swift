@@ -40,26 +40,18 @@ nonisolated struct JobTransitionDraft: Equatable, Sendable {
     }
 }
 
-nonisolated struct WatchConditionDraft: Equatable, Sendable {
-    var condition: WatchCondition
-    var note: String
-}
-
 nonisolated enum JobAction: Sendable {
     case transition
     case reopen
-    case condition
 }
 
 nonisolated struct JobActionDraft: Equatable, Sendable {
     let action: JobAction
     var transition: JobTransitionDraft
-    var condition: WatchConditionDraft
 
-    init(action: JobAction, job: JobRecord, watch: WatchRecord) {
+    init(action: JobAction, job: JobRecord) {
         self.action = action
         transition = JobTransitionDraft(job: job)
         if action == .reopen { transition.stage = .inProgress }
-        condition = WatchConditionDraft(condition: watch.condition, note: watch.conditionNote ?? "")
     }
 }

@@ -19,9 +19,6 @@ nonisolated struct JobServiceTests {
             draft, for: watch.id, editing: nil)
         #expect(first.title == "Inspect inherited watch")
         #expect(first.stage == .planned)
-        #expect(first.ownerName == nil)
-        #expect(first.ownerEmail == nil)
-        #expect(first.ownerPhone == nil)
         #expect(first.reportedProblem == nil)
         #expect(first.createdAt == date)
         #expect(first.intakeSnapshot.version == 1)
@@ -32,14 +29,8 @@ nonisolated struct JobServiceTests {
         draft.reportedProblem = "Stops overnight.\nCheck after winding."
         draft.agreedScope = "Inspection only"
         draft.intakeCondition = "Disassembled on arrival"
-        draft.ownerName = "  Åse Øster  "
-        draft.ownerEmail = "No email; call instead"
-        draft.ownerPhone = "+45 (00) 0012 / daytime"
         let second = try await JobService(coordinator: coordinator).save(
             draft, for: other.id, editing: nil)
-        #expect(second.ownerName == "Åse Øster")
-        #expect(second.ownerEmail == draft.ownerEmail)
-        #expect(second.ownerPhone == draft.ownerPhone)
         #expect(second.reportedProblem == draft.reportedProblem)
         #expect(second.agreedScope == draft.agreedScope)
         #expect(second.intakeCondition == draft.intakeCondition)
@@ -69,20 +60,16 @@ nonisolated struct JobServiceTests {
         _ = try await coordinator.open()
         let calibers = CaliberService(coordinator: coordinator)
         let caliber = try await calibers.create(named: "0012–Å")
-        var watchDraft = fixture.completeDraft
-        watchDraft.caliberID = caliber.id
-        let watch = try await WatchService(coordinator: coordinator).save(
-            watchDraft, editing: nil, locale: Locale(identifier: "da_DK"))
+        let watch = try await WatchFixture.completeWatch(coordinator, caliberID: caliber.id)
         let service = JobService(coordinator: coordinator)
         var draft = JobDraft()
         draft.title = "First repair"
         let first = try await service.save(draft, for: watch.id, editing: nil)
         #expect(first.intakeSnapshot.caliberDesignation == "0012–Å")
         #expect(first.intakeSnapshot.caliberVariant == nil)
-        watchDraft.name = "Current name"
-        watchDraft.serial = "Different serial"
-        _ = try await WatchService(coordinator: coordinator).save(
-            watchDraft, editing: watch.id, locale: Locale(identifier: "da_DK"))
+        let watches = WatchService(coordinator: coordinator)
+        _ = try await watches.update(watch.id, .name("Current name"))
+        _ = try await watches.update(watch.id, .serial("Different serial"))
         _ = try await calibers.update(caliber.id, .name("Corrected designation"))
         _ = try await calibers.update(caliber.id, .maker("Corrected maker"))
         #expect(
@@ -320,10 +307,7 @@ nonisolated struct JobServiceTests {
         let old = fixture.coordinator()
         let before = try await old.open()
         let caliber = try await CaliberService(coordinator: old).create(named: "0012")
-        var watchDraft = fixture.completeDraft
-        watchDraft.caliberID = caliber.id
-        let watch = try await WatchService(coordinator: old).save(
-            watchDraft, editing: nil, locale: Locale(identifier: "da_DK"))
+        let watch = try await WatchFixture.completeWatch(old, caliberID: caliber.id)
         let bytes = Data("original evidence".utf8)
         try await old.mutate { db, originals, _ in
             try JobMigrationFixture.removeStages(in: db)
@@ -351,7 +335,6 @@ nonisolated struct JobServiceTests {
     }
 
     private func makeWatch(_ coordinator: LibraryCoordinator) async throws -> WatchRecord {
-        try await WatchService(coordinator: coordinator).save(
-            WatchFixture().completeDraft, editing: nil, locale: Locale(identifier: "da_DK"))
+        try await WatchFixture.completeWatch(coordinator)
     }
 }

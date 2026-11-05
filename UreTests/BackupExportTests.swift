@@ -108,9 +108,8 @@ nonisolated struct BackupExportTests {
         try await latch.waitUntilReached()
         let changed = Mutex(false)
         let mutation = Task {
-            var draft = WatchDraft()
-            draft.name = "Queued during export"
-            let watch = try await WatchService(coordinator: coordinator).save(draft, editing: nil)
+            let watch = try await WatchService(coordinator: coordinator).make(
+                "Queued during export")
             changed.withLock { $0 = true }
             return watch
         }
@@ -281,9 +280,7 @@ nonisolated struct BackupExportTests {
             path: LibraryFiles.database(in: generation).path, configuration: configuration)
         defer { try? writer.close() }
         _ = try await coordinator.open()
-        var draft = WatchDraft()
-        draft.name = "Committed in WAL – 時計"
-        let watch = try await WatchService(coordinator: coordinator).save(draft, editing: nil)
+        let watch = try await WatchService(coordinator: coordinator).make("Committed in WAL – 時計")
         let wal = generation.appending(path: "library.sqlite-wal")
         #expect(try Data(contentsOf: wal).count > 0)
         let destination = fixture.directory.appending(path: "wal.watchbackup")

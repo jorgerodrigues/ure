@@ -53,9 +53,6 @@ nonisolated struct JobDraft: Equatable, Sendable {
     var reportedProblem = ""
     var agreedScope = ""
     var intakeCondition = ""
-    var ownerName = ""
-    var ownerEmail = ""
-    var ownerPhone = ""
     var intake: JobIntakeDraft?
 
     init() {}
@@ -65,9 +62,6 @@ nonisolated struct JobDraft: Equatable, Sendable {
         reportedProblem = job.reportedProblem ?? ""
         agreedScope = job.agreedScope ?? ""
         intakeCondition = job.intakeCondition ?? ""
-        ownerName = job.ownerName ?? ""
-        ownerEmail = job.ownerEmail ?? ""
-        ownerPhone = job.ownerPhone ?? ""
         intake = JobIntakeDraft(snapshot: job.intakeSnapshot)
     }
 
@@ -82,9 +76,8 @@ nonisolated struct JobDraft: Equatable, Sendable {
             id: id, watchID: watchID, title: title, stage: stage,
             reportedProblem: Self.optional(reportedProblem),
             agreedScope: Self.optional(agreedScope),
-            intakeCondition: Self.optional(intakeCondition), ownerName: Self.optional(ownerName),
-            ownerEmail: Self.optional(ownerEmail), ownerPhone: Self.optional(ownerPhone),
-            intakeSnapshot: snapshot, createdAt: createdAt, updatedAt: updatedAt,
+            intakeCondition: Self.optional(intakeCondition), intakeSnapshot: snapshot,
+            createdAt: createdAt, updatedAt: updatedAt,
             waitingReason: existing?.waitingReason, outcome: existing?.outcome,
             recommendations: existing?.recommendations,
             cancellationReason: existing?.cancellationReason,

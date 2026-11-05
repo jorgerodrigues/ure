@@ -28,7 +28,33 @@ struct PageSectionHeading: View {
     }
 }
 
-// Values from the "5 Caliber" artboard on the Paper page "Rework · Simple".
+// The square tile at the start of a page header: the record's photo, or a symbol when it has
+// none.
+struct PageTile: View {
+    let photoID: UUID?
+    let symbol: String
+
+    var body: some View {
+        ZStack {
+            Rectangle().fill(Color(nsColor: .quaternarySystemFill))
+            if let photoID {
+                PhotoThumbnailView(photoID: photoID, fills: true)
+            } else {
+                Image(systemName: symbol)
+                    .font(.system(size: 36, weight: .light))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: PageLayout.tileSize, height: PageLayout.tileSize)
+        .clipShape(RoundedRectangle(cornerRadius: PageLayout.tileRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: PageLayout.tileRadius)
+                .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5)
+        )
+    }
+}
+
+// Values from the "4 Watch" and "5 Caliber" artboards on the Paper page "Rework · Simple".
 enum PageLayout {
     static let headingSize: CGFloat = 17
     static let detailSize: CGFloat = 13
@@ -37,6 +63,14 @@ enum PageLayout {
     static let topPadding: CGFloat = 40
     static let sidePadding: CGFloat = 56
     static let bottomPadding: CGFloat = 64
+    static let tileSize: CGFloat = 104
+    static let tileRadius: CGFloat = 18
+    static let headerSpacing: CGFloat = 24
+    static let titleSpacing: CGFloat = 6
+    static let factsTop: CGFloat = 24
+    static let factRowSpacing: CGFloat = 20
+    static let factColumnSpacing: CGFloat = 32
+    static let pillTextSize: CGFloat = 12
 
     // A date as a page shows it, such as "15 October", with the year when it is not this year.
     static func day(_ date: Date, now: Date = .now) -> String {

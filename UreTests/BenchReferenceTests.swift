@@ -25,16 +25,10 @@ struct BenchReferenceTests {
         closure.outcome = "Inspection finished"
         _ = try await JobService(coordinator: coordinator).transition(firstJob.id, using: closure)
         let sameWatchJob = try await makeJob(coordinator, watchID: firstJob.watchID)
-        var sharedWatch = WatchDraft()
-        sharedWatch.name = "Second watch"
-        sharedWatch.caliberID = caliber.id
-        let secondWatch = try await WatchService(coordinator: coordinator).save(
-            sharedWatch, editing: nil)
+        let secondWatch = try await WatchService(coordinator: coordinator).make(
+            "Second watch", caliberID: caliber.id)
         let sharedJob = try await makeJob(coordinator, watchID: secondWatch.id)
-        var unrelatedWatch = WatchDraft()
-        unrelatedWatch.name = "Unrelated watch"
-        let thirdWatch = try await WatchService(coordinator: coordinator).save(
-            unrelatedWatch, editing: nil)
+        let thirdWatch = try await WatchService(coordinator: coordinator).make("Unrelated watch")
         let unrelatedJob = try await makeJob(coordinator, watchID: thirdWatch.id)
         state.apply(try await coordinator.read(BenchSnapshot.fetch))
         for item in items {
@@ -127,9 +121,7 @@ struct BenchReferenceTests {
         let caliberItem = try #require(items.first { $0.caliberID != nil })
         state.pin(caliberItem.id)
         let watch = try #require(state.snapshot.watches.first)
-        var draft = WatchDraft(watch: watch)
-        draft.caliberID = nil
-        _ = try await WatchService(coordinator: coordinator).save(draft, editing: watch.id)
+        _ = try await WatchService(coordinator: coordinator).update(watch.id, .caliber(nil))
         try await waitUntil { state.pinnedID == nil }
         #expect(
             try await coordinator.read { try LibraryItemQueries.fetch(caliberItem.id, in: $0) }
@@ -187,18 +179,24 @@ struct BenchReferenceTests {
         let job = try #require(bench.snapshot.jobs.first)
         bench.selectJob(job.id)
         let editing = MaterialEditingFixture.editing(coordinator)
-        editing.watches.create()
-        editing.watches.draft?.name = "Unfinished bench watch"
+        let observation = Task { await editing.jobs.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { !editing.jobs.isLoading }
+        editing.jobs.open(try #require(editing.jobs.jobs.first { $0.id == job.id }))
+        editing.jobs.edit()
+        editing.jobs.draft?.title = "Unfinished bench job"
         bench.pin(items[0].id)
         bench.togglePane()
-        #expect(editing.watches.draft?.name == "Unfinished bench watch")
+        #expect(editing.jobs.draft?.title == "Unfinished bench job")
         var navigated = false
         editing.requestNavigation { navigated = true }
         #expect(editing.showsUnsavedChanges && !navigated)
         editing.stay()
-        #expect(editing.watches.draft?.name == "Unfinished bench watch")
+        #expect(editing.jobs.draft?.title == "Unfinished bench job")
         #expect(bench.reference?.item == items[0])
         #expect(try await coordinator.read(LibraryItemQueries.fetchAll).count == items.count)
+        observation.cancel()
+        await observation.value
         try await coordinator.close()
     }
 

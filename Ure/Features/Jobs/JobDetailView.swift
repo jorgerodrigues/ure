@@ -44,12 +44,6 @@ struct JobDetailView: View {
                             LabeledContent("Started") { Text(startedAt, format: .dateTime) }
                         }
                     }
-                    if let watch = watches.watches.first(where: { $0.id == job.watchID }) {
-                        Section("Current watch condition") {
-                            LabeledContent("Condition", value: watch.condition.rawValue)
-                            JobValue(label: "Condition note", value: watch.conditionNote)
-                        }
-                    }
                     Section("Outcome") {
                         JobValue(label: "Outcome", value: job.outcome)
                         JobValue(label: "Recommendations", value: job.recommendations)
@@ -69,10 +63,10 @@ struct JobDetailView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    Section("Owner contact") {
-                        JobValue(label: "Name", value: job.ownerName)
-                        JobValue(label: "Email", value: job.ownerEmail)
-                        JobValue(label: "Phone", value: job.ownerPhone)
+                    // The owner is written on the watch's page.
+                    Section("Owner") {
+                        JobValue(label: "Owner", value: watch(of: job)?.owner)
+                        JobValue(label: "Contact", value: watch(of: job)?.contact)
                     }
                     Section("Identity at intake") {
                         if job.intakeSnapshot.version == 1 {
@@ -104,13 +98,6 @@ struct JobDetailView: View {
                             .labelStyle(.iconOnly)
                             .help("Change Stage")
                             .accessibilityIdentifier("changeJobStage")
-                        Button(
-                            "Change Condition", systemImage: "waveform.path.ecg",
-                            action: changeCondition
-                        )
-                        .labelStyle(.iconOnly)
-                        .help("Change Condition")
-                        .accessibilityIdentifier("changeWatchCondition")
                     } else {
                         Button("Reopen Job", systemImage: "arrow.counterclockwise", action: reopen)
                             .labelStyle(.iconOnly)
@@ -138,7 +125,6 @@ struct JobDetailView: View {
         .onChange(of: jobs.selectedID, resetTimeline)
         .onChange(of: parts.selectedID, resetTimeline)
         .onChange(of: search.navigationRevision, resetTimeline)
-        .onChange(of: editing.archive.navigationRevision, resetTimeline)
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Button("Back to Watch", systemImage: "chevron.left", action: backToWatch)
@@ -153,8 +139,12 @@ struct JobDetailView: View {
         return backToWatch
     }
 
+    private func watch(of job: JobRecord) -> WatchRecord? {
+        watches.watches.first { $0.id == job.watchID }
+    }
+
     private func caliber(for job: JobRecord) -> CaliberRecord? {
-        calibers.caliber(watches.watches.first { $0.id == job.watchID }?.caliberID)
+        calibers.caliber(watch(of: job)?.caliberID)
     }
 
     private func backToWatch() { editing.requestNavigation(jobs.close) }
@@ -162,16 +152,8 @@ struct JobDetailView: View {
     private func closeTimeline() { showsTimeline = false }
     private func resetTimeline() { showsTimeline = false }
 
-    private func changeStage() { beginAction(.transition) }
-    private func changeCondition() { beginAction(.condition) }
-    private func reopen() { beginAction(.reopen) }
-
-    private func beginAction(_ action: JobAction) {
-        guard let job = jobs.selectedJob,
-            let watch = watches.watches.first(where: { $0.id == job.watchID })
-        else { return }
-        jobs.beginAction(action, watch: watch)
-    }
+    private func changeStage() { jobs.beginAction(.transition) }
+    private func reopen() { jobs.beginAction(.reopen) }
 
     private func menuActions(for job: JobRecord) -> RecordMenuActions {
         guard !editing.isSaving else { return RecordMenuActions() }
@@ -179,7 +161,6 @@ struct JobDetailView: View {
         if job.stage.isOpen {
             if job.intakeSnapshot.version == 1 { actions.edit = jobs.edit }
             actions.changeStage = changeStage
-            actions.changeCondition = changeCondition
         } else if job.archivedAt == nil && editing.canWrite(LibraryItemOwner.watch(job.watchID)) {
             actions.reopen = reopen
         }

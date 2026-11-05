@@ -358,4 +358,6 @@ enum InPlaceLayout {
     static let rowRadius: CGFloat = 6
     static let rowTextSize: CGFloat = 13
     static let rowDetailSize: CGFloat = 12
+    static let openSpacing: CGFloat = 8
+    static let openWidth: CGFloat = 16
 }

@@ -3,13 +3,11 @@ import GRDB
 
 nonisolated enum ArchiveError: LocalizedError, Equatable {
     case archived
-    case openJob
     case missingRecord
 
     var errorDescription: String? {
         switch self {
         case .archived: "This record is archived. Unarchive it before making changes."
-        case .openJob: "Close the watch's open job before archiving it."
         case .missingRecord: "This record is no longer available."
         }
     }
@@ -39,6 +37,8 @@ nonisolated enum RecordAccess {
     }
 }
 
+// Archiving hides a watch or caliber from its list and keeps everything it holds. Any watch can
+// be archived, even one with an open job, and that job stays open to work on.
 nonisolated struct ArchiveService: Sendable {
     let coordinator: LibraryCoordinator
 
@@ -46,9 +46,6 @@ nonisolated struct ArchiveService: Sendable {
         try await coordinator.mutate { db, _, dependencies in
             guard var watch = try WatchQueries.fetch(id, in: db) else {
                 throw ArchiveError.missingRecord
-            }
-            if archived, try JobQueries.openJob(for: id, in: db) != nil {
-                throw ArchiveError.openJob
             }
             guard (watch.archivedAt != nil) != archived else { return watch }
             watch.archivedAt =

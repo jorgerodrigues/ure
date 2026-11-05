@@ -67,7 +67,7 @@ nonisolated struct CaliberMigrationTests {
         let package = fixture.directory.appending(path: "before-caliber-facts.watchbackup")
         try LegacyCaliberFixture.package(at: package)
         let staged = try await coordinator.stageRestore(from: package)
-        #expect(staged.summary.appliedMigrations == ["v21-caliber-facts"])
+        #expect(staged.summary.appliedMigrations == ["v21-caliber-facts", "v22-watch-owner"])
         #expect(staged.summary.counts["caliber"] == LegacyCaliberFixture.calibers.count)
         let result = try await coordinator.activateRestore(staged)
         #expect(result.outcome == .restored)
@@ -124,6 +124,7 @@ nonisolated struct CaliberMigrationTests {
 // Puts a current library back to the schema before v21, with the caliber fields that v21 drops.
 nonisolated enum CaliberMigrationFixture {
     static func restoreCaliberFields(in db: Database) throws {
+        try WatchMigrationFixture.restoreWatchFields(in: db)
         try db.alter(table: "caliber") { table in
             for column in ["variant", "specificationNotes", "sourceNote"] {
                 table.add(column: column, .text)

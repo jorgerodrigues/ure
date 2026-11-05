@@ -30,11 +30,11 @@ nonisolated final class CaliberUITests: XCTestCase {
         enter("Corrected fixture", in: "caliberName", app: app)
         window.typeKey(.tab, modifierFlags: [])
         app.buttons["First watch"].click()
-        XCTAssertTrue(app.staticTexts["Corrected fixture"].waitForExistence(timeout: 5))
-        app.buttons["editWatch"].click()
-        chooseCaliber("Unknown", app: app)
-        window.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editWatch"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.menuButtons["watchCaliber"].waitForExistence(timeout: 5))
+        XCTAssertEqual(
+            app.menuButtons["watchCaliber"].value as? String, "Example maker Corrected fixture")
+        chooseCaliber("None", app: app)
+        XCTAssertEqual(app.menuButtons["watchCaliber"].value as? String, "")
         app.terminate()
         app.launch()
         openSection("3", control: "addCaliber", app: app)
@@ -96,14 +96,14 @@ nonisolated final class CaliberUITests: XCTestCase {
         openSection("2", control: "addWatch", app: app)
         app.buttons["addWatch"].click()
         enter(name, in: "watchName", app: app)
+        app.windows.firstMatch.typeKey(.return, modifierFlags: [])
         chooseCaliber(caliber, app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editWatch"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.menuButtons["watchCaliber"].value as? String, caliber)
     }
 
     @MainActor
     private func chooseCaliber(_ label: String, app: XCUIApplication) {
-        app.popUpButtons["watchCaliber"].click()
+        app.menuButtons["watchCaliber"].click()
         app.menuItems[label].click()
     }
 

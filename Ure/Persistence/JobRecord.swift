@@ -61,9 +61,6 @@ nonisolated struct JobRecord: Codable, Equatable, Identifiable, Sendable, Fetcha
     let reportedProblem: String?
     let agreedScope: String?
     let intakeCondition: String?
-    let ownerName: String?
-    let ownerEmail: String?
-    let ownerPhone: String?
     let intakeSnapshot: JobIntakeSnapshot
     let createdAt: Date
     var updatedAt: Date

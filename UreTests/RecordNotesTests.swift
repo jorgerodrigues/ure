@@ -60,15 +60,13 @@ nonisolated struct RecordNotesMigrationTests {
         defer { fixture.remove() }
         let coordinator = LibraryCoordinator(root: fixture.root)
         _ = try await coordinator.open()
-        var draft = WatchDraft()
-        draft.name = "Replaced by the restore"
-        _ = try await WatchService(coordinator: coordinator).save(draft, editing: nil)
+        _ = try await WatchService(coordinator: coordinator).make("Replaced by the restore")
         let package = fixture.directory.appending(path: "before-notes.watchbackup")
         try LegacyLibraryFixture.package(at: package)
         let staged = try await coordinator.stageRestore(from: package)
         #expect(
             staged.summary.appliedMigrations == [
-                "v19-record-notes", "v20-material", "v21-caliber-facts",
+                "v19-record-notes", "v20-material", "v21-caliber-facts", "v22-watch-owner",
             ])
         #expect(staged.summary.counts["note"] == nil && staged.summary.counts["watch"] == 2)
         let result = try await coordinator.activateRestore(staged)
@@ -399,10 +397,8 @@ final class SavedTexts {
 nonisolated enum NoteFixture {
     static func owners(_ coordinator: LibraryCoordinator) async throws -> [LibraryItemOwner] {
         let caliber = try await CaliberService(coordinator: coordinator).create(named: "0012–Å")
-        var watchDraft = WatchDraft()
-        watchDraft.name = "Bench watch"
-        watchDraft.caliberID = caliber.id
-        let watch = try await WatchService(coordinator: coordinator).save(watchDraft, editing: nil)
+        let watch = try await WatchService(coordinator: coordinator).make(
+            "Bench watch", caliberID: caliber.id)
         var jobDraft = JobDraft()
         jobDraft.title = "Inspect movement"
         let job = try await JobService(coordinator: coordinator).save(

@@ -49,10 +49,9 @@ struct WorkshopOverviewStateTests {
         let jobs = JobService(coordinator: coordinator)
         _ = try await jobs.transition(job.id, using: waiting)
         try await waitUntil { workshop.rows.first?.job.waitingReason == waiting.waitingReason }
-        var watchDraft = WatchDraft()
-        watchDraft.name = "Updated watch"
-        _ = try await WatchService(coordinator: coordinator).save(watchDraft, editing: job.watchID)
-        try await waitUntil { workshop.rows.first?.watch.name == watchDraft.name }
+        _ = try await WatchService(coordinator: coordinator).update(
+            job.watchID, .name("Updated watch"))
+        try await waitUntil { workshop.rows.first?.watch.name == "Updated watch" }
         var closure = JobTransitionDraft(stage: .completed)
         closure.outcome = "Reviewed"
         closure.unfinishedTasksReason = "Kept for history"

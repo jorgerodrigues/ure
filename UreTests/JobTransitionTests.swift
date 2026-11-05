@@ -47,20 +47,20 @@ nonisolated struct JobTransitionTests {
         let storedDate = Date(timeIntervalSince1970: clock.timeIntervalSince1970)
         let coordinator = fixture.coordinator(dependencies: LibraryDependencies(now: { clock }))
         _ = try await coordinator.open()
-        let (_, job) = try await makeJob(coordinator)
+        let (bench, job) = try await makeJob(coordinator)
         let service = JobService(coordinator: coordinator)
         let started = try await service.transition(job.id, using: draft(.inProgress))
         #expect(started.startedAt == storedDate)
         #expect(try await coordinator.read(JobQueries.fetchAll) == [started])
-        let watch = try await service.setCondition(
-            job.id, using: WatchConditionDraft(condition: .running, note: "Bench test"))
+        let watch = try await WatchService(coordinator: coordinator).update(
+            bench.id, .brand("Bench test"))
         #expect(watch.updatedAt == storedDate)
         #expect(try await coordinator.read(WatchQueries.fetchAll) == [watch])
         let closed = try await service.transition(job.id, using: draft(.completed))
         #expect(closed.completedAt == storedDate)
         #expect(try await coordinator.read(JobQueries.fetchAll) == [closed])
         let events = try await coordinator.read(ActivityQueries.fetchAll)
-        #expect(events.map(\.ordering) == [1, 2, 3])
+        #expect(events.map(\.ordering) == [1, 2])
         #expect(events.allSatisfy { $0.occurredAt == storedDate })
         #expect(events.last?.nextValue == .job(JobStageValue(job: closed)))
         try await coordinator.close()
@@ -125,51 +125,6 @@ nonisolated struct JobTransitionTests {
         try await coordinator.close()
     }
 
-    @Test(arguments: WatchCondition.allCases)
-    func conditionAndNoteChangesDoNotMoveTheJobAndSurviveRestart(condition: WatchCondition)
-        async throws
-    {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        let (watch, job) = try await makeJob(coordinator)
-        let service = JobService(coordinator: coordinator)
-        let waiting = try await service.transition(job.id, using: draft(.waiting))
-        let change = WatchConditionDraft(condition: condition, note: "  Measured at the bench  ")
-        let updated = try await service.setCondition(job.id, using: change)
-        #expect(updated.condition == condition)
-        #expect(updated.conditionNote == "Measured at the bench")
-        #expect(try await coordinator.read(JobQueries.fetchAll) == [waiting])
-        let events = try await coordinator.read(ActivityQueries.fetchAll)
-        let event = try #require(events.last)
-        #expect(event.kind == .watchConditionChanged)
-        #expect(event.priorValue == .condition(WatchConditionValue(watch: watch)))
-        #expect(event.nextValue == .condition(WatchConditionValue(watch: updated)))
-        _ = try await service.setCondition(job.id, using: change)
-        #expect(try await coordinator.read(ActivityQueries.fetchAll) == events)
-        var identity = WatchDraft(watch: watch)
-        identity.name = "Corrected identity"
-        let renamed = try await WatchService(coordinator: coordinator).save(
-            identity, editing: watch.id)
-        #expect(renamed.condition == condition)
-        #expect(renamed.conditionNote == updated.conditionNote)
-        _ = try await service.save(JobDraft(job: waiting), for: watch.id, editing: job.id)
-        #expect(
-            try await coordinator.read { db in try JobQueries.fetch(job.id, in: db)?.waitingReason }
-                == waiting.waitingReason)
-        try await coordinator.close()
-        let restarted = fixture.coordinator()
-        _ = try await restarted.open()
-        #expect(try await restarted.read(WatchQueries.fetchAll) == [renamed])
-        #expect(try await restarted.read(ActivityQueries.fetchAll) == events)
-        let cleared = try await JobService(coordinator: restarted).setCondition(
-            job.id, using: WatchConditionDraft(condition: condition, note: " \n "))
-        #expect(cleared.conditionNote == nil)
-        #expect(try await restarted.read(ActivityQueries.fetchAll).count == events.count + 1)
-        try await restarted.close()
-    }
-
     @Test(
         arguments: [JobStage.completed, .cancelled],
         [JobStage.planned, .inProgress, .waiting, .ready])
@@ -190,10 +145,6 @@ nonisolated struct JobTransitionTests {
         }
         await #expect(throws: JobError.closedJob) {
             try await service.transition(job.id, using: draft(.ready))
-        }
-        await #expect(throws: JobError.closedJob) {
-            try await service.setCondition(
-                job.id, using: WatchConditionDraft(condition: .running, note: ""))
         }
         await #expect(throws: JobError.invalidReopenStage) {
             try await service.reopen(job.id, using: draft(.completed))
@@ -244,8 +195,8 @@ nonisolated struct JobTransitionTests {
         try await coordinator.close()
     }
 
-    @Test(arguments: [false, true])
-    func failedEventInsertRollsBackItsStateChange(condition: Bool) async throws {
+    @Test
+    func failedEventInsertRollsBackItsStateChange() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -259,13 +210,7 @@ nonisolated struct JobTransitionTests {
         }
         let service = JobService(coordinator: coordinator)
         await #expect(throws: DatabaseError.self) {
-            if condition {
-                _ = try await service.setCondition(
-                    job.id,
-                    using: WatchConditionDraft(condition: .disassembled, note: "Removed movement"))
-            } else {
-                _ = try await service.transition(job.id, using: draft(.completed))
-            }
+            _ = try await service.transition(job.id, using: draft(.completed))
         }
         #expect(try await coordinator.read(JobQueries.fetchAll) == [job])
         #expect(try await coordinator.read(WatchQueries.fetchAll) == [watch])
@@ -306,9 +251,7 @@ nonisolated struct JobTransitionTests {
 
     private func makeJob(_ coordinator: LibraryCoordinator) async throws -> (WatchRecord, JobRecord)
     {
-        var watchDraft = WatchDraft()
-        watchDraft.name = "Bench watch"
-        let watch = try await WatchService(coordinator: coordinator).save(watchDraft, editing: nil)
+        let watch = try await WatchService(coordinator: coordinator).make("Bench watch")
         var intake = JobDraft()
         intake.title = "Inspect movement"
         let job = try await JobService(coordinator: coordinator).save(

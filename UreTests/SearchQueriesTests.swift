@@ -15,14 +15,14 @@ nonisolated struct SearchQueriesTests {
         _ = try await coordinator.open()
         let caliber = try await CaliberService(coordinator: coordinator).create(
             named: "ÉТА 0012/Å")
-        var watchDraft = WatchDraft()
-        watchDraft.name = "Straße 時計"
-        watchDraft.brand = "ΜΆΡΚΑ"
-        watchDraft.model = "МОДЕЛЬ"
-        watchDraft.caseReference = "0012–Å/04"
-        watchDraft.serial = "000042.7-A"
-        watchDraft.caliberID = caliber.id
-        let watch = try await WatchService(coordinator: coordinator).save(watchDraft, editing: nil)
+        let watches = WatchService(coordinator: coordinator)
+        var watch = try await watches.make("Straße 時計", brand: "ΜΆΡΚΑ", caliberID: caliber.id)
+        for fact in [
+            WatchFact.model("МОДЕЛЬ"), .reference("0012–Å/04"), .serial("000042.7-A"),
+            .owner("Ödön Ünal"), .contact("ODON@EXAMPLE.ORG"),
+        ] {
+            watch = try await watches.update(watch.id, fact)
+        }
         var jobDraft = JobDraft()
         jobDraft.title = "Réparation"
         let job = try await JobService(coordinator: coordinator).save(
@@ -46,7 +46,8 @@ nonisolated struct SearchQueriesTests {
             pdf, titled: "Technical PDF", for: .job(job.id), in: coordinator)
         let cases: [(String, UUID)] = [
             ("STRASSE", watch.id), ("時計", watch.id), ("μάρκα", watch.id), ("модель", watch.id),
-            ("0012–å/04", watch.id), ("000042.7-a", watch.id), ("éта 0012/å", caliber.id),
+            ("0012–å/04", watch.id), ("000042.7-a", watch.id), ("ödön ünal", watch.id),
+            ("odon@example", watch.id), ("éта 0012/å", caliber.id),
             ("RÉPARATION", job.id), ("finding", job.id), ("cafe\u{301}", job.id),
             ("100%_", job.id), ("[brackets]", job.id), ("'quotes'", job.id),
             ("\"double\"", job.id), ("\\path", job.id), ("'; DROP TABLE watch;--", job.id),
@@ -88,10 +89,9 @@ nonisolated struct SearchQueriesTests {
             try Data(
                 contentsOf: try await restarted.originalURL(for: try #require(document.asset).id))
                 == pdfBytes)
-        var editedWatch = WatchDraft(watch: watch)
-        editedWatch.name = "Corrected watch"
-        editedWatch.serial = "0099-new"
-        _ = try await WatchService(coordinator: restarted).save(editedWatch, editing: watch.id)
+        let restartedWatches = WatchService(coordinator: restarted)
+        _ = try await restartedWatches.update(watch.id, .name("Corrected watch"))
+        _ = try await restartedWatches.update(watch.id, .serial("0099-new"))
         _ = try await CaliberService(coordinator: restarted).update(
             caliber.id, .name("Corrected caliber"))
         var editedJob = JobDraft(job: job)
@@ -123,18 +123,16 @@ nonisolated struct SearchQueriesTests {
                 sql: "UPDATE caliber SET archivedAt = 1 WHERE id = ?",
                 arguments: [caliber.id.uuidString])
         }
+        // An archived caliber and its material stay in search and say that they are archived.
         #expect(
             try await restarted.read { try SearchQueries.fetch("corrected caliber", in: $0) }
-                .isEmpty)
+                .map(\.isArchived) == [true])
         #expect(
-            try await restarted.read { try SearchQueries.fetch("corrected link", in: $0) }.isEmpty)
+            try await restarted.read { try SearchQueries.fetch("corrected link", in: $0) }
+                .map(\.isArchived) == [true])
         #expect(
-            try await restarted.read { try SearchQueries.fetch("corrected watch", in: $0) }.count
-                == 1)
-        #expect(
-            try await restarted.read {
-                try SearchQueries.fetch("corrected link", includeArchived: true, in: $0)
-            }.first?.isArchived == true)
+            try await restarted.read { try SearchQueries.fetch("corrected watch", in: $0) }
+                .map(\.isArchived) == [false])
         try await restarted.close()
     }
 
@@ -176,30 +174,22 @@ nonisolated struct SearchQueriesTests {
                 sql: "UPDATE job SET archivedAt = ? WHERE id = ?",
                 arguments: [date.timeIntervalSince1970, job.id.uuidString])
         }
-        #expect(try await coordinator.read { try SearchQueries.fetch("corrected", in: $0) }.isEmpty)
         #expect(
-            try await coordinator.read {
-                try SearchQueries.fetch("corrected", includeArchived: true, in: $0)
-            }.first?.isArchived == true)
+            try await coordinator.read { try SearchQueries.fetch("corrected", in: $0) }.map(
+                \.isArchived) == [true])
         try await coordinator.mutate { db, _, _ in
             try db.execute(
                 sql: "UPDATE watch SET archivedAt = ? WHERE id = ?",
                 arguments: [date.timeIntervalSince1970, job.watchID.uuidString])
         }
-        #expect(try await coordinator.read { try SearchQueries.fetch("duplicate", in: $0) }.isEmpty)
-        #expect(
-            try await coordinator.read {
-                try SearchQueries.fetch("duplicate", includeArchived: true, in: $0)
-            }.count == 2)
+        let archived = try await coordinator.read { try SearchQueries.fetch("duplicate", in: $0) }
+        #expect(archived.count == 2 && archived.allSatisfy { $0.isArchived })
         try await coordinator.mutate { db, _, _ in
             try db.execute(
                 sql: "UPDATE job SET notes = '' WHERE id = ?", arguments: [job.id.uuidString])
             try SearchKey.refresh(job.id, table: .job, in: db)
         }
-        #expect(
-            try await coordinator.read {
-                try SearchQueries.fetch("corrected", includeArchived: true, in: $0)
-            }.isEmpty)
+        #expect(try await coordinator.read { try SearchQueries.fetch("corrected", in: $0) }.isEmpty)
         try await coordinator.close()
     }
 

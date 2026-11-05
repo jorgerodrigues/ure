@@ -22,7 +22,10 @@ nonisolated enum SearchKey {
         var fields: [String] {
             switch self {
             case .watch:
-                ["name", "brand", "model", "caseReference", "serial", "approximateYear", "notes"]
+                [
+                    "name", "brand", "model", "caseReference", "serial", "approximateYear", "owner",
+                    "contact", "notes",
+                ]
             case .caliber: ["designation", "manufacturer", "notes"]
             case .job: ["title", "notes"]
             case .libraryItem: ["title"]

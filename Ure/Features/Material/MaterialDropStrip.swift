@@ -5,12 +5,13 @@ import SwiftUI
 // photos and PDFs. Drop files or links on it. A click also gives it focus, so ⌘V then pastes a
 // link.
 struct MaterialDropStrip: NSViewRepresentable {
+    var style = RecordSectionStyle.form
     let choose: () -> Void
     let drop: ([URL]) -> Void
     let paste: (String?) -> Void
 
     func makeNSView(context: Context) -> MaterialDropStripView {
-        let view = MaterialDropStripView()
+        let view = MaterialDropStripView(style: style)
         updateNSView(view, context: context)
         return view
     }
@@ -24,7 +25,8 @@ struct MaterialDropStrip: NSViewRepresentable {
     func sizeThatFits(
         _ proposal: ProposedViewSize, nsView view: MaterialDropStripView, context: Context
     ) -> CGSize? {
-        CGSize(width: proposal.width ?? 320, height: MaterialLayout.stripHeight)
+        let height = style == .page ? MaterialLayout.pageStripHeight : MaterialLayout.stripHeight
+        return CGSize(width: proposal.width ?? 320, height: height)
     }
 }
 
@@ -33,13 +35,16 @@ final class MaterialDropStripView: NSView {
     var onDrop: ([URL]) -> Void = { _ in }
     var onPaste: (String?) -> Void = { _ in }
     var pasteboard = NSPasteboard.general
-    private let label = NSHostingView(rootView: MaterialDropStripLabel(isTargeted: false))
+    private let style: RecordSectionStyle
+    private let label: NSHostingView<MaterialDropStripLabel>
     private var isTargeted = false {
-        didSet { label.rootView = MaterialDropStripLabel(isTargeted: isTargeted) }
+        didSet { label.rootView = MaterialDropStripLabel(style: style, isTargeted: isTargeted) }
     }
 
-    override init(frame: NSRect) {
-        super.init(frame: frame)
+    init(style: RecordSectionStyle = .form) {
+        self.style = style
+        label = NSHostingView(rootView: MaterialDropStripLabel(style: style, isTargeted: false))
+        super.init(frame: .zero)
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
         NSLayoutConstraint.activate([
@@ -108,10 +113,8 @@ final class MaterialDropStripView: NSView {
     override var focusRingMaskBounds: NSRect { bounds }
 
     override func drawFocusRingMask() {
-        NSBezierPath(
-            roundedRect: bounds, xRadius: MaterialLayout.cornerRadius,
-            yRadius: MaterialLayout.cornerRadius
-        ).fill()
+        let radius = style == .page ? MaterialLayout.pageRadius : MaterialLayout.cornerRadius
+        NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
     }
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
@@ -135,39 +138,56 @@ final class MaterialDropStripView: NSView {
     }
 }
 
+// A form's strip says how to add material on two lines. A page's strip says it on one centred
+// line, as on the "4 Watch" artboard.
 struct MaterialDropStripLabel: View {
+    let style: RecordSectionStyle
     let isTargeted: Bool
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "plus.circle")
-                .font(.title3)
+        Group {
+            switch style {
+            case .form:
+                HStack(spacing: 10) {
+                    Image(systemName: "plus.circle")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Drop photos or PDFs, or click to choose")
+                        Text("Paste a link with ⌘V")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 14)
+            case .page:
+                HStack(spacing: 8) {
+                    Image(systemName: "plus").font(.system(size: 12, weight: .medium))
+                    Text("Add photos, PDFs or links, or drop them here")
+                }
+                .font(.system(size: PageLayout.detailSize))
                 .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Drop photos or PDFs, or click to choose")
-                Text("Paste a link with ⌘V")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 14)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(MaterialDropStripBorder(isTargeted: isTargeted))
+        .background(MaterialDropStripBorder(style: style, isTargeted: isTargeted))
     }
 }
 
 private struct MaterialDropStripBorder: View {
+    let style: RecordSectionStyle
     let isTargeted: Bool
 
     var body: some View {
-        RoundedRectangle(cornerRadius: MaterialLayout.cornerRadius)
+        let shape = RoundedRectangle(
+            cornerRadius: style == .page ? MaterialLayout.pageRadius : MaterialLayout.cornerRadius)
+        shape
             .strokeBorder(
                 isTargeted ? AnyShapeStyle(.tint) : AnyShapeStyle(.separator),
                 style: StrokeStyle(lineWidth: isTargeted ? 2 : 1, dash: [5, 4])
             )
             .background(
-                RoundedRectangle(cornerRadius: MaterialLayout.cornerRadius)
-                    .fill(isTargeted ? AnyShapeStyle(.tint.opacity(0.08)) : AnyShapeStyle(.clear)))
+                shape.fill(isTargeted ? AnyShapeStyle(.tint.opacity(0.08)) : AnyShapeStyle(.clear)))
     }
 }

@@ -19,7 +19,7 @@ WORKER = Path(sys.argv[1]).resolve()
 RUN = REPO / ".build/recovery-runs" / str(uuid.uuid4())
 GENERATION = "00000000-0000-4000-8000-000000000001"
 VERSIONS = ("v10-documents", "v15-part-procurement")
-CURRENT_MIGRATION = "v21-caliber-facts"
+CURRENT_MIGRATION = "v22-watch-owner"
 # Columns that a later migration removes on purpose.
 REMOVED_COLUMNS = {
     "partLink": {
@@ -29,6 +29,8 @@ REMOVED_COLUMNS = {
     "partRequirement": {"supplierSnapshot"},
     "libraryItem": {"sourceURL", "sourceDescription", "notes", "photoStage", "caption"},
     "caliber": {"variant", "specificationNotes", "sourceNote", "movementType"},
+    "watch": {"condition", "conditionNote", "waterResistance", "specificationNotes"},
+    "job": {"ownerName", "ownerEmail", "ownerPhone"},
 }
 # Library item fields that v20 writes into the owner's notes, with the label before each value.
 MOVED_INTO_NOTES = (
@@ -40,6 +42,13 @@ CALIBER_INTO_NOTES = (
     ("variant", "Variant: "), ("specificationNotes", "Specification notes: "), ("sourceNote", "Source note: "),
 )
 WINDINGS = ("Manual", "Automatic", "Quartz")
+# Watch fields that v22 writes into the watch's notes, with the label before each value.
+WATCH_INTO_NOTES = (
+    ("conditionNote", "Condition note: "), ("waterResistance", "Water resistance: "),
+    ("specificationNotes", "Specification notes: "),
+)
+# Job owner fields that v22 moves to the watch, with the label each older owner gets in notes.
+OWNER_COLUMNS = (("ownerName", "Owner: "), ("ownerEmail", "Email: "), ("ownerPhone", "Phone: "))
 # Tables that a later migration joins into the notes text of the record that owns each row.
 JOINED_INTO_NOTES = {"note"}
 NOTE_OWNERS = (("watchID", "watch"), ("jobID", "job"), ("caliberID", "caliber"))
@@ -177,9 +186,43 @@ def calibers_preserved(rows, after):
                 require(label + value.rstrip() in kept["notes"], f"caliber: {column} in notes")
 
 
+def owner_values(job):
+    return tuple((job[column] or "").rstrip() if (job[column] or "").strip() else None for column, _ in OWNER_COLUMNS)
+
+
+def watches_preserved(rows, before, after):
+    watches = {row["id"]: row for row in after["tables"]["watch"]}
+    jobs = sorted(before["tables"].get("job", []), key=lambda job: (-job["createdAt"], job["id"]))
+    for row in rows:
+        kept = watches[row["id"]]
+        if row["condition"] != "Unknown":
+            require("Condition: " + row["condition"] in kept["notes"], "watch: condition in notes")
+        for column, label in WATCH_INTO_NOTES:
+            value = row[column] or ""
+            if value.strip():
+                require(label + value.rstrip() in kept["notes"], f"watch: {column} in notes")
+        owners = [job for job in jobs if job["watchID"] == row["id"] and any(owner_values(job))]
+        if not owners:
+            require(kept["owner"] is None and kept["contact"] is None, "watch: no owner without one")
+            continue
+        name, email, phone = owner_values(owners[0])
+        contact = " · ".join(value for value in (email, phone) if value) or None
+        require(kept["owner"] == (name.strip() if name else None), "watch: owner from latest job")
+        require(kept["contact"] == (contact.strip() if contact else None), "watch: contact joins email and phone")
+        for job in owners[1:]:
+            if owner_values(job) == owner_values(owners[0]):
+                continue
+            require("Job · " + job["title"] in kept["notes"], "watch: older owner's job in notes")
+            for (column, label), value in zip(OWNER_COLUMNS, owner_values(job)):
+                if value:
+                    require(label + value in kept["notes"], f"watch: older {column} in notes")
+
+
 def preserved(before, after):
     require(before["originals"] == after["originals"], "Original and technical PDF bytes preserved")
     for table, rows in before["tables"].items():
+        if table == "watch" and rows and "condition" in rows[0]:
+            watches_preserved(rows, before, after)
         if table == "libraryItem" and rows and "sourceURL" in rows[0]:
             material_preserved(rows, after)
         if table == "caliber" and rows and "movementType" in rows[0]:

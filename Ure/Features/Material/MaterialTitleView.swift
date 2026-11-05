@@ -96,14 +96,16 @@ final class MaterialTitleField: NSTextField {
         isBezeled = false
         drawsBackground = false
         focusRingType = .default
-        font = .systemFont(ofSize: MaterialLayout.titleSize, weight: .medium)
+        font = .systemFont(ofSize: MaterialLayout.titleSize)
         textColor = .labelColor
         lineBreakMode = .byTruncatingTail
         cell?.usesSingleLineMode = true
         cell?.wraps = false
         cell?.isScrollable = true
         cell?.allowsUndo = false
+        // VoiceOver reads the field's cell, so the label goes on the cell as well as the field.
         setAccessibilityLabel("Material title")
+        cell?.setAccessibilityLabel("Material title")
         setAccessibilityIdentifier("materialTitle")
     }
 
@@ -116,6 +118,7 @@ final class MaterialTitleField: NSTextField {
     }
 }
 
+// The page values come from the "4 Watch" artboard on the Paper page "Rework · Simple".
 enum MaterialLayout {
     static let tileWidth: CGFloat = 156
     static let previewHeight: CGFloat = 104
@@ -124,4 +127,12 @@ enum MaterialLayout {
     static let tileSpacing: CGFloat = 12
     static let stripHeight: CGFloat = 56
     static let cornerRadius: CGFloat = 8
+    static let pageTileMinimum: CGFloat = 140
+    static let pagePreviewHeight: CGFloat = 116
+    static let pageRadius: CGFloat = 10
+    static let pageStripHeight: CGFloat = 48
+    static let detailSize: CGFloat = 11
+    static let chipHeight: CGFloat = 24
+    static let chipSpacing: CGFloat = 8
+    static let chipTextSize: CGFloat = 12
 }

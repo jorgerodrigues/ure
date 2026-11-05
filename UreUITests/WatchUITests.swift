@@ -3,136 +3,81 @@ import XCTest
 
 nonisolated final class WatchUITests: XCTestCase {
     @MainActor
-    func testKeyboardCreateEditCancelAndStayWithLongName() {
+    func testNewWatchPutsTheCursorInItsNameAndFactsSaveInPlace() {
         let app = isolatedApp()
         app.launch()
         defer { app.terminate() }
         let window = app.windows.firstMatch
-        XCTAssertTrue(app.outlines["Workshop sections"].waitForExistence(timeout: 5))
-        window.typeKey("2", modifierFlags: [.command, .option])
-        XCTAssertTrue(app.buttons["addWatch"].waitForExistence(timeout: 5))
+        openWatches(app)
         window.typeKey("n", modifierFlags: .command)
         XCTAssertTrue(app.textFields["watchName"].waitForExistence(timeout: 3))
         let name =
             "Long bench watch – 00042-A/7 – Å時計 – "
             + String(repeating: "Service history ", count: 10)
         window.typeText(name)
-        window.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editWatch"].waitForExistence(timeout: 5))
-        window.typeKey("e", modifierFlags: [.command, .option])
-        XCTAssertTrue(app.textFields["watchName"].waitForExistence(timeout: 3))
-        window.typeKey("a", modifierFlags: .command)
-        window.typeText("Discard this edit")
-        window.typeKey("f", modifierFlags: [.command, .shift])
-        XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 3))
-        window.typeText("Search while editing")
-        window.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
-        XCTAssertEqual(app.textFields["watchName"].value as? String, "Discard this edit")
-        window.typeKey(".", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editWatch"].waitForExistence(timeout: 3))
-        window.typeKey("2", modifierFlags: [.command, .option])
-        window.typeKey("e", modifierFlags: [.command, .option])
-        XCTAssertTrue(app.textFields["watchName"].waitForExistence(timeout: 3))
-        XCTAssertEqual(
-            app.textFields["watchName"].value as? String, name.trimmingCharacters(in: .whitespaces))
-        window.typeKey("a", modifierFlags: .command)
-        window.typeText("Stay with this draft")
-        window.typeKey("3", modifierFlags: [.command, .option])
-        XCTAssertTrue(app.sheets.buttons["Stay"].waitForExistence(timeout: 3))
-        app.sheets.firstMatch.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
-        XCTAssertEqual(app.textFields["watchName"].value as? String, "Stay with this draft")
-        window.typeKey(".", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editWatch"].waitForExistence(timeout: 3))
-    }
-
-    @MainActor
-    func testCreateEditCancelAndRestart() {
-        let app = isolatedApp()
-        app.launch()
-        defer { app.terminate() }
-        openWatches(app)
-        XCTAssertTrue(app.staticTexts["No watches"].waitForExistence(timeout: 5))
-        app.buttons["addWatch"].click()
-        enter("Bench watch", in: "watchName", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editWatch"].waitForExistence(timeout: 5))
-        app.buttons["editWatch"].click()
-        enter("Renamed watch", in: "watchName", app: app)
+        window.typeKey(.tab, modifierFlags: [])
+        window.typeText("Omega")
+        window.typeKey(.return, modifierFlags: [])
+        window.typeText("Seamaster")
         enter("00042-A/7", in: "watchSerial", app: app)
-        enter("0", in: "watchCaseDiameter", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.staticTexts["watchSaveError"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.textFields["watchName"].value as? String, "Renamed watch")
-        enter("36.5", in: "watchCaseDiameter", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editWatch"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["00042-A/7"].exists)
-        app.buttons["editWatch"].click()
-        enter("Discarded name", in: "watchName", app: app)
-        app.buttons["cancelWatch"].click()
-        XCTAssertTrue(app.buttons["editWatch"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.staticTexts["Discarded name"].exists)
+        enter("35mm", in: "watchDiameter", app: app)
+        window.typeKey(.tab, modifierFlags: [])
+        XCTAssertEqual(app.textFields["watchDiameter"].value as? String, "35 mm")
+        enter("Ana Ribeiro", in: "watchOwner", app: app)
+        enter("+351 912 480 117", in: "watchContact", app: app)
+        window.typeKey(.return, modifierFlags: [])
         app.terminate()
         app.launch()
         openWatches(app)
-        let row = app.staticTexts["Renamed watch"].firstMatch
+        let row = app.staticTexts["Omega"].firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.click()
-        XCTAssertTrue(app.buttons["editWatch"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["00042-A/7"].exists)
+        XCTAssertTrue(app.textFields["watchName"].waitForExistence(timeout: 5))
+        XCTAssertEqual(
+            app.textFields["watchName"].value as? String, name.trimmingCharacters(in: .whitespaces))
+        XCTAssertEqual(app.textFields["watchSerial"].value as? String, "00042-A/7")
+        XCTAssertEqual(app.textFields["watchOwner"].value as? String, "Ana Ribeiro")
         capture(app, name: "Watch-after-restart")
     }
 
     @MainActor
-    func testDirtySectionNavigationSupportsStaySaveAndDiscard() {
+    func testInvalidDiameterStaysOnThePageAndUndoBringsBackAFact() {
         let app = isolatedApp()
         app.launch()
         defer { app.terminate() }
+        let window = app.windows.firstMatch
         openWatches(app)
-        app.buttons["addWatch"].click()
-        enter("Unsaved watch", in: "watchName", app: app)
-        app.windows.firstMatch.typeKey("3", modifierFlags: [.command, .option])
-        XCTAssertTrue(app.sheets.buttons["Stay"].waitForExistence(timeout: 3))
-        app.sheets.buttons["Stay"].click()
-        XCTAssertEqual(app.textFields["watchName"].value as? String, "Unsaved watch")
-        app.windows.firstMatch.typeKey("3", modifierFlags: [.command, .option])
-        XCTAssertTrue(app.sheets.buttons["Discard"].waitForExistence(timeout: 3))
-        app.sheets.buttons["Discard"].click()
-        XCTAssertTrue(app.staticTexts["No calibers"].waitForExistence(timeout: 3))
-        openWatches(app)
-        XCTAssertTrue(app.staticTexts["No watches"].waitForExistence(timeout: 3))
-        app.buttons["addWatch"].click()
-        enter("Saved on navigation", in: "watchName", app: app)
-        app.windows.firstMatch.typeKey("3", modifierFlags: [.command, .option])
-        XCTAssertTrue(app.sheets.buttons["Stay"].waitForExistence(timeout: 3))
-        app.sheets.buttons["Save"].click()
-        XCTAssertTrue(app.staticTexts["No calibers"].waitForExistence(timeout: 5))
-        openWatches(app)
+        window.typeKey("n", modifierFlags: .command)
+        XCTAssertTrue(app.textFields["watchName"].waitForExistence(timeout: 3))
+        window.typeText("Bench watch")
+        enter("0", in: "watchDiameter", app: app)
+        window.typeKey(.tab, modifierFlags: [])
         XCTAssertTrue(
-            app.staticTexts["Saved on navigation"].firstMatch.waitForExistence(timeout: 5))
+            app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Enter a diameter'"))
+                .firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.textFields["watchDiameter"].value as? String, "0")
+        enter("Ana", in: "watchOwner", app: app)
+        window.typeKey(.tab, modifierFlags: [])
+        window.typeKey("z", modifierFlags: .command)
+        XCTAssertEqual(app.textFields["watchOwner"].value as? String, "")
+        window.typeKey("3", modifierFlags: [.command, .option])
+        XCTAssertFalse(app.sheets.buttons["Stay"].waitForExistence(timeout: 2))
     }
 
     @MainActor
-    func testDirtyWindowCloseAndQuitKeepTheDraftWhenCancelled() {
+    func testQuitSavesTypingWithoutAsking() {
         let app = isolatedApp()
         app.launch()
         defer { app.terminate() }
         openWatches(app)
         app.buttons["addWatch"].click()
         enter("Do not lose this", in: "watchName", app: app)
-        app.windows.firstMatch.typeKey("w", modifierFlags: .command)
-        XCTAssertTrue(app.sheets.buttons["Stay"].waitForExistence(timeout: 3))
-        app.sheets.buttons["Stay"].click()
-        XCTAssertEqual(app.textFields["watchName"].value as? String, "Do not lose this")
         app.windows.firstMatch.typeKey("q", modifierFlags: .command)
-        XCTAssertTrue(app.sheets.buttons["Stay"].waitForExistence(timeout: 3))
-        app.sheets.buttons["Stay"].click()
-        XCTAssertEqual(app.textFields["watchName"].value as? String, "Do not lose this")
-        capture(app, name: "Watch-unsaved-draft")
-        app.windows.firstMatch.typeKey("q", modifierFlags: .command)
-        XCTAssertTrue(app.sheets.buttons["Discard"].waitForExistence(timeout: 3))
-        app.sheets.buttons["Discard"].click()
         XCTAssertTrue(app.wait(for: .notRunning, timeout: 5))
+        app.launch()
+        openWatches(app)
+        XCTAssertTrue(
+            app.staticTexts["Do not lose this"].firstMatch.waitForExistence(timeout: 5))
     }
 
     @MainActor

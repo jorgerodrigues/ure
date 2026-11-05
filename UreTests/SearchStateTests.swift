@@ -207,20 +207,21 @@ struct SearchStateTests {
             SearchEditingFixture.loaded(editing) && search.results.count == 1
         }
         editing.watches.select(first.watchID)
-        editing.watches.edit()
-        editing.watches.draft?.name = "Keep correction"
+        editing.jobs.open(first)
+        editing.jobs.edit()
+        editing.jobs.draft?.title = "Keep correction"
         search.present()
         search.open("Part-\(part.id.uuidString)", editing: editing, navigation: navigation)
         #expect(editing.showsUnsavedChanges && editing.watches.selectedID == first.watchID)
         editing.stay()
-        #expect(editing.watches.draft?.name == "Keep correction" && search.isPresented)
-        editing.watches.draft?.name = ""
+        #expect(editing.jobs.draft?.title == "Keep correction" && search.isPresented)
+        editing.jobs.draft?.title = ""
         search.open("Part-\(part.id.uuidString)", editing: editing, navigation: navigation)
         await editing.saveAndContinue()
         #expect(
-            editing.watches.saveError != nil && editing.watches.selectedID == first.watchID
+            editing.jobs.saveError != nil && editing.watches.selectedID == first.watchID
                 && search.isPresented)
-        editing.watches.draft?.name = "Keep correction"
+        editing.jobs.draft?.title = "Keep correction"
         search.open("Part-\(part.id.uuidString)", editing: editing, navigation: navigation)
         await editing.saveAndContinue()
         #expect(
@@ -240,6 +241,52 @@ struct SearchStateTests {
         }
         search.open("Part-\(part.id.uuidString)", editing: editing, navigation: navigation)
         #expect(editing.jobs.selectedID == second.id)
+        observations.forEach { $0.cancel() }
+        for observation in observations { await observation.value }
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func archivedWatchesAndCalibersStayInSearchAndOpenInTheirArchivedSections() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let caliber = try await CaliberService(coordinator: coordinator).create(
+            named: "Needle 27CS")
+        let watch = try await WatchService(coordinator: coordinator).make(
+            "Needle field watch", caliberID: caliber.id)
+        let archive = ArchiveService(coordinator: coordinator)
+        _ = try await archive.setWatch(watch.id, archived: true)
+        _ = try await archive.setCaliber(caliber.id, archived: true)
+        let editing = SearchEditingFixture.make(coordinator)
+        let navigation = WorkshopNavigation(configuration: AppConfiguration.current)
+        let search = SearchState(coordinator: coordinator)
+        search.text = "needle"
+        let observations = SearchEditingFixture.observe(editing) + [Task { await search.observe() }]
+        defer { observations.forEach { $0.cancel() } }
+        try await SearchEditingFixture.waitUntil {
+            SearchEditingFixture.loaded(editing) && search.results.count == 2
+        }
+        #expect(search.results.allSatisfy { $0.isArchived })
+        #expect(
+            editing.watches.filteredWatches.isEmpty && editing.watches.archivedWatches.count == 1)
+        #expect(
+            editing.calibers.filteredCalibers.isEmpty
+                && editing.calibers.archivedCalibers.count == 1)
+        #expect(!editing.watches.showsArchived && !editing.calibers.showsArchived)
+        search.present()
+        search.open("Watch-\(watch.id.uuidString)", editing: editing, navigation: navigation)
+        #expect(navigation.selection == .watches && editing.watches.selectedID == watch.id)
+        #expect(editing.watches.showsArchived && !search.isPresented)
+        search.present()
+        search.open("Caliber-\(caliber.id.uuidString)", editing: editing, navigation: navigation)
+        #expect(navigation.selection == .calibers && editing.calibers.selectedID == caliber.id)
+        #expect(editing.calibers.showsArchived)
+        editing.watches.searchText = "NEEDLE"
+        #expect(editing.watches.archivedWatches.map(\.id) == [watch.id])
+        editing.watches.searchText = "missing"
+        #expect(editing.watches.archivedWatches.isEmpty)
         observations.forEach { $0.cancel() }
         for observation in observations { await observation.value }
         try await coordinator.close()

@@ -4,63 +4,7 @@ import Testing
 
 @testable import Ure
 
-struct ArchiveStateTests {
-    @Test(.timeLimit(.minutes(1)))
-    func listsKeepArchivedOwnersLoadedAndArchiveNavigationProtectsDrafts() async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        _ = try await NoteFixture.owners(coordinator)
-        let watch = try #require(try await coordinator.read(WatchQueries.fetchAll).first)
-        let caliber = try #require(try await coordinator.read(CaliberQueries.fetchAll).first)
-        let job = try #require(try await coordinator.read(JobQueries.fetchAll).first)
-        var closure = JobTransitionDraft(stage: .cancelled)
-        closure.cancellationReason = "Retain for later"
-        _ = try await JobService(coordinator: coordinator).transition(job.id, using: closure)
-        _ = try await ArchiveService(coordinator: coordinator).setWatch(watch.id, archived: true)
-        _ = try await ArchiveService(coordinator: coordinator).setCaliber(
-            caliber.id, archived: true)
-        let editing = SearchEditingFixture.make(coordinator)
-        let observations = SearchEditingFixture.observe(editing)
-        defer { observations.forEach { $0.cancel() } }
-        try await SearchEditingFixture.waitUntil { SearchEditingFixture.loaded(editing) }
-        #expect(
-            editing.watches.filteredWatches.isEmpty && editing.calibers.filteredCalibers.isEmpty)
-        #expect(editing.watches.watches.count == 1 && editing.calibers.calibers.count == 1)
-        #expect(editing.archive.records(editing: editing).count == 3)
-        editing.archive.open(.job(job.id), editing: editing)
-        #expect(editing.jobs.selectedID == job.id && editing.watches.selectedID == watch.id)
-        let revision = editing.archive.navigationRevision
-        editing.archive.open(.job(job.id), editing: editing)
-        #expect(editing.archive.navigationRevision == revision + 1)
-        #expect(!editing.canWrite(LibraryItemOwner.watch(watch.id)))
-        #expect(!editing.canWrite(LibraryItemOwner.caliber(caliber.id)))
-        editing.archive.open(.caliber(caliber.id), editing: editing)
-        #expect(editing.archive.isShowingCaliber(editing: editing))
-        #expect(editing.jobs.selectedID == nil && editing.calibers.selectedID == caliber.id)
-        #expect(await editing.calibers.toggleArchive())
-        try await SearchEditingFixture.waitUntil { editing.calibers.filteredCalibers.count == 1 }
-        #expect(editing.canWrite(LibraryItemOwner.caliber(caliber.id)))
-        let name = try #require(editing.calibers.facts(for: caliber.id)?.name)
-        name.beginEditing()
-        name.change(to: "Keep caliber correction", undoManager: nil)
-        editing.archive.open(.watch(watch.id), editing: editing)
-        #expect(
-            !editing.showsUnsavedChanges && editing.archive.selectedTarget == .watch(watch.id))
-        try await SearchEditingFixture.waitUntil { !name.hasUnsavedChanges }
-        #expect(
-            try await coordinator.read(CaliberQueries.fetchAll).first?.designation
-                == "Keep caliber correction")
-        #expect(await editing.watches.toggleArchive())
-        try await SearchEditingFixture.waitUntil { editing.watches.filteredWatches.count == 1 }
-        editing.archive.searchText = job.title.uppercased()
-        #expect(editing.archive.records(editing: editing).map(\.id) == [.job(job.id)])
-        observations.forEach { $0.cancel() }
-        for observation in observations { await observation.value }
-        try await coordinator.close()
-    }
-
+struct ChildRemovalStateTests {
     @Test(.timeLimit(.minutes(1)))
     func failedRemovalKeepsTheViewerAndRemovalClosesItAndClearsThePin() async throws {
         let fixture = ImportFixture()

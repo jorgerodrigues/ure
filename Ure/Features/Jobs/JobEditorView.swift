@@ -21,14 +21,6 @@ struct JobEditorView: View {
                     .lineLimit(2...6)
                     .accessibilityIdentifier("jobIntakeCondition")
             }
-            Section("Owner contact (optional)") {
-                TextField("Name", text: field(\.ownerName))
-                    .accessibilityIdentifier("jobOwnerName")
-                TextField("Email", text: field(\.ownerEmail))
-                    .accessibilityIdentifier("jobOwnerEmail")
-                TextField("Phone", text: field(\.ownerPhone))
-                    .accessibilityIdentifier("jobOwnerPhone")
-            }
             Section("Identity at intake") {
                 if jobs.draft?.intake != nil {
                     TextField("Watch name", text: intakeField(\.watchName))

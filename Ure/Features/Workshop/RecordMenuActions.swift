@@ -5,7 +5,6 @@ struct RecordMenuActions {
     var remove: (() -> Void)?
     var exportOriginal: (() -> Void)?
     var changeStage: (() -> Void)?
-    var changeCondition: (() -> Void)?
     var reopen: (() -> Void)?
 }
 
