@@ -15,6 +15,8 @@ struct InPlaceTextView: NSViewRepresentable {
     let identifier: String
     let requestsFocus: Bool
     let didFocus: () -> Void
+    // A value that reads quieter, such as a fitted part's name.
+    var isQuiet = false
 
     func makeCoordinator() -> Coordinator { Coordinator(field: field) }
 
@@ -35,6 +37,8 @@ struct InPlaceTextView: NSViewRepresentable {
         view.setPrompt(field.prompt)
         view.setLabel(field.label)
         view.isEditable = isEditable
+        let color: NSColor = isQuiet ? .secondaryLabelColor : .labelColor
+        if view.textColor != color { view.textColor = color }
         // A field that stops taking changes while you type in it ends the edit, which saves it.
         if !isEditable, view.currentEditor() != nil { view.window?.makeFirstResponder(nil) }
         if let editor = view.currentEditor() as? NSTextView {

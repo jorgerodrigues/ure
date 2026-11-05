@@ -1,10 +1,11 @@
 import SwiftUI
 
 // The job's parts under the Parts heading, laid out as on the "2 Job" artboard. Each part is one
-// line: its state, its name written in place, its description and quantity, and the day of its
-// state. A click on the state moves the part on and records the day. The line after the last
-// part adds the next one as you type, as on the "7 Typing" artboard, and offers the spares in
-// hand whose name matches. Parts and checklist steps are independent.
+// line: its state, its name written in place with its quantity, and under the name its
+// description and the day of its state. A click on the state moves the part on and records the
+// day. The line after the last part adds the next one as you type, as on the parts card of the
+// "7 Typing" artboard, and offers the spares in hand whose name matches. Parts and checklist
+// steps are independent.
 struct PartSectionView: View {
     @Environment(PartState.self) private var parts
     @Environment(WorkshopEditing.self) private var editing
@@ -49,14 +50,22 @@ private struct PartLines: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            Divider()
             ForEach(lines) { part in
                 PartLine(part: part, isEditable: isEditable)
+                Divider()
             }
             if isEditable {
-                PartEntryLine(entry: state.entry(for: jobID))
-                PartUnsavedNames(entry: state.entry(for: jobID))
+                let entry = state.entry(for: jobID)
+                PartEntryLine(entry: entry)
+                if entry.isTyping {
+                    PartKeyHints().padding(.top, PartLineLayout.hintsTop)
+                }
+                PartUnsavedNames(entry: entry)
             } else if lines.isEmpty {
-                Text("No parts").foregroundStyle(.secondary)
+                Text("No parts")
+                    .foregroundStyle(.secondary)
+                    .frame(height: PartLineLayout.entryHeight)
             }
             if let error = state.saveError {
                 Label(error, systemImage: "exclamationmark.circle.fill")
@@ -68,12 +77,10 @@ private struct PartLines: View {
     }
 }
 
-// One part: its state, which a click moves on, its name written in place, its description and
-// quantity, the day of its state, and an arrow that opens its page.
+// One part: its state, which a click moves on, its name written in place with its quantity, the
+// line under it, and an arrow that opens its page. A fitted part reads quieter.
 private struct PartLine: View {
     @Environment(PartState.self) private var parts
-    @Environment(WorkshopEditing.self) private var editing
-    @Environment(\.undoManager) private var undoManager
     let part: PartRecord
     let isEditable: Bool
 
@@ -81,35 +88,51 @@ private struct PartLine: View {
         if let facts = parts.facts(for: part.id) {
             HStack(spacing: PartLineLayout.spacing) {
                 PartStateButton(part: part, isEditable: isEditable)
-                    .frame(width: PartLineLayout.stateWidth, alignment: .leading)
-                InPlaceField(
-                    field: facts.name, isEditable: isEditable,
-                    identifier: "partName-\(part.id.uuidString)")
-                // The description, quantity and day are columns, so they line up from line to
-                // line.
-                Text(part.description ?? "")
-                    .font(.system(size: PartLineLayout.detailSize))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .frame(width: PartLineLayout.descriptionWidth, alignment: .leading)
-                Text(part.quantity > 1 ? "× \(part.quantity)" : "")
-                    .font(.system(size: PartLineLayout.detailSize))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .frame(width: PartLineLayout.quantityWidth, alignment: .trailing)
-                    .accessibilityLabel("Quantity \(part.quantity)")
-                Text(PartWording.shortDay(of: part) ?? "")
-                    .font(.system(size: PartLineLayout.detailSize))
-                    .foregroundStyle(.secondary)
-                    .frame(width: PartLineLayout.dayWidth, alignment: .trailing)
+                VStack(alignment: .leading, spacing: PartLineLayout.textSpacing) {
+                    HStack(spacing: PartLineLayout.quantitySpacing) {
+                        InPlaceField(
+                            field: facts.name, isEditable: isEditable,
+                            identifier: "partName-\(part.id.uuidString)",
+                            isQuiet: part.stage == .fitted, showsHint: false
+                        )
+                        // At rest the name is as wide as its text, so the quantity follows it.
+                        .frame(
+                            maxWidth: facts.name.isEditing ? .infinity : width(of: facts.name.text),
+                            alignment: .leading)
+                        if part.quantity > 1 {
+                            Text("× \(part.quantity)")
+                                .font(.system(size: InPlaceLayout.textSize))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                                .accessibilityLabel("Quantity \(part.quantity)")
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.leading, -InPlaceLayout.inset)
+                    if let detail = PartWording.detail(of: part) {
+                        Text(detail)
+                            .font(.system(size: PartLineLayout.detailSize))
+                            .foregroundStyle(part.stage == .fitted ? .tertiary : .secondary)
+                            .lineLimit(1)
+                    }
+                }
                 PartOpenButton(part: part)
             }
-            .frame(minHeight: PartLineLayout.rowHeight)
+            .frame(height: PartLineLayout.rowHeight)
             .zIndex(facts.name.isEditing ? 1 : 0)
             .contextMenu { PartMenuButtons(part: part, isEditable: isEditable) }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("partLine-\(part.id.uuidString)")
         }
+    }
+}
+
+extension PartLine {
+    // The width of a name at rest, inside the field's insets.
+    fileprivate func width(of name: String) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: InPlaceLayout.textSize)
+        let text = (name as NSString).size(withAttributes: [.font: font]).width
+        return ceil(text) + 2 * InPlaceLayout.inset + PartLineLayout.nameSlack
     }
 }
 
@@ -202,8 +225,10 @@ struct PartMenuButtons: View {
     private func remove() { parts.removeCommand(part.id, undoManager: undoManager) }
 }
 
-// The line after a job's last part, where you type the next one. While you type, the spares in
-// hand whose name matches show under it.
+// The line after a job's last part, where you type the next one, as on the parts card of the
+// "7 Typing" artboard. At rest it shows a plus and "Add a part or use a spare". While you type,
+// it shows the Needed pill the part starts with, the name with the typing ring, and a
+// description that Tab reaches. The spares in hand whose name matches show under it.
 private struct PartEntryLine: View {
     @Environment(PartState.self) private var parts
     @Environment(\.undoManager) private var undoManager
@@ -211,45 +236,54 @@ private struct PartEntryLine: View {
 
     var body: some View {
         HStack(spacing: PartLineLayout.spacing) {
-            Image(systemName: "plus")
-                .font(.system(size: ChecklistLayout.plusSize, weight: .medium))
-                .foregroundStyle(.tertiary)
-                .padding(.leading, PartLineLayout.plusLeading)
-                .frame(width: PartLineLayout.stateWidth, alignment: .leading)
-                .accessibilityHidden(true)
-            PartEntryTextView(
-                entry: entry, text: entry.text, isEditable: true,
-                identifier: "addPart-\(entry.jobID.uuidString)", submit: submit
-            )
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .overlay(alignment: .leading) { prompt }
-            .padding(.horizontal, InPlaceLayout.inset)
-            .frame(height: PartLineLayout.rowHeight)
-            .background(fill, in: RoundedRectangle(cornerRadius: InPlaceLayout.cornerRadius))
+            Group {
+                if entry.isTyping {
+                    PartStagePill(stage: .needed)
+                } else {
+                    Image(systemName: "plus")
+                        .font(.system(size: ChecklistLayout.plusSize, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .frame(width: PartPillLayout.width)
+            .accessibilityHidden(true)
+            PartEntryBox(isTyping: entry.isEditing) {
+                PartEntryTextView(
+                    entry: entry, role: .name, isEditable: true,
+                    identifier: "addPart-\(entry.jobID.uuidString)", submit: submit
+                )
+                .overlay(alignment: .leading) {
+                    if entry.text.isEmpty, !entry.isEditing {
+                        PartEntryPrompt(text: PartEntryWording.prompt)
+                    }
+                }
+            }
             .background(alignment: .topLeading) { spares }
+            if entry.isTyping {
+                PartEntryBox(isTyping: entry.isEditingDescription) {
+                    PartEntryTextView(
+                        entry: entry, role: .description, isEditable: true,
+                        identifier: "addPartDescription-\(entry.jobID.uuidString)",
+                        submit: submit
+                    )
+                    .overlay(alignment: .leading) {
+                        if entry.description.isEmpty, !entry.isEditingDescription {
+                            PartEntryPrompt(text: PartEntryWording.descriptionPrompt)
+                        }
+                    }
+                }
+                .frame(width: PartLineLayout.descriptionWidth)
+            }
         }
-        .zIndex(entry.isEditing ? 1 : 0)
-    }
-
-    @ViewBuilder private var prompt: some View {
-        if entry.text.isEmpty, !entry.isEditing {
-            Text(PartEntryWording.prompt)
-                .font(.system(size: InPlaceLayout.textSize))
-                .foregroundStyle(.tertiary)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-        }
-    }
-
-    private var fill: Color {
-        entry.isEditing ? Color.accentColor.opacity(ChecklistLayout.editingOpacity) : .clear
+        .frame(height: PartLineLayout.entryHeight)
+        .zIndex(entry.isTyping ? 1 : 0)
     }
 
     @ViewBuilder private var spares: some View {
         let found = entry.spares
         if !found.isEmpty {
             SpareList(entry: entry, spares: found, use: use)
-                .offset(y: PartLineLayout.rowHeight + InPlaceLayout.listGap)
+                .offset(x: -InPlaceLayout.inset, y: InPlaceLayout.boxHeight + InPlaceLayout.listGap)
         }
     }
 
@@ -262,8 +296,89 @@ private struct PartEntryLine: View {
     }
 }
 
-// The part names typed on the line that did not save, with Try Again. They stay while you type
-// the next part.
+// The box around one field of the add line. While you type in it, it has the field's typing
+// ring, as on "7 Typing".
+private struct PartEntryBox<Content: View>: View {
+    let isTyping: Bool
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, InPlaceLayout.inset)
+            .frame(height: InPlaceLayout.boxHeight)
+            .background(
+                isTyping ? Color(nsColor: .textBackgroundColor) : .clear,
+                in: RoundedRectangle(cornerRadius: InPlaceLayout.cornerRadius)
+            )
+            .background {
+                if isTyping {
+                    RoundedRectangle(
+                        cornerRadius: InPlaceLayout.cornerRadius + InPlaceLayout.ringSpread
+                    )
+                    .fill(Color.accentColor.opacity(InPlaceLayout.ringOpacity))
+                    .padding(-InPlaceLayout.ringSpread)
+                }
+            }
+            .overlay {
+                if isTyping {
+                    RoundedRectangle(cornerRadius: InPlaceLayout.cornerRadius)
+                        .strokeBorder(Color.accentColor, lineWidth: 1)
+                }
+            }
+            .padding(.leading, -InPlaceLayout.inset)
+    }
+}
+
+private struct PartEntryPrompt: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: InPlaceLayout.textSize))
+            .foregroundStyle(.tertiary)
+            .lineLimit(1)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
+// How typing a part works, under the add line while you type, as on "7 Typing".
+private struct PartKeyHints: View {
+    var body: some View {
+        HStack(spacing: ChecklistLayout.hintSpacing) {
+            PartKeyHint(key: "Tab", meaning: "Description")
+            PartKeyHint(key: "Return", meaning: "Add and start the next")
+            PartKeyHint(key: "↓", meaning: "Use a spare")
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct PartKeyHint: View {
+    let key: String
+    let meaning: String
+
+    var body: some View {
+        HStack(spacing: ChecklistLayout.keySpacing) {
+            Text(key)
+                .font(.system(size: ChecklistLayout.keySize, weight: .medium))
+                .padding(.horizontal, ChecklistLayout.keyInset)
+                .frame(height: ChecklistLayout.keyHeight)
+                .background(Color(nsColor: .quaternarySystemFill))
+                .overlay(alignment: .bottom) {
+                    Color(nsColor: .separatorColor).frame(height: 1)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: ChecklistLayout.keyRadius))
+            Text(meaning)
+                .font(.system(size: ChecklistLayout.meaningSize))
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+// The parts typed on the line that did not save, with Try Again. They stay while you type the
+// next part.
 private struct PartUnsavedNames: View {
     @Environment(PartState.self) private var parts
     @Environment(\.undoManager) private var undoManager
@@ -273,7 +388,8 @@ private struct PartUnsavedNames: View {
         if !entry.unsaved.isEmpty {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Label {
-                    Text("Not saved yet: \(entry.unsaved.joined(separator: ", "))")
+                    Text(
+                        "Not saved yet: \(entry.unsaved.map(\.name).joined(separator: ", "))")
                 } icon: {
                     Image(systemName: "exclamationmark.circle.fill")
                 }
@@ -308,12 +424,6 @@ private struct SpareList: View {
             ForEach(spares) { spare in
                 SpareRow(spare: spare, isHighlighted: spare.id == entry.highlightedID, use: use)
             }
-            Text("↓ then Return uses a spare · Return alone adds a new part")
-                .font(.system(size: InPlaceLayout.hintSize))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, InPlaceLayout.inset)
-                .padding(.top, PartLineLayout.listHintTop)
-                .padding(.bottom, PartLineLayout.listHintBottom)
         }
         .padding(InPlaceLayout.listPadding)
         .frame(width: PartLineLayout.listWidth, alignment: .leading)
@@ -368,9 +478,10 @@ private struct SpareRow: View {
         .accessibilityIdentifier("useSpare-\(spare.id.uuidString)")
     }
 
-    // The spare's description and quantity, such as "Cal. 2824 · × 2", or that it is in hand.
+    // The first line of the spare's description and its quantity, such as "Cal. 2824 · × 2",
+    // or that it is in hand.
     private var detail: String {
-        var parts = [spare.description].compactMap { $0 }
+        var parts = [PartWording.firstLine(of: spare.description)].compactMap { $0 }
         if spare.quantity > 1 { parts.append("× \(spare.quantity)") }
         return parts.isEmpty ? "In hand" : parts.joined(separator: " · ")
     }
@@ -378,20 +489,24 @@ private struct SpareRow: View {
     private func take() { use(spare) }
 }
 
+// Values from the "2 Job" artboard and the parts card of "7 Typing" on the Paper page "Rework ·
+// Simple".
 enum PartLineLayout {
-    static let rowHeight: CGFloat = 32
-    static let spacing: CGFloat = 8
-    // The state column is as wide as the widest pill, so the names line up.
-    static let stateWidth: CGFloat = 84
-    static let plusLeading: CGFloat = 9
+    static let rowHeight: CGFloat = 56
+    static let entryHeight: CGFloat = 48
+    static let spacing: CGFloat = 16
+    // The name's box is 32 pt high around a 20 pt line, so the line under it sits 2 pt below
+    // the text, as on the artboard.
+    static let textSpacing: CGFloat = -4
+    // The quantity follows the name about one space after it, past the field's inset.
+    static let quantitySpacing: CGFloat = -4
+    // A little room after a name at rest, so its last letter never clips.
+    static let nameSlack: CGFloat = 2
     static let detailSize: CGFloat = 12
-    static let descriptionWidth: CGFloat = 220
-    static let quantityWidth: CGFloat = 32
-    static let dayWidth: CGFloat = 56
+    static let descriptionWidth: CGFloat = 180
     static let messageTop: CGFloat = 8
+    static let hintsTop: CGFloat = 12
     static let iconSpacing: CGFloat = 8
     static let listWidth: CGFloat = 440
     static let listHeadingHeight: CGFloat = 22
-    static let listHintTop: CGFloat = 4
-    static let listHintBottom: CGFloat = 2
 }

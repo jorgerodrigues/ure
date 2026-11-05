@@ -152,20 +152,22 @@ struct PartStateTests {
 
         // Return empties the line at once, so the next name can follow while this one saves.
         entry.change(to: "Mainspring")
+        entry.changeDescription(to: " ")
         parts.submitCommand(entry, undoManager: nil)
-        #expect(entry.text.isEmpty)
+        #expect(entry.text.isEmpty && entry.description.isEmpty)
         try await waitUntil { parts.parts(on: job.id).map(\.name) == ["Mainspring"] }
 
         try await JobTaskFixture.failWrites(coordinator, on: "part")
         entry.change(to: "Crys")
-        #expect(!(await parts.submit("Crystal", spare: nil, on: entry)))
-        #expect(entry.unsaved == ["Crystal"] && entry.text == "Crys" && parts.hasUnsavedFacts)
-        #expect(!(await parts.submit("Gasket", spare: nil, on: entry)))
+        let crystal = PartEntryText(name: "Crystal", description: "Sapphire 30.0 mm")
+        #expect(!(await parts.submit(crystal, spare: nil, on: entry)))
+        #expect(entry.unsaved == [crystal] && entry.text == "Crys" && parts.hasUnsavedFacts)
+        #expect(!(await parts.submit(PartEntryText(name: "Gasket"), spare: nil, on: entry)))
         #expect(!(await parts.retryUnsaved(entry)))
-        #expect(entry.unsaved == ["Crystal", "Gasket"])
+        #expect(entry.unsaved.map(\.name) == ["Crystal", "Gasket"])
         // Quitting tries them again and says that they did not save.
         #expect(!(await parts.saveAllFacts()))
-        #expect(entry.unsaved == ["Crystal", "Gasket"])
+        #expect(entry.unsaved.map(\.name) == ["Crystal", "Gasket"])
         try await JobTaskFixture.allowWrites(coordinator, on: "part")
         // Two Try Agains at once add each name once.
         async let first = parts.retryUnsaved(entry)
@@ -174,6 +176,7 @@ struct PartStateTests {
         #expect(entry.unsaved.isEmpty && !parts.hasUnsavedFacts)
         #expect(await parts.saveAllFacts())
         #expect(parts.parts(on: job.id).map(\.name) == ["Mainspring", "Crystal", "Gasket"])
+        #expect(parts.parts(on: job.id).map(\.description) == [nil, "Sapphire 30.0 mm", nil])
         entry.endEditing()
         observation.cancel()
         await observation.value

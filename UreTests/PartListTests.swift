@@ -50,10 +50,19 @@ struct PartListTests {
         #expect(list.toBuyCount == 3 && list.subtitle == "3 to buy · 1 ordered")
 
         let rows = Dictionary(uniqueKeysWithValues: list.rows.map { ($0.id, $0) })
-        #expect(rows[spare.id].map(PartListWording.detail) == "Spare")
-        #expect(rows[crystal.id].map(PartListWording.detail) == "No watch yet · New crystal")
+        // A spare says so, a part of a job without a watch names the job, and an ordered
+        // part says when it was ordered. A quantity above one follows the name.
+        let spareRow = try #require(rows[spare.id])
+        let crystalRow = try #require(rows[crystal.id])
+        let gasketRow = try #require(rows[gaskets.id])
+        let ordered = try #require(gasketRow.part.orderedAt)
+        #expect(PartListWording.detail(of: spareRow) == "Spare")
+        #expect(PartListWording.detail(of: crystalRow) == "New crystal")
         #expect(
-            rows[gaskets.id].map(PartListWording.detail) == "Omega 0012–Å · Service movement · × 3")
+            PartListWording.detail(of: gasketRow)
+                == "Omega 0012–Å · \(PartWording.shortDay(ordered))")
+        #expect(PartListWording.title(of: gasketRow) == "Gaskets × 3")
+        #expect(PartListWording.title(of: spareRow) == "Crystal 30.0 mm")
         #expect(rows[mainspring.id]?.watch?.id == open.watchID && rows[spare.id]?.job == nil)
 
         // The search matches the part, its job and its watch.

@@ -91,7 +91,7 @@ Material is removed at once, and **Command-Z** brings it back. See [Material](#m
 
 Parts groups the parts on their way under **To buy**, **Ordered**, and **In hand**, newest change first. Each part is on a job that is open, or a spare in the drawer, which its row marks with a drawer and "Spare". Fitted parts and the parts of Done jobs stay on their job's page. The toolbar says how many are to buy and ordered, such as "2 to buy · 2 ordered", and the sidebar counts the parts to buy. Search matches the part's name, description, and notes, its job, and its watch.
 
-Select a part to open its page. It shows the state as a pop-up with the days the part reached, the name, the job and watch, the description and quantity, the saved links with **Open**, and the notes. Everything saves as you type. Use **New Part** or **Command-N** in Parts to make a spare named "New Part", in hand from today, with the cursor in its name.
+Select a part to open its page. It shows the state as a pop-up with when the part was added and the days it reached, the name, its job and watch as one link, the description, which can take several lines, the quantity, the saved links with **Open**, and the notes. Everything saves as you type. Use **New Part** or **Command-N** in Parts to make a spare named "New Part", in hand from today, with the cursor in its name.
 
 ## Watch records
 
@@ -131,7 +131,7 @@ Libraries from before W039 had tasks with five statuses, details, waiting and sk
 
 ## Parts on a job
 
-Each part takes one line on its job's page: its state, its name, its description, its quantity when it is more than one, and the day of its state. Type a name on the **Add a part** line and press **Return**. The part is added, Needed, and the line is empty for the next one. **Return** on an empty line moves on to the checklist. While you type, the spares in hand whose name matches show under the line. Press **Down Arrow** to highlight one, then **Return**, or click it, to put that spare on the job. **Esc** empties the line.
+Each part takes one line on its job's page: its state, its name with its quantity when it is more than one, and under the name its description and the day of its state, such as "ordered 30 Oct". Type a name on the **Add a part or use a spare** line, press **Tab** for its description if you want one, and press **Return**. The part is added, Needed, and the line is empty with the cursor in the name for the next one. **Return** on an empty line moves on to the checklist. While you type, the spares in hand whose name matches show under the line. Press **Down Arrow** to highlight one, then **Return**, or click it, to put that spare on the job. **Esc** empties the line.
 
 Click a part's state to move it on: Needed, Ordered, In hand, then Fitted. Each records the day. **Command-Z** puts back the state before, with its day. The part's page sets any state from its pop-up. Going back keeps the day of the state the part goes back to and clears the later ones. Right-click a part to set its state, open it, or delete it. The arrow at the end of a line opens the part's page, with **Back to Job**. Parts and checklist steps are independent: a fitted part never ticks a step.
 

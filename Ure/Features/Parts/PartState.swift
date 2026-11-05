@@ -121,15 +121,16 @@ final class PartState {
 
     // Adds a part to the end of a job's parts, Needed. ⌘Z removes it again.
     @discardableResult
-    func add(named name: String, to jobID: UUID, undoManager: UndoManager? = nil) async
-        -> PartRecord?
-    {
+    func add(
+        named name: String, description: String = "", to jobID: UUID,
+        undoManager: UndoManager? = nil
+    ) async -> PartRecord? {
         let typed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !typed.isEmpty else { return nil }
         // Parts typed one after another save one at a time, in the order they were typed.
         var made: PartRecord?
         _ = await presence.perform(true) { [weak self] _ in
-            made = await self?.make(named: typed, on: jobID)
+            made = await self?.make(named: typed, description: description, on: jobID)
             return made != nil
         }
         guard let made else { return nil }
@@ -140,24 +141,25 @@ final class PartState {
     // Return on a job's add line adds the typed part, or puts the highlighted spare on the job.
     // The line empties at once, so the next part can follow while this one saves.
     func submitCommand(_ entry: PartEntry, undoManager: UndoManager?) {
-        let text = entry.text
+        let typed = PartEntryText(name: entry.text, description: entry.description)
         let spare = entry.highlightedID
         entry.clear()
-        Task { await submit(text, spare: spare, on: entry, undoManager: undoManager) }
+        Task { await submit(typed, spare: spare, on: entry, undoManager: undoManager) }
     }
 
-    // A name that did not save stays under the line, with Try Again, also while you type the
+    // A part that did not save stays under the line, with Try Again, also while you type the
     // next one. A spare that could not be used stays in the drawer.
     @discardableResult
     func submit(
-        _ text: String, spare: UUID?, on entry: PartEntry, undoManager: UndoManager? = nil
+        _ typed: PartEntryText, spare: UUID?, on entry: PartEntry,
+        undoManager: UndoManager? = nil
     ) async -> Bool {
         if let spare { return await useSpare(spare, on: entry.jobID, undoManager: undoManager) }
-        guard await add(named: text, to: entry.jobID, undoManager: undoManager) == nil else {
-            return true
+        guard await save(typed, on: entry, undoManager: undoManager) else {
+            entry.keepUnsaved(typed)
+            return false
         }
-        entry.keepUnsaved(text)
-        return false
+        return true
     }
 
     func retryUnsavedCommand(_ entry: PartEntry, undoManager: UndoManager?) {
@@ -169,13 +171,21 @@ final class PartState {
     // True when every name saved.
     @discardableResult
     func retryUnsaved(_ entry: PartEntry, undoManager: UndoManager? = nil) async -> Bool {
-        while let name = entry.takeUnsaved() {
-            guard await add(named: name, to: entry.jobID, undoManager: undoManager) != nil else {
-                entry.putBackUnsaved(name)
+        while let typed = entry.takeUnsaved() {
+            guard await save(typed, on: entry, undoManager: undoManager) else {
+                entry.putBackUnsaved(typed)
                 return false
             }
         }
         return true
+    }
+
+    private func save(_ typed: PartEntryText, on entry: PartEntry, undoManager: UndoManager?)
+        async -> Bool
+    {
+        await add(
+            named: typed.name, description: typed.description, to: entry.jobID,
+            undoManager: undoManager) != nil
     }
 
     // ⌘N in Parts makes a spare named "New Part", in hand, selects it, and puts the cursor in
@@ -186,7 +196,7 @@ final class PartState {
     @discardableResult
     func makeSpare() async -> PartRecord? {
         guard !isSaving, !isLoading, loadError == nil else { return nil }
-        guard let part = await make(named: "", on: nil) else { return nil }
+        guard let part = await make(named: "", description: "", on: nil) else { return nil }
         select(part.id)
         nameToFocus = part.id
         return part
@@ -298,12 +308,14 @@ final class PartState {
         facts.values.flatMap(\.editors).filter(\.hasUnsavedChanges)
     }
 
-    private func make(named name: String, on jobID: UUID?) async -> PartRecord? {
+    private func make(named name: String, description: String, on jobID: UUID?) async
+        -> PartRecord?
+    {
         isSaving = true
         saveError = nil
         defer { isSaving = false }
         do {
-            let part = try await service.add(named: name, to: jobID)
+            let part = try await service.add(named: name, description: description, to: jobID)
             adopt(part)
             return part
         } catch {
@@ -468,14 +480,22 @@ final class PartState {
     }
 }
 
-// The line under a job's parts where you type the next part's name. As you type, the spares in
-// hand whose name has the text show under it. Return adds a part with the typed name, and the
-// line is empty again for the next one. The Down arrow highlights a spare, and Return then puts
-// that spare on the job instead.
+// A part typed on a job's add line: its name and, after Tab, its description.
+nonisolated struct PartEntryText: Equatable, Sendable {
+    let name: String
+    var description = ""
+}
+
+// The line under a job's parts where you type the next part's name, and after Tab its
+// description. As you type the name, the spares in hand whose name has the text show under it.
+// Return adds a part with the typed name and description, and the line is empty again for the
+// next one. The Down arrow highlights a spare, and Return then puts that spare on the job
+// instead.
 @Observable
 final class PartEntry {
     let jobID: UUID
     private(set) var text = ""
+    private(set) var description = ""
     // The spare that Return takes, or nil when Return adds a new part.
     private(set) var highlightedID: UUID?
     private(set) var isEditing = false
@@ -488,10 +508,18 @@ final class PartEntry {
 
     var spares: [PartRecord] { isEditing ? findSpares(text) : [] }
 
-    // Nothing typed and no spare highlighted, so Return has nothing to add.
+    // No name typed and no spare highlighted, so Return has nothing to add.
     var isBlank: Bool {
         highlightedID == nil && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    // Either field of the line has the cursor.
+    var isTyping: Bool { isEditing || isEditingDescription }
+    private(set) var isEditingDescription = false
+
+    func beginDescription() { isEditingDescription = true }
+    func endDescription() { isEditingDescription = false }
+    func changeDescription(to newText: String) { description = newText }
 
     func beginEditing() { isEditing = true }
 
@@ -528,16 +556,17 @@ final class PartEntry {
     // Empties the line for the next part.
     func clear() {
         text = ""
+        description = ""
         highlightedID = nil
     }
 
-    // The names typed on this line that did not save, in the order they were typed.
-    private(set) var unsaved: [String] = []
+    // The parts typed on this line that did not save, in the order they were typed.
+    private(set) var unsaved: [PartEntryText] = []
 
-    func keepUnsaved(_ name: String) { unsaved.append(name) }
+    func keepUnsaved(_ typed: PartEntryText) { unsaved.append(typed) }
 
-    // The first name that did not save, taken off the list while it is tried again.
-    func takeUnsaved() -> String? { unsaved.isEmpty ? nil : unsaved.removeFirst() }
+    // The first part that did not save, taken off the list while it is tried again.
+    func takeUnsaved() -> PartEntryText? { unsaved.isEmpty ? nil : unsaved.removeFirst() }
 
-    func putBackUnsaved(_ name: String) { unsaved.insert(name, at: 0) }
+    func putBackUnsaved(_ typed: PartEntryText) { unsaved.insert(typed, at: 0) }
 }

@@ -89,7 +89,7 @@ private struct PartListRowView: View {
         HStack(spacing: UreLayout.rowSpacing) {
             tile.frame(width: UreLayout.rowThumbnailSize, height: UreLayout.rowThumbnailSize)
             VStack(alignment: .leading, spacing: UreLayout.textSpacing) {
-                Text(row.part.name)
+                Text(PartListWording.title(of: row))
                     .font(.body)
                     .fontWeight(.semibold)
                     .lineLimit(1)
@@ -105,14 +105,7 @@ private struct PartListRowView: View {
 
     @ViewBuilder private var tile: some View {
         if row.part.isSpare {
-            RoundedRectangle(cornerRadius: PartListLayout.tileRadius)
-                .fill(Color(nsColor: .quaternarySystemFill))
-                .overlay {
-                    Image(systemName: PartListLayout.spareSymbol)
-                        .font(.system(size: PartListLayout.symbolSize))
-                        .foregroundStyle(.secondary)
-                }
-                .accessibilityLabel("Spare")
+            PartSpareTile(size: PartListLayout.tileSize)
         } else if let watch = row.watch {
             PhotoThumbnailView(photoID: watch.coverPhotoID)
         } else {
@@ -125,9 +118,11 @@ private struct PartListRowView: View {
     }
 }
 
+// Values from the "3 Parts" artboard on the Paper page "Rework · Simple".
 enum PartListLayout {
     // The drawer that marks a spare.
-    static let spareSymbol = "cabinet"
+    static let spareSymbol = "archivebox"
+    static let tileSize: CGFloat = 36
     static let tileRadius: CGFloat = 8
     static let symbolSize: CGFloat = 15
 }

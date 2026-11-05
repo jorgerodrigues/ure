@@ -70,19 +70,7 @@ private struct PartPage: View {
             if let facts = parts.facts(for: part.id) {
                 VStack(alignment: .leading, spacing: PageLayout.sectionSpacing) {
                     PartHeader(part: part, facts: facts, isEditable: isEditable).zIndex(1)
-                    HStack(alignment: .top, spacing: PageLayout.factColumnSpacing) {
-                        FactRow(
-                            field: facts.description, isEditable: isEditable,
-                            identifier: "partDescription"
-                        )
-                        .frame(maxWidth: NotesLayout.maximumWidth)
-                        FactRow(
-                            field: facts.quantity, isEditable: isEditable,
-                            identifier: "partQuantity"
-                        )
-                        .frame(width: PartPageLayout.quantityWidth)
-                    }
-                    .padding(.horizontal, -InPlaceLayout.inset)
+                    PartFactsRow(facts: facts, isEditable: isEditable)
                     if let error = parts.saveError {
                         Label(error, systemImage: "exclamationmark.triangle")
                             .foregroundStyle(.red)
@@ -115,15 +103,13 @@ private struct PartHeader: View {
     let isEditable: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: PageLayout.titleSpacing) {
+        VStack(alignment: .leading, spacing: PartPageLayout.headerSpacing) {
             HStack(spacing: PartPageLayout.stateSpacing) {
                 PartStatePopUp(part: part, isEditable: isEditable)
-                if let days = PartWording.days(of: part) {
-                    Text(days)
-                        .font(.system(size: PageLayout.pillTextSize))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                Text(PartWording.days(of: part))
+                    .font(.system(size: PageLayout.pillTextSize))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             InPlaceField(
                 field: facts.name, isEditable: isEditable, identifier: "partTitle",
@@ -174,10 +160,9 @@ private struct PartStatePopUp: View {
     }
 }
 
-// The job and its watch, each opening its own page, such as "Full service › · Grandfather's
-// Seamaster ›". A spare says that it is in the drawer.
+// The part's job and its watch, as one link that opens the job, such as "Full service,
+// Grandfather's Seamaster ›", after the watch's cover. A spare says that it is in the drawer.
 private struct PartJobLinks: View {
-    @Environment(PartState.self) private var parts
     @Environment(JobState.self) private var jobs
     @Environment(WatchState.self) private var watches
     @Environment(WorkshopEditing.self) private var editing
@@ -187,18 +172,15 @@ private struct PartJobLinks: View {
     var body: some View {
         HStack(spacing: PartPageLayout.linkSpacing) {
             if part.isSpare {
-                Label("Spare in the drawer", systemImage: PartListLayout.spareSymbol)
-                    .foregroundStyle(.secondary)
-            } else {
-                if let job {
-                    PartPageLink(title: job.title, identifier: "partJob", open: openJob)
-                }
-                if let watch {
-                    Text("·").foregroundStyle(.tertiary).accessibilityHidden(true)
-                    PartPageLink(title: watch.name, identifier: "partWatch", open: openWatch)
-                } else if job != nil {
-                    Text("· No watch yet").foregroundStyle(.secondary)
-                }
+                PartSpareTile(size: PartPageLayout.linkTileSize)
+                Text("Spare in the drawer")
+                    .fontWeight(.medium)
+            } else if let job {
+                PhotoThumbnailView(photoID: watch?.coverPhotoID)
+                    .frame(width: PartPageLayout.linkTileSize, height: PartPageLayout.linkTileSize)
+                    .clipShape(RoundedRectangle(cornerRadius: PartPageLayout.linkTileRadius))
+                    .accessibilityHidden(true)
+                PartPageLink(title: title(of: job), identifier: "partJob", open: openJob)
             }
         }
         .font(.system(size: PageLayout.detailSize))
@@ -206,6 +188,10 @@ private struct PartJobLinks: View {
 
     private var job: JobRecord? { jobs.jobs.first { $0.id == part.jobID } }
     private var watch: WatchRecord? { watches.watches.first { $0.id == job?.watchID } }
+
+    private func title(of job: JobRecord) -> String {
+        [job.title, watch?.name ?? "No watch yet"].joined(separator: ", ")
+    }
 
     private func openJob() {
         guard let job else { return }
@@ -218,16 +204,73 @@ private struct PartJobLinks: View {
             }
         }
     }
+}
 
-    private func openWatch() {
-        guard let watchID = watch?.id else { return }
-        editing.requestNavigation {
-            editing.closeChildren()
-            jobs.close()
-            watches.searchText = ""
-            watches.select(watchID)
-            navigation.selection = .watches
+// The description and the quantity, under a thin line, as on "3 Parts". The description can
+// take several lines.
+private struct PartFactsRow: View {
+    let facts: PartFacts
+    let isEditable: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Divider().padding(.bottom, PartPageLayout.factsTop)
+            HStack(alignment: .top, spacing: PageLayout.factColumnSpacing) {
+                VStack(alignment: .leading, spacing: InPlaceLayout.labelSpacing) {
+                    Text("Description")
+                        .font(.system(size: InPlaceLayout.labelSize, weight: .medium))
+                        .foregroundStyle(
+                            facts.description.isEditing ? Color.accentColor : .secondary
+                        )
+                        .accessibilityHidden(true)
+                    NotesTextView(
+                        field: facts.description, text: facts.description.text,
+                        isEditable: isEditable, label: "Description",
+                        identifier: "partDescription"
+                    )
+                    .overlay(alignment: .topLeading) {
+                        if facts.description.text.isEmpty {
+                            Text(isEditable ? "Add a description" : "No description")
+                                .font(.system(size: NotesLayout.textSize))
+                                .foregroundStyle(.tertiary)
+                                .frame(height: NotesLayout.lineHeight)
+                                .allowsHitTesting(false)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    if let error = facts.description.saveError {
+                        Label(
+                            "The description did not save. Your text is still here. \(error)",
+                            systemImage: "exclamationmark.circle.fill"
+                        )
+                        .font(.system(size: NotesLayout.failureSize))
+                        .foregroundStyle(.red)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(3)
+                FactRow(field: facts.quantity, isEditable: isEditable, identifier: "partQuantity")
+                    .padding(.leading, -InPlaceLayout.inset)
+                    .frame(width: PartPageLayout.quantityWidth, alignment: .leading)
+            }
         }
+    }
+}
+
+// The drawer that marks a spare, on a grey tile, as on "3 Parts".
+struct PartSpareTile: View {
+    let size: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: size * PartListLayout.tileRadius / PartListLayout.tileSize)
+            .fill(Color(nsColor: .quaternarySystemFill))
+            .overlay {
+                Image(systemName: PartListLayout.spareSymbol)
+                    .font(.system(size: size * PartListLayout.symbolSize / PartListLayout.tileSize))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: size, height: size)
+            .accessibilityLabel("Spare")
     }
 }
 
@@ -332,9 +375,14 @@ private struct PartNotesSection: View {
     }
 }
 
+// Values from the "3 Parts" artboard on the Paper page "Rework · Simple".
 private enum PartPageLayout {
+    static let headerSpacing: CGFloat = 8
     static let stateSpacing: CGFloat = 10
     static let linkSpacing: CGFloat = 8
+    static let linkTileSize: CGFloat = 20
+    static let linkTileRadius: CGFloat = 4
     static let chevronSpacing: CGFloat = 4
-    static let quantityWidth: CGFloat = 120
+    static let factsTop: CGFloat = 20
+    static let quantityWidth: CGFloat = 154
 }

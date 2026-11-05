@@ -5,11 +5,12 @@ import Foundation
 // own as you type, with Undo.
 struct PartFacts {
     let name: FactField
-    let description: FactField
+    // The description can take several lines, such as a maker's reference and its sizes.
+    let description: AutosaveField
     let quantity: FactField
     let notes: AutosaveField
 
-    var editors: [AutosaveField] { [name.editor, description.editor, quantity.editor, notes] }
+    var editors: [AutosaveField] { [name.editor, description, quantity.editor, notes] }
     var hasUnsavedChanges: Bool { editors.contains { $0.hasUnsavedChanges } }
 
     static let quantityRule = FactRule(
@@ -25,9 +26,8 @@ struct PartFacts {
             label: "Name", prompt: "Name", actionName: "Part Name", text: part.name,
             rule: .required("Enter a name."),
             save: { text in _ = try await service.update(id, .name(text)) }, pause: pause)
-        description = FactField(
-            label: "Description", prompt: "Add a description", actionName: "Description",
-            text: part.description ?? "", rule: .anyText,
+        description = AutosaveField(
+            text: part.description ?? "", actionName: "Description",
             save: { text in _ = try await service.update(id, .description(text)) },
             pause: pause)
         quantity = FactField(

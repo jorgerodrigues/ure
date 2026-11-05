@@ -82,8 +82,11 @@ nonisolated struct PartService: Sendable {
     var openBrowser: @MainActor @Sendable (URL) -> Bool = { NSWorkspace.shared.open($0) }
 
     // Adds a part to the end of a job's parts, Needed, or makes a spare in the drawer, In hand
-    // from today. A blank name is the name a new part starts with.
-    func add(named name: String, to jobID: UUID?) async throws -> PartRecord {
+    // from today. A blank name is the name a new part starts with, and a blank description is
+    // none.
+    func add(named name: String, description: String = "", to jobID: UUID?) async throws
+        -> PartRecord
+    {
         try await coordinator.mutate { db, _, dependencies in
             let now = Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
             var position = 0
@@ -95,6 +98,8 @@ nonisolated struct PartService: Sendable {
             var record = PartRecord(
                 id: dependencies.makeID(), jobID: jobID, position: position,
                 name: trimmed.isEmpty ? Self.newName : trimmed, createdAt: now, updatedAt: now)
+            let written = description.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !written.isEmpty { record.description = written }
             if jobID == nil {
                 record.stage = .inHand
                 record.inHandAt = now

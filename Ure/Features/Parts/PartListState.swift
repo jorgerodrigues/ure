@@ -88,19 +88,27 @@ final class PartListState {
     func clearSearch() { searchText = "" }
 }
 
-// How the Parts list words a part's line: its job's watch and title, such as "Grandfather's
-// Seamaster · Full service", or "Spare" for a part in the drawer, with its quantity when it is
-// more than one.
-nonisolated enum PartListWording {
-    static func detail(of row: PartListRow) -> String {
+// How the Parts list words a part, as on "3 Parts": its name with its quantity when it is more
+// than one, such as "Crystal gasket × 2", and a line with its job's watch, or "Spare" for a part
+// in the drawer, and the day an ordered part was ordered, such as "Spare · 31 Oct".
+enum PartListWording {
+    static func title(of row: PartListRow) -> String {
+        guard row.part.quantity > 1 else { return row.part.name }
+        return "\(row.part.name) × \(row.part.quantity)"
+    }
+
+    static func detail(of row: PartListRow, now: Date = .now) -> String {
         var parts: [String] = []
         if row.part.isSpare {
             parts.append("Spare")
+        } else if let watch = row.watch {
+            parts.append(watch.name)
         } else {
-            parts.append(row.watch?.name ?? "No watch yet")
-            if let job = row.job { parts.append(job.title) }
+            parts.append(row.job?.title ?? "No watch yet")
         }
-        if row.part.quantity > 1 { parts.append("× \(row.part.quantity)") }
+        if row.part.stage == .ordered, let ordered = row.part.orderedAt {
+            parts.append(PartWording.shortDay(ordered, now: now))
+        }
         return parts.joined(separator: " · ")
     }
 }
