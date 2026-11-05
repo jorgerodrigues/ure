@@ -63,8 +63,8 @@ struct JobListTests {
             #expect(ids[name].map(listed.contains) == false, "\(name)")
         }
 
-        // The state filters again with the time it reads, so a job leaves the list the day it
-        // turns 31 days old, also without a change to the library.
+        // When the day changes, a job leaves the list the day it turns 31 days old, also
+        // without a change to the library.
         let clock = JobListClock(now: now)
         let state = JobListState(
             coordinator: coordinator, now: { clock.now }, calendar: Self.calendar)
@@ -74,6 +74,10 @@ struct JobListTests {
         #expect(state.rows(in: .doneRecently).count == 3)
         #expect(state.listedRows.count == 3)
         clock.now = now.addingTimeInterval(86_400)
+        #expect(state.rows(in: .doneRecently).count == 3)
+        state.refreshDay()
+        #expect(state.cutoff == (try Self.daysAgo(29, hour: 0)))
+        #expect(state.listedRows.count == 1)
         #expect(
             Set(state.rows(in: .doneRecently).map(\.id))
                 == Set(["29 days ago"].compactMap { ids[$0] }))

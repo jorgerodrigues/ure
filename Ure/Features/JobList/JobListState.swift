@@ -40,6 +40,8 @@ final class JobListState {
     private(set) var loadError: String?
     private(set) var navigationError: String?
     private(set) var observationRevision = 0
+    // The first moment that is still recent. It moves on when the day changes.
+    private(set) var cutoff: Date
     var searchText = ""
 
     init(
@@ -49,6 +51,7 @@ final class JobListState {
         self.coordinator = coordinator
         self.now = now
         self.calendar = calendar
+        cutoff = Self.recentCutoff(now: now(), calendar: calendar)
     }
 
     // The start of the day 30 days before today. A job done at or after it is done recently.
@@ -57,10 +60,16 @@ final class JobListState {
         return calendar.date(byAdding: .day, value: -recentDays, to: today) ?? today
     }
 
+    // The day changed, at midnight or while the Mac slept, so a job done 31 days ago now
+    // leaves Done recently and the sidebar's count.
+    func refreshDay() {
+        let next = Self.recentCutoff(now: now(), calendar: calendar)
+        if next != cutoff { cutoff = next }
+    }
+
     // The rows the list shows, before the search. The sidebar counts them.
     var listedRows: [JobListRow] {
-        let cutoff = Self.recentCutoff(now: now(), calendar: calendar)
-        return rows.filter { row in
+        rows.filter { row in
             guard row.job.stage == .done else { return true }
             guard let doneAt = row.job.doneAt else { return false }
             return doneAt >= cutoff
@@ -117,7 +126,7 @@ final class JobListState {
         isLoading = true
         loadError = nil
         do {
-            let cutoff = Self.recentCutoff(now: now(), calendar: calendar)
+            refreshDay()
             let values = try await coordinator.jobListValues(doneSince: cutoff)
             for try await rows in values {
                 try Task.checkCancellation()

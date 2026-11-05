@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 struct WorkshopView: View {
@@ -79,6 +80,11 @@ struct WorkshopView: View {
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification),
             perform: revalidateReference
+        )
+        .onReceive(
+            NotificationCenter.default.publisher(for: .NSCalendarDayChanged)
+                .receive(on: RunLoop.main),
+            perform: refreshJobDay
         )
         .toolbar {
             if hasActiveJob {
@@ -198,6 +204,10 @@ struct WorkshopView: View {
         jobs.open(job)
         if !jobList.contains(job.id), job.watchID != nil { navigation.selection = .watches }
     }
-    private func revalidateReference(_ notification: Notification) { bench.revalidate() }
+    private func revalidateReference(_ notification: Notification) {
+        bench.revalidate()
+        jobList.refreshDay()
+    }
+    private func refreshJobDay(_ notification: Notification) { jobList.refreshDay() }
     private func openReference() { openWindow(id: "reference") }
 }
