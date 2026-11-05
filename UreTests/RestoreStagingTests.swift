@@ -175,7 +175,8 @@ nonisolated struct RestoreStagingTests {
         let staged = try await coordinator.stageRestore(from: fixture.package)
         #expect(staged.library.manifest.libraryID != active.manifest.libraryID)
         #expect(staged.summary.counts["watch"] == 1)
-        #expect(staged.summary.counts["taskPart"] == 0)
+        #expect(staged.summary.counts["checklistStep"] == 0)
+        #expect(staged.summary.counts["taskPart"] == nil)
         #expect(
             staged.summary.appliedMigrations
                 == Array(LibrarySchema.migrator.migrations.dropFirst(2)))
@@ -450,7 +451,7 @@ nonisolated private struct RestoreFixture: Sendable {
             try await mutatePackage("DROP INDEX job_one_open_per_watch")
         case .extraTrigger:
             try await mutatePackage(
-                "CREATE TRIGGER sqlitex_wipe AFTER INSERT ON fileAsset BEGIN DELETE FROM jobTask; END"
+                "CREATE TRIGGER sqlitex_wipe AFTER INSERT ON fileAsset BEGIN DELETE FROM checklistStep; END"
             )
         case .futureVersion:
             try write(manifest, version: BackupManifest.currentVersion + 1)
@@ -505,9 +506,12 @@ nonisolated private struct RestoreFixture: Sendable {
         try refreshDatabaseDeclaration()
     }
 
+    // Links between tasks and parts exist only in backups made before v24, so the backup goes
+    // back to that schema first.
     func seedCrossJobPart() async throws {
         let writer = try DatabaseQueue(path: LibraryFiles.database(in: package).path)
         try await writer.write { db in
+            try ChecklistMigrationFixture.restoreTasks(in: db)
             let watchID = UUID().uuidString
             let jobID = UUID().uuidString
             let taskID = UUID().uuidString
@@ -536,7 +540,9 @@ nonisolated private struct RestoreFixture: Sendable {
         let counts = try await writer.read(BackupQueries.counts)
         try writer.close()
         let manifest = try manifest()
-        try write(manifest, counts: counts)
+        try write(
+            manifest, migrations: manifest.migrations.filter { $0 != "v24-checklist-steps" },
+            counts: counts)
         try refreshDatabaseDeclaration()
     }
 

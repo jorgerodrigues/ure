@@ -145,7 +145,6 @@ struct SearchStateTests {
             #expect(editing.material.presented?.itemID == (opensViewer ? id : nil))
             #expect(editing.material.presented?.page == (opensViewer ? owner : nil))
             #expect(editing.parts.selectedID == (kind == .part ? id : nil))
-            #expect(editing.tasks.selectedID == nil)
             observation.cancel(); await observation.value
         }
         for (kind, id, text) in [
@@ -194,8 +193,8 @@ struct SearchStateTests {
         draft.description = "Needle part"
         let part = try await PartService(coordinator: coordinator).save(
             draft, for: second.id, editing: nil)
-        let task = try await JobTaskService(coordinator: coordinator).save(
-            JobTaskFixture.draft(.toDo), for: first.id, editing: nil)
+        let bench = try await PartService(coordinator: coordinator).save(
+            PartFixture.draft(), for: first.id, editing: nil)
         let editing = SearchEditingFixture.make(coordinator)
         let navigation = WorkshopNavigation(configuration: AppConfiguration.current)
         let search = SearchState(coordinator: coordinator)
@@ -207,21 +206,21 @@ struct SearchStateTests {
         }
         editing.watches.select(first.watchID)
         editing.jobs.open(first)
-        editing.tasks.open(task, for: first.id)
-        editing.tasks.edit(jobs: editing.jobs)
-        editing.tasks.draft?.title = "Keep correction"
+        editing.parts.open(bench, for: first.id)
+        editing.parts.edit(jobs: editing.jobs)
+        editing.parts.draft?.description = "Keep correction"
         search.present()
         search.open("Part-\(part.id.uuidString)", editing: editing, navigation: navigation)
         #expect(editing.showsUnsavedChanges && editing.watches.selectedID == first.watchID)
         editing.stay()
-        #expect(editing.tasks.draft?.title == "Keep correction" && search.isPresented)
-        editing.tasks.draft?.title = ""
+        #expect(editing.parts.draft?.description == "Keep correction" && search.isPresented)
+        editing.parts.draft?.description = ""
         search.open("Part-\(part.id.uuidString)", editing: editing, navigation: navigation)
         await editing.saveAndContinue()
         #expect(
-            editing.tasks.saveError != nil && editing.watches.selectedID == first.watchID
+            editing.parts.saveError != nil && editing.watches.selectedID == first.watchID
                 && search.isPresented)
-        editing.tasks.draft?.title = "Keep correction"
+        editing.parts.draft?.description = "Keep correction"
         search.open("Part-\(part.id.uuidString)", editing: editing, navigation: navigation)
         await editing.saveAndContinue()
         #expect(
@@ -237,7 +236,7 @@ struct SearchStateTests {
                 sql: "DELETE FROM partRequirement WHERE id = ?", arguments: [part.id.uuidString])
         }
         try await SearchEditingFixture.waitUntil {
-            search.results.isEmpty && editing.parts.parts.isEmpty
+            search.results.isEmpty && !editing.parts.parts.contains { $0.id == part.id }
         }
         search.open("Part-\(part.id.uuidString)", editing: editing, navigation: navigation)
         #expect(editing.jobs.selectedID == second.id)
@@ -302,7 +301,7 @@ enum SearchEditingFixture {
             notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
             material: MaterialState(
                 service: MaterialService(coordinator: coordinator, openBrowser: { _ in false })),
-            tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
+            checklist: ChecklistState(service: ChecklistService(coordinator: coordinator)),
             parts: PartState(
                 service: PartService(coordinator: coordinator, openBrowser: { _ in false })))
     }
@@ -310,13 +309,14 @@ enum SearchEditingFixture {
         [
             Task { await editing.watches.observe() }, Task { await editing.calibers.observe() },
             Task { await editing.jobs.observe() },
-            Task { await editing.material.observe() }, Task { await editing.tasks.observe() },
+            Task { await editing.material.observe() }, Task { await editing.checklist.observe() },
             Task { await editing.parts.observe() },
         ]
     }
     static func loaded(_ editing: WorkshopEditing) -> Bool {
         !editing.watches.isLoading && !editing.calibers.isLoading && !editing.jobs.isLoading
-            && !editing.material.isLoading && !editing.tasks.isLoading && !editing.parts.isLoading
+            && !editing.material.isLoading && !editing.checklist.isLoading
+            && !editing.parts.isLoading
     }
     static func waitUntil(_ condition: () -> Bool) async throws {
         for _ in 0..<500 {

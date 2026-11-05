@@ -184,7 +184,7 @@ struct RestoreStateTests {
         #expect(state.session.jobs !== oldSession.jobs)
         #expect(state.session.calibers !== oldSession.calibers)
         #expect(state.session.notes !== oldSession.notes)
-        #expect(state.session.tasks !== oldSession.tasks)
+        #expect(state.session.checklist !== oldSession.checklist)
         #expect(state.session.parts !== oldSession.parts)
         #expect(state.session.material !== oldSession.material)
         #expect(state.session.search !== oldSession.search)

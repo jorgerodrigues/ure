@@ -54,41 +54,6 @@ struct ChildRemovalStateTests {
         #expect(restarted.pinnedID == nil)
         try await coordinator.close()
     }
-
-    @Test(.timeLimit(.minutes(1)))
-    func taskConfirmationListsPartsAndRejectsChangedLinksBeforeRemovingAnything() async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        let job = try await JobTaskFixture.job(coordinator)
-        let part = try await PartService(coordinator: coordinator).save(
-            PartFixture.draft(), for: job.id, editing: nil)
-        var draft = JobTaskFixture.draft(.done)
-        draft.partIDs = [part.id]
-        let task = try await JobTaskService(coordinator: coordinator).save(
-            draft, for: job.id, editing: nil)
-        let editing = SearchEditingFixture.make(coordinator)
-        let observations = SearchEditingFixture.observe(editing)
-        defer { observations.forEach { $0.cancel() } }
-        try await SearchEditingFixture.waitUntil { SearchEditingFixture.loaded(editing) }
-        editing.tasks.open(task, for: job.id)
-        editing.tasks.requestRemoval()
-        #expect(editing.tasks.removalMessage.contains(part.record.description))
-        draft.partIDs = []
-        _ = try await JobTaskService(coordinator: coordinator).save(
-            draft, for: job.id, editing: task.id)
-        #expect(await editing.tasks.remove() == false)
-        #expect(editing.tasks.saveError != nil && editing.tasks.selectedID == task.id)
-        try await SearchEditingFixture.waitUntil { editing.tasks.linkedParts(for: task.id).isEmpty }
-        editing.tasks.requestRemoval()
-        #expect(await editing.tasks.remove())
-        #expect(editing.tasks.selectedID == nil && editing.tasks.jobID == nil)
-        #expect(try await coordinator.read { try PartQueries.fetch(part.id, in: $0) } == part)
-        observations.forEach { $0.cancel() }
-        for observation in observations { await observation.value }
-        try await coordinator.close()
-    }
 }
 
 private struct ArchiveBenchPreferences {

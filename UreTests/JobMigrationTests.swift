@@ -34,7 +34,7 @@ nonisolated struct JobMigrationTests {
                 columns: try db.columns(in: "job").map(\.name),
                 tables: try String.fetchAll(
                     db, sql: "SELECT name FROM sqlite_schema WHERE type = 'table'"),
-                tasks: try JobTaskRecord.fetchAll(db, sql: "SELECT * FROM jobTask"),
+                steps: try ChecklistQueries.fetchAll(db),
                 parts: try PartRecord.fetchAll(db, sql: "SELECT * FROM partRequirement"),
                 triggers: try String.fetchAll(
                     db, sql: "SELECT name FROM sqlite_schema WHERE type = 'trigger' ORDER BY name"),
@@ -49,9 +49,9 @@ nonisolated struct JobMigrationTests {
             ])
         #expect(!stored.tables.contains("activityEvent"))
         #expect(stored.integrity == "ok" && stored.foreignKeys == 0)
-        #expect(Set(stored.tasks.map(\.id)) == [LegacyJobFixture.taskID, LegacyJobFixture.skipped])
-        #expect(
-            stored.tasks.first { $0.id == LegacyJobFixture.skipped }?.skippedReason == "Not needed")
+        // v24 then makes the tasks steps. The skipped one is ticked, and its reason is in notes.
+        #expect(stored.steps.map(\.id) == [LegacyJobFixture.taskID, LegacyJobFixture.skipped])
+        #expect(stored.steps.map(\.isTicked) == [false, true])
         #expect(stored.parts.map(\.id) == [LegacyJobFixture.partID])
         #expect(stored.parts.first?.statusReason == "Wrong size")
         #expect(stored.triggers == ["watch_cover_insert", "watch_cover_update"])
@@ -81,7 +81,7 @@ nonisolated struct JobMigrationTests {
         let package = fixture.directory.appending(path: "before-job-states.watchbackup")
         try LegacyJobFixture.package(at: package)
         let staged = try await coordinator.stageRestore(from: package)
-        #expect(staged.summary.appliedMigrations == ["v23-job-states"])
+        #expect(staged.summary.appliedMigrations == ["v23-job-states", "v24-checklist-steps"])
         #expect(staged.summary.counts["job"] == LegacyJobFixture.jobs.count)
         // The staged library is already upgraded, so its history is gone.
         #expect(staged.summary.counts["activityEvent"] == nil)
@@ -202,6 +202,7 @@ nonisolated struct JobMigrationTests {
 // nothing into the notes when it runs again.
 nonisolated enum JobStateMigrationFixture {
     static func restoreJobFields(in db: Database) throws {
+        try ChecklistMigrationFixture.restoreTasks(in: db)
         // The job's tasks, parts and material wait for the rebuilt table, which takes the rows
         // back after the old one goes.
         try db.execute(sql: "PRAGMA defer_foreign_keys = ON")
@@ -373,7 +374,8 @@ nonisolated enum LegacyJobFixture {
                     + "History\n\(date(0)) · Waiting reason: Waiting for the owner's answer\n"
                     + "\(date(0)) · Condition note: Stopped after a knock\n"
                     + "\(date(1)) · Task · Clean the movement · Waiting reason: Mainspring on order\n"
-                    + "\(date(2)) · Part · Mainspring · Order reference: PO-1"
+                    + "\(date(2)) · Part · Mainspring · Order reference: PO-1\n\n"
+                    + "Step · Polish\nSkipped reason: Not needed"
             }),
         Job(
             id: id(0x13), watchID: watches[2].id, title: "Crystal", stage: "Waiting",

@@ -107,116 +107,59 @@ nonisolated final class JobUITests: XCTestCase {
     }
 
     @MainActor
-    func testTaskValidationDraftGuardDoneJobAndRestart() {
+    func testAChecklistIsTypedWithTheKeyboardAloneAndKeepsItsOrder() {
         let app = isolatedApp()
         app.launch()
         defer { app.terminate() }
+        let window = app.windows.firstMatch
         createWatch(app)
-        startJob("Bench repair", app: app)
-        XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
-        app.buttons["addTask"].click()
-        enter("Inspect escapement", in: "taskTitle", app: app)
-        enter("Inspection", in: "taskGroupLabel", app: app)
-        choose("Waiting", picker: "taskStatus", app: app)
-        app.buttons["saveTask"].click()
-        XCTAssertTrue(app.staticTexts["taskSaveError"].waitForExistence(timeout: 5))
-        enter("Need technical sheet", in: "taskWaitingReason", app: app)
-        app.buttons["backFromTask"].click()
-        XCTAssertTrue(app.sheets.buttons["Stay"].waitForExistence(timeout: 3))
-        app.sheets.buttons["Stay"].click()
-        XCTAssertEqual(app.textFields["taskTitle"].value as? String, "Inspect escapement")
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editTask"].waitForExistence(timeout: 5))
-        app.buttons["backFromTask"].click()
-        chooseState("Done", app: app)
-        XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["addTask"].isEnabled)
-        app.terminate()
-        app.launch()
-        XCTAssertTrue(state(app).waitForExistence(timeout: 5))
-        XCTAssertEqual(state(app).value as? String, "Done")
-        XCTAssertEqual(
-            app.buttons.matching(
-                NSPredicate(
-                    format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "task-",
-                    "Inspect escapement")
-            ).count, 1)
-        XCTAssertTrue(app.buttons["addTask"].isEnabled)
-    }
-
-    @MainActor
-    func testTaskOrderingKeyboardDragProgressAndRestart() {
-        let app = isolatedApp()
-        app.launch()
-        defer { app.terminate() }
-        createWatch(app)
-        startJob("Bench order", app: app)
-        XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
-        let progress = app.descendants(matching: .any)["taskProgressSummary"].firstMatch
-        XCTAssertTrue(progress.waitForExistence(timeout: 5))
-        XCTAssertEqual(progress.value as? String, "No tasks planned. 0 skipped.")
-        for (title, status) in [("Inspect", "Done"), ("Polish", "Skipped"), ("Test", "To do")] {
-            app.buttons["addTask"].click()
-            enter(title, in: "taskTitle", app: app)
-            enter("Testing", in: "taskGroupLabel", app: app)
-            choose(status, picker: "taskStatus", app: app)
-            if status == "Skipped" { enter("Outside scope", in: "taskSkippedReason", app: app) }
-            app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-            XCTAssertTrue(app.buttons["editTask"].waitForExistence(timeout: 5))
-            app.buttons["backFromTask"].click()
-            XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
+        startJob("Full service", app: app)
+        let add = app.textFields.matching(NSPredicate(format: "label == %@", "Add a step"))
+            .firstMatch
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.click()
+        for line in ["Clean all parts", "# Assembly", "Fit the new mainspring"] {
+            window.typeText(line)
+            window.typeKey(.return, modifierFlags: [])
         }
-        XCTAssertEqual(progress.value as? String, "1 of 2 tasks done, 50 percent. 1 skipped.")
-        let rows = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "task-"))
-        rows.element(boundBy: 0).click()
-        XCTAssertTrue(app.buttons["moveTaskDown"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["moveTaskUp"].isEnabled)
-        app.windows.firstMatch.typeKey(.downArrow, modifierFlags: [.command, .option])
-        let upEnabled = NSPredicate(format: "isEnabled == true")
+        window.typeText("Oil the escapement")
+        window.typeKey("u", modifierFlags: [.command, .shift])
+        window.typeKey(.upArrow, modifierFlags: [.command, .control])
+        let progress = app.descendants(matching: .any)["checklistProgress"].firstMatch
+        XCTAssertEqual(progress.value as? String, "1 of 3 steps done")
         XCTAssertEqual(
-            XCTWaiter.wait(
-                for: [
-                    XCTNSPredicateExpectation(
-                        predicate: upEnabled, object: app.buttons["moveTaskUp"])
-                ], timeout: 5), .completed)
-        app.buttons["backFromTask"].click()
-        XCTAssertTrue(rows.element(boundBy: 0).label.contains("Polish"))
-        XCTAssertTrue(rows.element(boundBy: 1).label.contains("Inspect"))
-        let polishID = rows.element(boundBy: 0).identifier
-        let inspectID = rows.element(boundBy: 1).identifier
-        let testID = rows.element(boundBy: 2).identifier
-        rows.element(boundBy: 2).scrollFullyIntoView(in: app.windows.firstMatch)
-        rows.element(boundBy: 2).click(forDuration: 1, thenDragTo: rows.element(boundBy: 0))
-        let testFirst = NSPredicate(format: "identifier == %@", testID)
-        XCTAssertEqual(
-            XCTWaiter.wait(
-                for: [
-                    XCTNSPredicateExpectation(
-                        predicate: testFirst, object: rows.element(boundBy: 0))
-                ], timeout: 5), .completed)
-        XCTAssertEqual(rows.element(boundBy: 1).identifier, polishID)
-        XCTAssertEqual(rows.element(boundBy: 2).identifier, inspectID)
+            lines(app),
+            [
+                "Clean all parts", "Assembly", "Oil the escapement", "Fit the new mainspring",
+            ])
+        capture(app, name: "Checklist-typed")
+        // Undo puts back the order, then the tick.
+        window.typeKey("z", modifierFlags: .command)
+        XCTAssertEqual(lines(app).last, "Oil the escapement")
+        window.typeKey("z", modifierFlags: .command)
+        XCTAssertEqual(progress.value as? String, "0 of 3 steps done")
+        window.typeKey("z", modifierFlags: [.command, .shift])
+        window.typeKey("z", modifierFlags: [.command, .shift])
+        window.typeKey(.tab, modifierFlags: [])
         app.terminate()
         app.launch()
-        XCTAssertTrue(app.buttons["addTask"].waitForExistence(timeout: 5))
-        XCTAssertEqual(rows.element(boundBy: 0).identifier, testID)
-        XCTAssertEqual(rows.element(boundBy: 1).identifier, polishID)
-        XCTAssertEqual(rows.element(boundBy: 2).identifier, inspectID)
-        rows.element(boundBy: 2).click()
-        app.buttons["editTask"].click()
-        choose("Doing", picker: "taskStatus", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["backFromTask"].waitForExistence(timeout: 5))
-        app.buttons["backFromTask"].click()
-        XCTAssertEqual(progress.value as? String, "0 of 2 tasks done, 0 percent. 1 skipped.")
+        XCTAssertTrue(progress.waitForExistence(timeout: 5))
+        XCTAssertEqual(progress.value as? String, "1 of 3 steps done")
+        XCTAssertEqual(
+            lines(app),
+            [
+                "Clean all parts", "Assembly", "Oil the escapement", "Fit the new mainspring",
+            ])
     }
 
+    // The checklist's lines from top to bottom, without the row that adds a step.
     @MainActor
-    private func choose(_ value: String, picker identifier: String, app: XCUIApplication) {
-        let picker = app.popUpButtons[identifier]
-        XCTAssertTrue(picker.waitForExistence(timeout: 3))
-        picker.click()
-        app.menuItems[value].firstMatch.click()
+    private func lines(_ app: XCUIApplication) -> [String] {
+        app.textFields.matching(NSPredicate(format: "identifier BEGINSWITH %@", "checklistStep-"))
+            .allElementsBoundByIndex
+            .filter { $0.label != "Add a step" }
+            .sorted { $0.frame.minY < $1.frame.minY }
+            .compactMap { $0.value as? String }
     }
 
     // Starts a job from the watch page and types its title over "New Job".

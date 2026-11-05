@@ -179,26 +179,26 @@ struct BenchReferenceTests {
         let editing = MaterialEditingFixture.editing(coordinator)
         let observation = Task { await editing.jobs.observe() }
         defer { observation.cancel() }
-        let taskObservation = Task { await editing.tasks.observe() }
-        defer { taskObservation.cancel() }
-        try await waitUntil { !editing.jobs.isLoading && !editing.tasks.isLoading }
+        let partObservation = Task { await editing.parts.observe() }
+        defer { partObservation.cancel() }
+        try await waitUntil { !editing.jobs.isLoading && !editing.parts.isLoading }
         editing.jobs.open(try #require(editing.jobs.jobs.first { $0.id == job.id }))
-        editing.tasks.create(for: job.id, jobs: editing.jobs)
-        editing.tasks.draft?.title = "Unfinished bench task"
+        editing.parts.create(for: job.id, jobs: editing.jobs)
+        editing.parts.draft?.description = "Unfinished bench part"
         bench.pin(items[0].id)
         bench.togglePane()
-        #expect(editing.tasks.draft?.title == "Unfinished bench task")
+        #expect(editing.parts.draft?.description == "Unfinished bench part")
         var navigated = false
         editing.requestNavigation { navigated = true }
         #expect(editing.showsUnsavedChanges && !navigated)
         editing.stay()
-        #expect(editing.tasks.draft?.title == "Unfinished bench task")
+        #expect(editing.parts.draft?.description == "Unfinished bench part")
         #expect(bench.reference?.item == items[0])
         #expect(try await coordinator.read(LibraryItemQueries.fetchAll).count == items.count)
         observation.cancel()
-        taskObservation.cancel()
+        partObservation.cancel()
         await observation.value
-        await taskObservation.value
+        await partObservation.value
         try await coordinator.close()
     }
 

@@ -186,8 +186,8 @@ nonisolated struct PartServiceTests {
         let coordinator = fixture.coordinator()
         let before = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let task = try await JobTaskService(coordinator: coordinator).save(
-            JobTaskFixture.draft(.done), for: job.id, editing: nil)
+        let steps = try await ChecklistService(coordinator: coordinator).save(
+            [ChecklistStep(id: UUID(), text: "Clean all parts", isTicked: true)], for: job.id)
         try await coordinator.mutate { db, originals, _ in
             try Data("Original bytes".utf8).write(to: originals.appending(path: "evidence.bin"))
             try PartMigrationFixture.removeParts(in: db)
@@ -197,7 +197,7 @@ nonisolated struct PartServiceTests {
         let after = try await reopened.open()
         #expect(after.generationID != before.generationID)
         #expect(try await reopened.read(JobQueries.fetchAll) == [job])
-        #expect(try await reopened.read(JobTaskQueries.fetchAll) == [task])
+        #expect(try await reopened.read(ChecklistQueries.fetchAll) == steps)
         #expect(try await reopened.read(PartQueries.fetchAll).isEmpty)
         #expect(
             try Data(

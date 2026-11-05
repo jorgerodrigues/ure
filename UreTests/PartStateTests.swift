@@ -299,7 +299,8 @@ struct PartStateTests {
             calibers: CaliberState(service: CaliberService(coordinator: coordinator)), jobs: jobs,
             notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
             material: MaterialState(service: MaterialService(coordinator: coordinator)),
-            tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)), parts: parts)
+            checklist: ChecklistState(service: ChecklistService(coordinator: coordinator)),
+            parts: parts)
     }
 
     private func waitUntil(_ condition: () -> Bool) async throws {
