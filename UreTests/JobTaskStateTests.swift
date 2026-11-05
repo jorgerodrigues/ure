@@ -185,15 +185,14 @@ struct JobTaskStateTests {
         #expect(tasks.loadError != nil)
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let watch = try #require(try await coordinator.read(WatchQueries.fetchAll).first)
         let jobObservation = Task { await jobs.observe() }
         defer { jobObservation.cancel() }
         try await waitUntil { !jobs.isLoading }
         jobs.open(job)
-        jobs.beginAction(.condition, watch: watch)
+        jobs.beginAction(.transition)
         #expect(editing.canSaveJob)
         jobs.cancel()
-        jobs.beginAction(.transition, watch: watch)
+        jobs.beginAction(.transition)
         jobs.actionDraft?.transition.stage = .completed
         jobs.actionDraft?.transition.outcome = "Serviced"
         #expect(jobs.canSave && !editing.canSaveJob)

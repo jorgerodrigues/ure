@@ -50,8 +50,7 @@ nonisolated struct RestoreActivationTests {
             _ = try await coordinator.read(WatchQueries.fetchAll)
         }
         await #expect(throws: LibraryError.notOpen) {
-            _ = try await WatchService(coordinator: coordinator).save(
-                ActivationFixture.draft("Stale"), editing: nil)
+            _ = try await WatchService(coordinator: coordinator).create(named: "Stale")
         }
         await #expect(throws: LibraryError.notOpen) {
             _ = try await coordinator.importOriginal(
@@ -259,8 +258,7 @@ nonisolated struct RestoreActivationTests {
         let signalled = await Task.detached { Self.waitForCheckpoint(reached) }.value
         #expect(signalled)
         let queued = Task {
-            try await WatchService(coordinator: coordinator).save(
-                ActivationFixture.draft("Queued stale watch"), editing: nil)
+            try await WatchService(coordinator: coordinator).create(named: "Queued stale watch")
         }
         resume.signal()
         let result = try await activation.value
@@ -287,21 +285,13 @@ nonisolated struct ActivationFixture: Sendable {
         library: LibraryInfo, asset: FileAsset, bytes: Data
     ) {
         let library = try await coordinator.open()
-        var draft = WatchDraft()
-        draft.name = "Backup watch"
-        let watch = try await WatchService(coordinator: coordinator).save(draft, editing: nil)
+        let watch = try await WatchService(coordinator: coordinator).make("Backup watch")
         let source = try files.source(type: .png)
         let asset = try await coordinator.importOriginal(from: source, maximumByteCount: 1_000_000)
         _ = try await coordinator.exportBackup(to: package, applicationVersion: "fixture")
-        draft.name = "Newer current watch"
-        _ = try await WatchService(coordinator: coordinator).save(draft, editing: watch.id)
+        _ = try await WatchService(coordinator: coordinator).update(
+            watch.id, .name("Newer current watch"))
         return (library, asset, try Data(contentsOf: source))
-    }
-
-    static func draft(_ name: String) -> WatchDraft {
-        var draft = WatchDraft()
-        draft.name = name
-        return draft
     }
 
     func pointer() throws -> ActiveLibrary {

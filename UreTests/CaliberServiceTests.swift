@@ -93,20 +93,14 @@ nonisolated struct CaliberServiceTests {
         let service = CaliberService(coordinator: coordinator)
         let caliber = try await service.create(named: "0012")
         let watches = WatchService(coordinator: coordinator)
-        var draft = WatchDraft()
-        draft.name = "First watch"
-        draft.caliberID = caliber.id
-        let first = try await watches.save(draft, editing: nil)
-        draft.name = "Second watch"
-        let second = try await watches.save(draft, editing: nil)
+        let first = try await watches.make("First watch", caliberID: caliber.id)
+        let second = try await watches.make("Second watch", caliberID: caliber.id)
         let renamed = try await service.update(caliber.id, .name("Corrected designation"))
         #expect(
             try await coordinator.read(WatchQueries.fetchAll).allSatisfy {
                 $0.caliberID == renamed.id
             })
-        var clear = WatchDraft(watch: first)
-        clear.caliberID = nil
-        _ = try await watches.save(clear, editing: first.id)
+        _ = try await watches.update(first.id, .caliber(nil))
         let restored = try await coordinator.read(WatchQueries.fetchAll)
         #expect(restored.first { $0.id == first.id }?.caliberID == nil)
         #expect(restored.first { $0.id == second.id }?.caliberID == caliber.id)
@@ -121,12 +115,10 @@ nonisolated struct CaliberServiceTests {
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let service = WatchService(coordinator: coordinator)
-        var draft = WatchDraft()
-        draft.name = "Watch"
-        let watch = try await service.save(draft, editing: nil)
-        draft.caliberID = UUID()
-        await #expect(throws: WatchError.self) { try await service.save(draft, editing: watch.id) }
-        await #expect(throws: WatchError.self) { try await service.save(draft, editing: nil) }
+        let watch = try await service.make("Watch")
+        await #expect(throws: WatchError.self) {
+            try await service.update(watch.id, .caliber(UUID()))
+        }
         #expect(try await coordinator.read(WatchQueries.fetchAll) == [watch])
         await #expect(throws: DatabaseError.self) {
             try await coordinator.mutate { db, _, _ in
@@ -137,8 +129,7 @@ nonisolated struct CaliberServiceTests {
         }
         let caliber = try await CaliberService(coordinator: coordinator).create(
             named: "Linked caliber")
-        draft.caliberID = caliber.id
-        _ = try await service.save(draft, editing: watch.id)
+        _ = try await service.update(watch.id, .caliber(caliber.id))
         await #expect(throws: DatabaseError.self) {
             try await coordinator.mutate { db, _, _ in
                 try db.execute(

@@ -8,53 +8,65 @@ nonisolated struct ArchiveServiceTests {
     private let clock = Date(timeIntervalSince1970: 1_700_000_000.25)
 
     @Test
-    func openJobBlocksArchiveAndUnarchivePreservesHistoryAcrossRestart() async throws {
+    func aWatchWithAnOpenJobArchivesAndUnarchiveKeepsItsJobsAndHistory() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let clock = clock
         let coordinator = fixture.coordinator(dependencies: LibraryDependencies(now: { clock }))
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let service = ArchiveService(coordinator: coordinator)
-        await #expect(throws: ArchiveError.openJob) {
-            try await service.setWatch(job.watchID, archived: true)
-        }
-        var closure = JobTransitionDraft(stage: .cancelled)
-        closure.cancellationReason = "Keep for reference"
-        let closed = try await JobService(coordinator: coordinator).transition(
-            job.id, using: closure)
+        let task = try await JobTaskService(coordinator: coordinator).save(
+            JobTaskFixture.draft(.toDo), for: job.id, editing: nil)
         let events = try await coordinator.read(ActivityQueries.fetchAll)
         let prior = try #require(
             try await coordinator.read { try WatchQueries.fetch(job.watchID, in: $0) })
+        let service = ArchiveService(coordinator: coordinator)
         let archived = try await service.setWatch(job.watchID, archived: true)
         #expect(archived.archivedAt == clock)
         #expect(archived.updatedAt == prior.updatedAt)
-        #expect(try await coordinator.read { try SearchQueries.fetch(prior.name, in: $0) }.isEmpty)
         #expect(
-            try await coordinator.read {
-                try SearchQueries.fetch(prior.name, includeArchived: true, in: $0)
-            }.contains { $0.recordID == prior.id })
+            try await coordinator.read { try SearchQueries.fetch(prior.name, in: $0) }.first {
+                $0.recordID == prior.id
+            }?.isArchived == true)
+
+        // The open job stays in the workshop and can still change.
+        #expect(try await coordinator.read(WorkshopQueries.fetch).map(\.id) == [job.id])
+        var intake = JobDraft(job: job)
+        intake.title = "Service while archived"
+        let renamed = try await JobService(coordinator: coordinator).save(
+            intake, for: job.watchID, editing: job.id)
+        try await RecordNotesService(coordinator: coordinator).save(
+            "Still on the bench", for: .job(job.id))
+        await #expect(throws: ArchiveError.archived) {
+            try await WatchService(coordinator: coordinator).update(archived.id, .brand("Omega"))
+        }
+        var closure = JobTransitionDraft(stage: .cancelled)
+        closure.cancellationReason = "Keep for reference"
+        closure.unfinishedTasksReason = "The owner collected the watch"
+        let closed = try await JobService(coordinator: coordinator).transition(
+            job.id, using: closure)
         await #expect(throws: ArchiveError.archived) {
             try await JobService(coordinator: coordinator).reopen(
                 job.id, using: JobTransitionDraft(stage: .planned))
         }
         await #expect(throws: ArchiveError.archived) {
-            try await WatchService(coordinator: coordinator).save(
-                WatchDraft(watch: archived), editing: archived.id)
-        }
-        await #expect(throws: ArchiveError.archived) {
             try await JobService(coordinator: coordinator).save(
                 JobDraft(), for: archived.id, editing: nil)
         }
+        let history = try await coordinator.read(ActivityQueries.fetchAll)
         try await coordinator.close()
+
         let reopened = fixture.coordinator()
         _ = try await reopened.open()
         #expect(try await reopened.read { try WatchQueries.fetch(prior.id, in: $0) } == archived)
         let restored = try await ArchiveService(coordinator: reopened).setWatch(
             prior.id, archived: false)
         #expect(restored == prior)
-        #expect(try await reopened.read(ActivityQueries.fetchAll) == events)
+        #expect(try await reopened.read(ActivityQueries.fetchAll) == history)
+        #expect(history.count == events.count + 1)
         #expect(try await reopened.read { try JobQueries.fetch(closed.id, in: $0) } == closed)
+        #expect(closed.title == renamed.title)
+        #expect(try await reopened.read { try JobTaskQueries.fetch(task.id, in: $0) } == task)
         _ = try await JobService(coordinator: reopened).reopen(
             job.id, using: JobTransitionDraft(stage: .planned))
         try await reopened.close()
@@ -75,11 +87,11 @@ nonisolated struct ArchiveServiceTests {
         #expect(
             try await coordinator.read { try WatchQueries.fetch(watch.id, in: $0)?.caliberID }
                 == caliber.id)
-        var draft = WatchDraft(watch: watch)
-        draft.name = "Updated linked watch"
-        _ = try await WatchService(coordinator: coordinator).save(draft, editing: watch.id)
+        let watches = WatchService(coordinator: coordinator)
+        _ = try await watches.update(watch.id, .name("Updated linked watch"))
+        let other = try await watches.create(named: "Another watch")
         await #expect(throws: ArchiveError.archived) {
-            try await WatchService(coordinator: coordinator).save(draft, editing: nil)
+            try await watches.update(other.id, .caliber(caliber.id))
         }
         await #expect(throws: ArchiveError.archived) {
             try await CaliberService(coordinator: coordinator).update(
@@ -108,9 +120,7 @@ nonisolated struct ArchiveServiceTests {
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
-        var draft = WatchDraft()
-        draft.name = "Archive needle"
-        let watch = try await WatchService(coordinator: coordinator).save(draft, editing: nil)
+        let watch = try await WatchService(coordinator: coordinator).create(named: "Archive needle")
         try await coordinator.mutate { db, _, _ in
             try db.execute(
                 sql:

@@ -297,9 +297,7 @@ nonisolated enum JobTaskMigrationFixture {
 
 nonisolated enum JobTaskFixture {
     static func job(_ coordinator: LibraryCoordinator) async throws -> JobRecord {
-        var watch = WatchDraft()
-        watch.name = "Omega 0012–Å"
-        let saved = try await WatchService(coordinator: coordinator).save(watch, editing: nil)
+        let saved = try await WatchService(coordinator: coordinator).make("Omega 0012–Å")
         var job = JobDraft()
         job.title = "Service movement"
         return try await JobService(coordinator: coordinator).save(job, for: saved.id, editing: nil)

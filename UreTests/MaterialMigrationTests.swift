@@ -85,13 +85,14 @@ nonisolated struct MaterialMigrationTests {
         defer { fixture.remove() }
         let coordinator = LibraryCoordinator(root: fixture.root)
         _ = try await coordinator.open()
-        var draft = WatchDraft()
-        draft.name = "Replaced by the restore"
-        _ = try await WatchService(coordinator: coordinator).save(draft, editing: nil)
+        _ = try await WatchService(coordinator: coordinator).make("Replaced by the restore")
         let package = fixture.directory.appending(path: "before-material.watchbackup")
         let legacy = try LegacyMaterialFixture.package(at: package, sources: fixture)
         let staged = try await coordinator.stageRestore(from: package)
-        #expect(staged.summary.appliedMigrations == ["v20-material", "v21-caliber-facts"])
+        #expect(
+            staged.summary.appliedMigrations == [
+                "v20-material", "v21-caliber-facts", "v22-watch-owner",
+            ])
         #expect(staged.summary.counts["libraryItem"] == LegacyMaterialFixture.items.count - 1)
         let result = try await coordinator.activateRestore(staged)
         #expect(result.outcome == .restored)
@@ -491,8 +492,15 @@ nonisolated enum LegacyMaterialFixture {
                 openJobID.uuidString, watchID.uuidString, snapshot, "Service started.\n",
                 closedJobID.uuidString, watchID.uuidString, snapshot,
             ])
-        for table in [SearchKey.Table.watch, .caliber, .job] {
-            try SearchKey.backfill(table, in: db)
+        let searchFields = [
+            "watch": [
+                "name", "brand", "model", "caseReference", "serial", "approximateYear", "notes",
+            ],
+            "caliber": ["designation", "manufacturer", "variant", "notes"],
+            "job": ["title", "notes"],
+        ]
+        for (table, fields) in searchFields {
+            try SearchKey.backfill(table, fields: fields, in: db)
         }
     }
 

@@ -38,10 +38,8 @@ nonisolated struct ReleaseJourneyTests {
             #expect(material.allSatisfy { $0.item.kind == .link || $0.asset != nil })
         }
         let retainedAssets = try await coordinator.read(FileAssetQueries.fetchAll)
-        var watchDraft = WatchDraft()
-        watchDraft.name = "Release bench – Å時計"
-        let watch = try await WatchService(coordinator: coordinator).save(watchDraft, editing: nil)
-        #expect(watch.brand == nil && watch.caliberID == nil && watch.condition == .unknown)
+        let watch = try await WatchService(coordinator: coordinator).make("Release bench – Å時計")
+        #expect(watch.brand == nil && watch.caliberID == nil && watch.owner == nil)
         var jobDraft = JobDraft()
         jobDraft.title = "Inspect movement"
         let jobs = JobService(coordinator: coordinator)

@@ -16,9 +16,8 @@ nonisolated struct PartsOverviewTests {
         var expected: Set<UUID> = []
         for stage in JobStage.allCases {
             let job = try await JobTaskFixture.job(coordinator)
-            var watch = WatchDraft()
-            watch.name = "Watch \(stage.rawValue) Å時計"
-            _ = try await WatchService(coordinator: coordinator).save(watch, editing: job.watchID)
+            _ = try await WatchService(coordinator: coordinator).update(
+                job.watchID, .name("Watch \(stage.rawValue) Å時計"))
             for status in PartStatus.allCases {
                 var draft = PartFixture.draft()
                 draft.description = "Mainspring Å時計"

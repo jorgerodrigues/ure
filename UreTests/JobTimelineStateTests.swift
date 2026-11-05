@@ -64,12 +64,10 @@ struct JobTimelineStateTests {
         await observation.value
         let invalidID = try await coordinator.mutate { db, _, dependencies in
             let id = dependencies.makeID()
-            let watch = try WatchQueries.fetch(job.watchID, in: db)
-            let savedWatch = try #require(watch)
+            let condition = WatchConditionValue(condition: .unknown, note: nil)
             try ActivityEvent(
                 id: id, jobID: job.id, kind: .jobStageChanged, occurredAt: Date(), ordering: 1,
-                priorValue: .condition(WatchConditionValue(watch: savedWatch)),
-                nextValue: .condition(WatchConditionValue(watch: savedWatch))
+                priorValue: .condition(condition), nextValue: .condition(condition)
             ).insert(db)
             return id
         }
@@ -101,8 +99,8 @@ struct JobTimelineStateTests {
         let part = try await PartService(coordinator: coordinator).save(
             partDraft, for: job.id, editing: nil)
         let jobs = JobService(coordinator: coordinator)
-        _ = try await jobs.setCondition(
-            job.id, using: WatchConditionDraft(condition: .running, note: "Tested"))
+        try await ConditionEventFixture.record(
+            .running, note: "Tested", for: job.id, in: coordinator)
         _ = try await jobs.transition(job.id, using: JobTransitionDraft(stage: .ready))
         let editing = makeEditing(coordinator)
         let timeline = JobTimelineState()

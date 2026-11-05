@@ -228,7 +228,7 @@ struct JobStateTests {
         state.draft?.title = "Repair"
         #expect(await state.save())
         let job = try #require(state.selectedJob)
-        state.beginAction(.transition, watch: watch)
+        state.beginAction(.transition)
         state.actionDraft?.transition.stage = .waiting
         #expect(!(await state.save()))
         #expect(state.fieldErrors[.waitingReason] != nil)
@@ -245,8 +245,8 @@ struct JobStateTests {
         #expect(navigated)
         #expect(state.selectedJob?.stage == .waiting)
         #expect(state.actionDraft == nil)
-        state.beginAction(.condition, watch: watch)
-        state.actionDraft?.condition.condition = .disassembled
+        state.beginAction(.transition)
+        state.actionDraft?.transition.stage = .ready
         state.requestNavigation(state.close)
         state.discardAndContinue()
         #expect(state.selectedID == nil)
@@ -256,7 +256,7 @@ struct JobStateTests {
         try await coordinator.close()
     }
 
-    @Test(.timeLimit(.minutes(1)), arguments: [JobAction.transition, .condition, .reopen])
+    @Test(.timeLimit(.minutes(1)), arguments: [JobAction.transition, .reopen])
     func pendingActionsRejectRepeatedSavesAndNavigation(action: JobAction) async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
@@ -276,12 +276,11 @@ struct JobStateTests {
                 job.id, using: completion)
             try await waitUntil { state.selectedJob == closed }
             state.edit()
-            state.beginAction(.condition, watch: watch)
+            state.beginAction(.transition)
             #expect(!state.isEditing)
         }
-        state.beginAction(action, watch: watch)
+        state.beginAction(action)
         if action == .transition { state.actionDraft?.transition.stage = .ready }
-        if action == .condition { state.actionDraft?.condition.condition = .running }
         let before = try await coordinator.read(ActivityQueries.fetchAll)
         let started = AsyncStream<Void>.makeStream()
         let gate = DispatchSemaphore(value: 0)
@@ -325,8 +324,8 @@ struct JobStateTests {
         state.draft?.title = "Repair"
         #expect(await state.save())
         let job = try #require(state.selectedJob)
-        state.beginAction(.condition, watch: watch)
-        state.actionDraft?.condition.condition = .running
+        state.beginAction(.transition)
+        state.actionDraft?.transition.stage = .ready
         try await coordinator.mutate { db, _, _ in
             try db.execute(
                 sql:
@@ -334,7 +333,7 @@ struct JobStateTests {
             )
         }
         #expect(!(await state.save()))
-        #expect(state.actionDraft?.condition.condition == .running)
+        #expect(state.actionDraft?.transition.stage == .ready)
         #expect(state.saveError != nil)
         #expect(state.selectedJob == job)
         #expect(try await coordinator.read(WatchQueries.fetchAll) == [watch])
@@ -359,9 +358,7 @@ struct JobStateTests {
     }
 
     private func makeWatch(_ coordinator: LibraryCoordinator) async throws -> WatchRecord {
-        var draft = WatchDraft()
-        draft.name = "Inherited watch"
-        return try await WatchService(coordinator: coordinator).save(draft, editing: nil)
+        try await WatchService(coordinator: coordinator).make("Inherited watch")
     }
 
     private func waitUntil(_ condition: () -> Bool) async throws {

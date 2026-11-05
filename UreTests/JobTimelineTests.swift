@@ -18,9 +18,8 @@ nonisolated struct JobTimelineTests {
         let other = try await JobTaskFixture.job(coordinator)
         let jobs = JobService(coordinator: coordinator)
         _ = try await jobs.transition(job.id, using: JobTransitionDraft(stage: .inProgress))
-        _ = try await jobs.setCondition(
-            job.id,
-            using: WatchConditionDraft(condition: .disassembled, note: "Opened for inspection"))
+        try await ConditionEventFixture.record(
+            .disassembled, note: "Opened for inspection", for: job.id, in: coordinator)
         let task = try await JobTaskService(coordinator: coordinator).save(
             JobTaskFixture.draft(.done), for: job.id, editing: nil)
         var part = PartFixture.draft()
@@ -28,9 +27,6 @@ nonisolated struct JobTimelineTests {
         let savedPart = try await PartService(coordinator: coordinator).save(
             part, for: job.id, editing: nil)
         _ = try await jobs.transition(job.id, using: JobTransitionDraft(stage: .inProgress))
-        _ = try await jobs.setCondition(
-            job.id,
-            using: WatchConditionDraft(condition: .disassembled, note: "Opened for inspection"))
         _ = try await JobTaskService(coordinator: coordinator).save(
             JobTaskDraft(task: task), for: job.id, editing: task.id)
         _ = try await PartService(coordinator: coordinator).save(
@@ -144,10 +140,6 @@ nonisolated struct JobTimelineTests {
             try await JobService(coordinator: coordinator).transition(
                 job.id, using: JobTransitionDraft(stage: .inProgress))
         }
-        await #expect(throws: DatabaseError.self) {
-            try await JobService(coordinator: coordinator).setCondition(
-                job.id, using: WatchConditionDraft(condition: .running, note: "Failed finding"))
-        }
         var onHand = PartFixture.draft()
         onHand.status = .arrived
         await #expect(throws: DatabaseError.self) {
@@ -164,5 +156,22 @@ nonisolated struct JobTimelineTests {
         -> [JobTimelineEntry]
     {
         try await coordinator.read { try JobTimelineQueries.fetch(jobID, in: $0) }
+    }
+}
+
+// An activity record of a watch condition change, as libraries before W036 saved them. Watches
+// have no condition since then, but the timeline still reads these records.
+nonisolated enum ConditionEventFixture {
+    static func record(
+        _ condition: WatchCondition, note: String, for jobID: UUID,
+        in coordinator: LibraryCoordinator
+    ) async throws {
+        try await coordinator.mutate { db, _, dependencies in
+            try ActivityQueries.insert(
+                jobID: jobID, kind: .watchConditionChanged,
+                prior: .condition(WatchConditionValue(condition: .unknown, note: nil)),
+                next: .condition(WatchConditionValue(condition: condition, note: note)),
+                in: db, dependencies: dependencies)
+        }
     }
 }

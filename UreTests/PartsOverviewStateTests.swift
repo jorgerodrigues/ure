@@ -43,9 +43,8 @@ struct PartsOverviewStateTests {
             overview.rows.first?.part.status == .arrived
                 && editing.parts.records(for: job.id).first?.record.status == .arrived
         }
-        var watch = WatchDraft()
-        watch.name = "Corrected watch Å時計"
-        _ = try await WatchService(coordinator: coordinator).save(watch, editing: job.watchID)
+        let watch = try await WatchService(coordinator: coordinator).update(
+            job.watchID, .name("Corrected watch Å時計"))
         var jobDraft = JobDraft(job: job)
         jobDraft.title = "Corrected repair"
         _ = try await JobService(coordinator: coordinator).save(

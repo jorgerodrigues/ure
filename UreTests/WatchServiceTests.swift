@@ -1,135 +1,90 @@
 import Foundation
 import GRDB
+import Synchronization
 import Testing
 
 @testable import Ure
 
 nonisolated struct WatchServiceTests {
     @Test
-    func nameOnlyAndCompleteWatchesSurviveRestart() async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let date = Date(timeIntervalSince1970: 1_700_000_000)
-        let coordinator = fixture.coordinator(dependencies: LibraryDependencies(now: { date }))
-        _ = try await coordinator.open()
-        let service = WatchService(coordinator: coordinator)
-        var minimal = WatchDraft()
-        minimal.name = "  Bench watch  "
-        let first = try await service.save(minimal, editing: nil)
-        #expect(first.name == "Bench watch")
-        #expect(first.brand == nil)
-        #expect(first.serial == nil)
-        #expect(first.caseDiameter == nil)
-        #expect(first.lugWidth == nil)
-        #expect(first.specificationNotes == nil)
-        #expect(first.createdAt == date)
-        #expect(first.updatedAt == date)
-        let full = fixture.completeDraft
-        let second = try await service.save(full, editing: nil, locale: Locale(identifier: "da_DK"))
-        #expect(second.caseReference == "0012–Å/3")
-        #expect(second.serial == "000042.7-A")
-        #expect(second.caseDiameter == 36.5)
-        #expect(second.lugWidth == 18)
-        #expect(second.approximateYear == "circa 1960–1965")
-        #expect(second.specificationNotes == full.specificationNotes)
-        try await coordinator.close()
-        let reopened = fixture.coordinator()
-        _ = try await reopened.open()
-        let records = try await reopened.read(WatchQueries.fetchAll)
-        #expect(Set(records.map(\.id)) == [first.id, second.id])
-        #expect(records.contains(first))
-        #expect(records.contains(second))
-        #expect(
-            WatchDraft(watch: second, locale: Locale(identifier: "da_DK")).caseDiameter == "36,5")
-        try await reopened.close()
-    }
-
-    @Test(arguments: ["0", "-1", "nan", "inf", "1e999", "18mm", "18,5"])
-    func invalidDimensionsReportBothFieldsAndWriteNothing(value: String) async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        var draft = WatchDraft()
-        draft.name = "Watch"
-        draft.caseDiameter = value
-        draft.lugWidth = value
-        do {
-            _ = try await WatchService(coordinator: coordinator).save(
-                draft, editing: nil, locale: Locale(identifier: "en_US"))
-            Issue.record("Invalid dimensions must fail")
-        } catch let error as WatchValidationError {
-            #expect(error.fields[.caseDiameter] != nil)
-            #expect(error.fields[.lugWidth] != nil)
-        }
-        #expect(try await coordinator.read(WatchQueries.fetchAll).isEmpty)
-        try await coordinator.close()
-    }
-
-    @Test
-    func missingNameFailsAndDuplicateNamesRemainAllowed() async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        let service = WatchService(coordinator: coordinator)
-        var draft = WatchDraft()
-        draft.name = " \n "
-        do {
-            _ = try await service.save(draft, editing: nil)
-            Issue.record("A blank name must fail")
-        } catch let error as WatchValidationError {
-            #expect(error.fields[.name] != nil)
-        }
-        draft.name = "Same name"
-        draft.serial = "0000-1"
-        draft.caseDiameter = "  "
-        let first = try await service.save(draft, editing: nil)
-        let second = try await service.save(draft, editing: nil)
-        #expect(first.id != second.id)
-        #expect(first.caseDiameter == nil)
-        #expect(try await coordinator.read(WatchQueries.fetchAll).count == 2)
-        try await coordinator.close()
-    }
-
-    @Test
-    func editingKeepsIdentityCreationTimeAndUntouchedSpecifications() async throws {
+    func newWatchHasOnlyItsNameAndEachFactSavesOnItsOwn() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let created = Date(timeIntervalSince1970: 1_700_000_000)
-        let old = fixture.coordinator(dependencies: LibraryDependencies(now: { created }))
-        _ = try await old.open()
-        let record = try await WatchService(coordinator: old).save(
-            fixture.completeDraft, editing: nil, locale: Locale(identifier: "da_DK"))
-        try await old.close()
-        let updated = created.addingTimeInterval(3600)
-        let coordinator = fixture.coordinator(dependencies: LibraryDependencies(now: { updated }))
+        let clock = Mutex(created)
+        let coordinator = fixture.coordinator(
+            dependencies: LibraryDependencies(now: { clock.withLock { $0 } }))
         _ = try await coordinator.open()
-        var draft = WatchDraft(watch: record)
-        draft.name = "Renamed watch"
-        let saved = try await WatchService(coordinator: coordinator).save(draft, editing: record.id)
-        #expect(saved.id == record.id)
-        #expect(saved.createdAt == created)
-        #expect(saved.updatedAt == updated)
-        #expect(saved.name == draft.name)
-        #expect(saved.serial == record.serial)
-        #expect(saved.caseDiameter == record.caseDiameter)
-        #expect(try await coordinator.read(WatchQueries.fetchAll) == [saved])
+        let caliber = try await CaliberService(coordinator: coordinator).create(named: "552")
+        let service = WatchService(coordinator: coordinator)
+        let watch = try await service.create()
+        #expect(watch.name == "New Watch" && watch.brand == nil && watch.caliberID == nil)
+        #expect(watch.owner == nil && watch.contact == nil && watch.caseDiameter == nil)
+        #expect(watch.createdAt == created && watch.updatedAt == created)
+
+        let edited = created.addingTimeInterval(60)
+        clock.withLock { $0 = edited }
+        let facts: [WatchFact] = [
+            .name("  Inherited watch  "), .brand(" Example maker "), .model("Å 001"),
+            .reference("0012–Å/3"), .serial("000042.7-A"), .year("circa 1960–1965"),
+            .caliber(caliber.id), .caseMaterial("Steel"), .diameter(36.5), .lugWidth(18),
+            .owner(" Åse Øster "), .contact("No email; call +45 (00) 0012 / daytime"),
+        ]
+        for fact in facts { _ = try await service.update(watch.id, fact) }
+        let saved = try #require(try await coordinator.read(WatchQueries.fetchAll).first)
+        #expect(saved.name == "Inherited watch" && saved.brand == "Example maker")
+        #expect(saved.model == "Å 001" && saved.caseReference == "0012–Å/3")
+        #expect(saved.serial == "000042.7-A" && saved.approximateYear == "circa 1960–1965")
+        #expect(saved.caliberID == caliber.id && saved.caseMaterial == "Steel")
+        #expect(saved.caseDiameter == 36.5 && saved.lugWidth == 18)
+        #expect(saved.owner == "Åse Øster")
+        #expect(saved.contact == "No email; call +45 (00) 0012 / daytime")
+        #expect(saved.createdAt == created && saved.updatedAt == edited)
+
+        let cleared = created.addingTimeInterval(120)
+        clock.withLock { $0 = cleared }
+        #expect(try await service.update(watch.id, .serial("000042.7-A")) == saved)
+        let withoutOwner = try await service.update(watch.id, .owner("  "))
+        #expect(withoutOwner.owner == nil && withoutOwner.updatedAt == cleared)
+        _ = try await service.update(watch.id, .caliber(nil))
         try await coordinator.close()
+
+        let reopened = fixture.coordinator()
+        _ = try await reopened.open()
+        let restarted = try #require(try await reopened.read(WatchQueries.fetchAll).first)
+        #expect(restarted.owner == nil && restarted.caliberID == nil)
+        #expect(restarted.contact == saved.contact && restarted.serial == "000042.7-A")
+        #expect(
+            try await reopened.read { try SearchQueries.fetch("call +45", in: $0) }.map(
+                \.recordID) == [watch.id])
+        try await reopened.close()
     }
 
     @Test
-    func anUnavailableEditDoesNotCreateANewWatch() async throws {
+    func invalidFactsAreRejectedAndChangeNothing() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
-        var draft = WatchDraft()
-        draft.name = "Stale edit"
-        await #expect(throws: WatchError.self) {
-            try await WatchService(coordinator: coordinator).save(draft, editing: UUID())
+        let service = WatchService(coordinator: coordinator)
+        let watch = try await service.create(named: "Bench watch")
+        for fact in [
+            WatchFact.name(" \n "), .diameter(0), .diameter(-1), .lugWidth(.nan),
+            .lugWidth(.infinity),
+        ] {
+            await #expect(throws: WatchValidationError.self) {
+                try await service.update(watch.id, fact)
+            }
         }
-        #expect(try await coordinator.read(WatchQueries.fetchAll).isEmpty)
+        await #expect(throws: WatchError.self) {
+            try await service.update(watch.id, .caliber(UUID()))
+        }
+        await #expect(throws: ArchiveError.missingRecord) {
+            try await service.update(UUID(), .name("Stale edit"))
+        }
+        #expect(try await coordinator.read(WatchQueries.fetchAll) == [watch])
+        let twin = try await service.create(named: "Bench watch")
+        #expect(twin.id != watch.id)
         try await coordinator.close()
     }
 
@@ -143,9 +98,7 @@ nonisolated struct WatchServiceTests {
         var iterator = values.makeAsyncIterator()
         #expect(try await iterator.next() == [])
         let service = WatchService(coordinator: coordinator)
-        var draft = WatchDraft()
-        draft.name = "First name"
-        let first = try await service.save(draft, editing: nil)
+        let first = try await service.create(named: "First name")
         #expect(try await iterator.next() == [first])
         try await coordinator.mutate { db, _, _ in
             try db.execute(
@@ -154,16 +107,14 @@ nonisolated struct WatchServiceTests {
                     BEGIN SELECT RAISE(ABORT, 'fixture write failed'); END
                     """)
         }
-        draft.name = "Failed name"
         await #expect(throws: DatabaseError.self) {
-            try await service.save(draft, editing: first.id)
+            try await service.update(first.id, .name("Failed name"))
         }
         #expect(try await coordinator.read(WatchQueries.fetchAll) == [first])
         try await coordinator.mutate { db, _, _ in
             try db.execute(sql: "DROP TRIGGER failWatchUpdate")
         }
-        draft.name = "Final name"
-        let last = try await service.save(draft, editing: first.id)
+        let last = try await service.update(first.id, .name("Final name"))
         #expect(try await iterator.next() == [last])
         try await coordinator.close()
     }
@@ -215,21 +166,33 @@ nonisolated struct WatchFixture: Sendable {
         LibraryCoordinator(root: root, dependencies: dependencies)
     }
 
-    var completeDraft: WatchDraft {
-        var draft = WatchDraft()
-        draft.name = "Inherited watch"
-        draft.brand = "Example maker"
-        draft.model = "Å 001"
-        draft.caseReference = "0012–Å/3"
-        draft.serial = "000042.7-A"
-        draft.approximateYear = "circa 1960–1965"
-        draft.caseMaterial = "Steel"
-        draft.caseDiameter = "36,5"
-        draft.lugWidth = "18"
-        draft.waterResistance = "3 atm (unverified)"
-        draft.specificationNotes = "Unsigned dial.\nCheck the case back."
-        return draft
-    }
-
     func remove() { try? FileManager.default.removeItem(at: root) }
+
+    // A watch with every identity and case fact, and the given caliber.
+    static func completeWatch(
+        _ coordinator: LibraryCoordinator, caliberID: UUID? = nil
+    ) async throws -> WatchRecord {
+        let service = WatchService(coordinator: coordinator)
+        var watch = try await service.make(
+            "Inherited watch", brand: "Example maker", caliberID: caliberID)
+        for fact in [
+            WatchFact.model("Å 001"), .reference("0012–Å/3"), .serial("000042.7-A"),
+            .year("circa 1960–1965"), .caseMaterial("Steel"), .diameter(36.5), .lugWidth(18),
+        ] {
+            watch = try await service.update(watch.id, fact)
+        }
+        return watch
+    }
+}
+
+extension WatchService {
+    // Makes a watch the way the watch page does: ⌘N, then each fact on its own.
+    nonisolated func make(
+        _ name: String, brand: String? = nil, caliberID: UUID? = nil
+    ) async throws -> WatchRecord {
+        var watch = try await create(named: name)
+        if let brand { watch = try await update(watch.id, .brand(brand)) }
+        if let caliberID { watch = try await update(watch.id, .caliber(caliberID)) }
+        return watch
+    }
 }

@@ -11,13 +11,7 @@ final class ArchiveUndo {
 
     // Runs the write after any change that is still saving.
     func perform(_ archived: Bool, write: @escaping Write) async -> Bool {
-        let previous = change
-        let next = Task { () -> Bool in
-            _ = await previous?.value
-            return await write(archived)
-        }
-        change = next
-        return await next.value
+        await enqueue(archived, write: write).value
     }
 
     func registerUndo(
@@ -31,10 +25,22 @@ final class ArchiveUndo {
                 archiving.registerUndo(
                     setting: !archived, actionName: actionName, undoManager: undoManager,
                     write: write)
-                Task { _ = await archiving.perform(archived, write: write) }
+                archiving.enqueue(archived, write: write)
             }
         }
         undoManager.setActionName(actionName)
+    }
+
+    // Starts the write at once, so a wait that follows sees it.
+    @discardableResult
+    private func enqueue(_ archived: Bool, write: @escaping Write) -> Task<Bool, Never> {
+        let previous = change
+        let next = Task { () -> Bool in
+            _ = await previous?.value
+            return await write(archived)
+        }
+        change = next
+        return next
     }
 
     // Waits for a change that Undo or Redo started.
