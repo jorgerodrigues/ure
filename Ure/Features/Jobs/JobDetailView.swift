@@ -4,15 +4,12 @@ struct JobDetailView: View {
     @Environment(JobState.self) private var jobs
     @Environment(WorkshopEditing.self) private var editing
     @Environment(MaterialState.self) private var material
-    @Environment(JobTaskState.self) private var tasks
     @Environment(PartState.self) private var parts
 
     var body: some View {
         Group {
             if let job = jobs.selectedJob, parts.isPresenting(for: job.id) {
                 PartDetailView(jobID: job.id)
-            } else if let job = jobs.selectedJob, tasks.isPresenting(for: job.id) {
-                JobTaskDetailView(jobID: job.id)
             } else if let job = jobs.selectedJob, material.isPresenting(on: .job(job.id)) {
                 MaterialViewerView(page: .job(job.id))
             } else if let job = jobs.selectedJob {
@@ -61,7 +58,7 @@ private struct JobPage: View {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                 }
                 PartSectionView(jobID: job.id)
-                JobTaskSectionView(jobID: job.id)
+                ChecklistSectionView(jobID: job.id)
                 MaterialSectionView(owner: .job(job.id), caliber: caliber, style: .page)
                 NotesSectionView(owner: .job(job.id), style: .page, edited: job.updatedAt)
             }
@@ -341,6 +338,13 @@ enum JobWording {
         if days <= 0 { return "Opened today" }
         return "\(opened) · \(days == 1 ? "1 day" : "\(days) days")"
     }
+}
+
+// Values from the "2 Job" artboard on the Paper page "Rework · Simple": the Parts and Checklist
+// headings sit 4 pt above their rows, which are 8 pt apart.
+enum JobSectionLayout {
+    static let spacing: CGFloat = 8
+    static let headingBottom: CGFloat = 4
 }
 
 // Values from the "2 Job" artboard on the Paper page "Rework · Simple".

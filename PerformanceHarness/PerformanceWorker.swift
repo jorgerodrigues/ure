@@ -89,8 +89,8 @@ nonisolated struct PerformanceMeasurements: Sendable {
         try await measure("jobs", into: &report) { db in
             try JobQueries.fetchAll(db).map { $0.id.uuidString }
         }
-        try await measure("tasks", into: &report) { db in
-            try TaskPartQueries.snapshot(db).tasks.map { $0.id.uuidString }
+        try await measure("steps", into: &report) { db in
+            try ChecklistQueries.fetchAll(db).map { $0.id.uuidString }
         }
         try await measure("photos", into: &report) { db in
             try MaterialQueries.fetchAll(db).map { $0.id.uuidString }

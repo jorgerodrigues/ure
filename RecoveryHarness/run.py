@@ -19,7 +19,7 @@ WORKER = Path(sys.argv[1]).resolve()
 RUN = REPO / ".build/recovery-runs" / str(uuid.uuid4())
 GENERATION = "00000000-0000-4000-8000-000000000001"
 VERSIONS = ("v10-documents", "v15-part-procurement")
-CURRENT_MIGRATION = "v23-job-states"
+CURRENT_MIGRATION = "v24-checklist-steps"
 # Columns that a later migration removes on purpose.
 REMOVED_COLUMNS = {
     "partLink": {
@@ -68,7 +68,9 @@ JOB_STATES = {
 # Tables that a later migration joins into the notes text of the record that owns each row.
 JOINED_INTO_NOTES = {"note"}
 # Tables that a later migration removes after writing their typed reasons into job notes.
-REMOVED_TABLES = {"activityEvent"}
+REMOVED_TABLES = {"activityEvent", "taskPart"}
+# Task fields that v24 writes into the job's notes, after a line with the step's text.
+TASK_INTO_NOTES = (("detail", "Detail: "), ("waitingReason", "Waiting reason: "), ("skippedReason", "Skipped reason: "))
 NOTE_OWNERS = (("watchID", "watch"), ("jobID", "job"), ("caliberID", "caliber"))
 RESULTS = []
 
@@ -253,6 +255,26 @@ def jobs_preserved(rows, after):
             require("Cancelled" in kept["notes"], "job: cancellation in notes")
 
 
+def tasks_preserved(rows, after):
+    steps = {row["id"]: row for row in after["tables"]["checklistStep"]}
+    jobs = {row["id"]: row for row in after["tables"]["job"]}
+    for row in rows:
+        step = steps[row["id"]]
+        require(step["jobID"] == row["jobID"] and step["text"] == row["title"], "jobTask: becomes a step")
+        require(bool(step["isTicked"]) == (row["status"] in ("Done", "Skipped")), "jobTask: done and skipped are ticked")
+        require(not step["isHeading"], "jobTask: a task is a step, not a heading")
+        notes = jobs[row["jobID"]]["notes"]
+        for column, label in TASK_INTO_NOTES:
+            value = row.get(column) or ""
+            if value.strip():
+                require("Step · " + row["title"] in notes, "jobTask: step text in notes")
+                require(label + value.rstrip() in notes, f"jobTask: {column} in notes")
+    for job_id in {row["jobID"] for row in rows}:
+        ordered = [row["id"] for row in sorted(rows, key=lambda row: (row["position"], row["id"])) if row["jobID"] == job_id]
+        kept = [step["id"] for step in sorted(steps.values(), key=lambda step: step["position"]) if step["jobID"] == job_id and not step["isHeading"]]
+        require(kept == ordered, "jobTask: steps keep the task order")
+
+
 def preserved(before, after):
     require(before["originals"] == after["originals"], "Original and technical PDF bytes preserved")
     for table, rows in before["tables"].items():
@@ -264,6 +286,10 @@ def preserved(before, after):
             calibers_preserved(rows, after)
         if table == "job" and rows and "intakeSnapshot" in rows[0]:
             jobs_preserved(rows, after)
+        if table == "jobTask":
+            require(table not in after["tables"], "jobTask: removed after each task became a step")
+            tasks_preserved(rows, after)
+            continue
         if table in REMOVED_TABLES:
             require(table not in after["tables"], f"{table}: removed after its reasons moved into notes")
             continue

@@ -747,6 +747,28 @@ nonisolated enum LibrarySchema {
             }
             try SearchKey.backfill("job", fields: ["title", "notes"], in: db)
         }
+        migrator.registerMigration("v24-checklist-steps", foreignKeyChecks: .immediate) { db in
+            try db.create(table: "checklistStep") { table in
+                table.column("id", .text).primaryKey()
+                table.column("jobID", .text).notNull().references("job", onDelete: .restrict)
+                table.column("position", .integer).notNull().check { $0 >= 0 }
+                table.column("text", .text).notNull().check(sql: "length(trim(text)) > 0")
+                table.column("isHeading", .boolean).notNull().defaults(to: false)
+                    .check(sql: "isHeading IN (0, 1)")
+                table.column("isTicked", .boolean).notNull().defaults(to: false)
+                    .check(sql: "isTicked IN (0, 1)")
+                table.column("createdAt", .double).notNull()
+                table.column("updatedAt", .double).notNull()
+                table.check(sql: "isHeading = 0 OR isTicked = 0")
+            }
+            try db.create(
+                index: "checklistStep_jobID_position", on: "checklistStep",
+                columns: ["jobID", "position"])
+            try ChecklistMigration.convertTasks(in: db)
+            try db.drop(table: "taskPart")
+            try db.drop(table: "jobTask")
+            try SearchKey.backfill("job", fields: ["title", "notes"], in: db)
+        }
         return migrator
     }
 }

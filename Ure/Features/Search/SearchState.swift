@@ -77,7 +77,6 @@ final class SearchState {
                     editing.calibers.calibers.contains(where: { $0.id == caliberID })
                 else { self.unavailable(); return }
             }
-            editing.tasks.close()
             editing.parts.close()
             editing.material.close()
             editing.jobs.close()

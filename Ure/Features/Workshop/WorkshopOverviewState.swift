@@ -81,7 +81,6 @@ final class WorkshopOverviewState {
                     "The job is unavailable. Retry loading the workshop or open its watch history."
                 return
             }
-            editing.tasks.close()
             editing.parts.close()
             editing.material.close()
             editing.watches.select(job.watchID)
