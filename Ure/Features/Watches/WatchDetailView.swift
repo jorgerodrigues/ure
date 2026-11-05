@@ -3,9 +3,8 @@ import SwiftUI
 struct WatchDetailView: View {
     @Environment(WatchState.self) private var watches
     @Environment(JobState.self) private var jobs
-    @Environment(DocumentState.self) private var documents
-    @Environment(PhotoState.self) private var photos
-    @Environment(ReferenceState.self) private var references
+    @Environment(MaterialState.self) private var material
+    @Environment(CaliberState.self) private var calibers
 
     @Environment(WorkshopNavigation.self) private var navigation
     @Environment(WorkshopEditing.self) private var editing
@@ -17,13 +16,8 @@ struct WatchDetailView: View {
             jobs.watchID == watch.id, jobs.selectedID != nil || jobs.draft != nil
         {
             JobDetailView()
-        } else if let watch = watches.selectedWatch, documents.isPresenting(for: .watch(watch.id)) {
-            DocumentDetailView(owner: .watch(watch.id))
-        } else if let watch = watches.selectedWatch, photos.isPresenting(for: .watch(watch.id)) {
-            PhotoDetailView(owner: .watch(watch.id))
-        } else if let watch = watches.selectedWatch, references.isPresenting(for: .watch(watch.id))
-        {
-            ReferenceDetailView(owner: .watch(watch.id))
+        } else if let watch = watches.selectedWatch, material.isPresenting(on: .watch(watch.id)) {
+            MaterialViewerView(page: .watch(watch.id))
         } else if let watch = watches.selectedWatch {
             Form {
                 RecordHeading(title: watch.name, subtitle: watch.condition.rawValue)
@@ -78,8 +72,8 @@ struct WatchDetailView: View {
                 }
                 WatchJobHistoryView(watch: watch)
                 NotesSectionView(owner: .watch(watch.id))
-                PhotoSectionView(owner: .watch(watch.id))
-                ReferenceSectionView(owner: .watch(watch.id))
+                MaterialSectionView(
+                    owner: .watch(watch.id), caliber: calibers.caliber(watch.caliberID))
             }
             .formStyle(.grouped)
             .textSelection(.enabled)

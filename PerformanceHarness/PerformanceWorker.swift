@@ -93,7 +93,7 @@ nonisolated struct PerformanceMeasurements: Sendable {
             try TaskPartQueries.snapshot(db).tasks.map { $0.id.uuidString }
         }
         try await measure("photos", into: &report) { db in
-            try PhotoQueries.fetchAll(db).map { $0.id.uuidString }
+            try MaterialQueries.fetchAll(db).map { $0.id.uuidString }
         }
         try await measure("parts", into: &report) { db in
             try PartsOverviewQueries.fetch(db).map { $0.id.uuidString }
@@ -118,7 +118,7 @@ nonisolated struct PerformanceMeasurements: Sendable {
                 }
             }
         }
-        let service = PhotoService(coordinator: coordinator)
+        let service = MaterialService(coordinator: coordinator)
         for index in 0..<30 {
             let assetID = try PerformanceFixture.id(5, index)
             let start = ContinuousClock.now
@@ -164,7 +164,7 @@ nonisolated struct PerformanceMeasurements: Sendable {
     }
 
     @concurrent
-    private func decode(_ service: PhotoService, assetID: UUID, thumbnail: Bool) async throws
+    private func decode(_ service: MaterialService, assetID: UUID, thumbnail: Bool) async throws
         -> (width: Int, height: Int, residentBytes: UInt64)
     {
         let image = try await service.image(for: assetID, thumbnail: thumbnail)

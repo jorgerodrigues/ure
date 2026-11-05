@@ -11,9 +11,7 @@ struct WorkshopView: View {
     @Environment(PartsOverviewState.self) private var partsOverview
     @Environment(JobTaskState.self) private var tasks
     @Environment(PartState.self) private var parts
-    @Environment(ReferenceState.self) private var references
-    @Environment(DocumentState.self) private var documents
-    @Environment(PhotoState.self) private var photos
+    @Environment(MaterialState.self) private var material
     @Environment(WorkshopEditing.self) private var editing
     @Environment(BenchReferenceState.self) private var bench
     @Environment(\.openWindow) private var openWindow
@@ -76,9 +74,7 @@ struct WorkshopView: View {
         .task(id: partsOverview.observationRevision, partsOverview.observe)
         .task(tasks.observe)
         .task(parts.observe)
-        .task(references.observe)
-        .task(photos.observe)
-        .task(documents.observe)
+        .task(material.observe)
         .task(startBench)
         .onChange(of: jobs.selectedID, selectBenchJob)
         .onChange(of: isLoadingSelection, restoreSelection)
@@ -201,8 +197,7 @@ struct WorkshopView: View {
         didRestoreSelection = true
         guard !editing.hasUnsavedChanges, !editing.isSaving, watches.draft == nil,
             navigation.selectedSection == .workshop, calibers.selectedID == nil,
-            calibers.draft == nil, !jobs.isEditing, references.draft == nil,
-            photos.draft == nil, documents.draft == nil, tasks.draft == nil, parts.draft == nil,
+            calibers.draft == nil, !jobs.isEditing, tasks.draft == nil, parts.draft == nil,
             watches.selectedID == nil, jobs.selectedID == nil,
             let job = jobs.jobs.first(where: { $0.id == bench.jobID })
         else { return }

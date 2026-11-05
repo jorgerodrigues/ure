@@ -155,7 +155,7 @@ struct PartsOverviewStateTests {
         await editing.saveAndContinue()
         #expect(editing.parts.selectedID == other.id && editing.jobs.selectedID == second.id)
         #expect(editing.watches.selectedID == second.watchID && editing.tasks.jobID == nil)
-        #expect(editing.references.owner == nil)
+        #expect(editing.material.presented == nil)
         try await waitUntil {
             overview.rows.contains { $0.part.description == "Keep my correction" }
         }
@@ -184,9 +184,7 @@ struct PartsOverviewStateTests {
             calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
             jobs: JobState(service: JobService(coordinator: coordinator)),
             notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
-            references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
-            photos: PhotoState(service: PhotoService(coordinator: coordinator)),
-            documents: DocumentState(service: DocumentService(coordinator: coordinator)),
+            material: MaterialState(service: MaterialService(coordinator: coordinator)),
             tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
             parts: PartState(
                 service: PartService(coordinator: coordinator, openBrowser: openBrowser)))

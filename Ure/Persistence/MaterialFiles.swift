@@ -6,7 +6,7 @@ extension LibraryCoordinator {
         let asset = try read { try FileAssetQueries.fetch(assetID, in: $0) }
         guard let asset, asset.detectedType != .pdf,
             let width = asset.pixelWidth, let height = asset.pixelHeight
-        else { throw PhotoError.notPhoto }
+        else { throw MaterialError.notPhoto }
         return (url, max(width, height))
     }
 
@@ -32,5 +32,14 @@ extension LibraryCoordinator {
         } else {
             try FileManager.default.moveItem(at: staged, to: destination)
         }
+    }
+
+    func documentBytes(for assetID: UUID) throws -> Data {
+        let url = try originalURL(for: assetID)
+        guard try read({ try FileAssetQueries.fetch(assetID, in: $0)?.detectedType }) == .pdf else {
+            throw MaterialError.notPDF
+        }
+        try Task.checkCancellation()
+        return try Data(contentsOf: url)
     }
 }

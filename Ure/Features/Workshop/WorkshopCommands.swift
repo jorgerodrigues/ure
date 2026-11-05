@@ -161,18 +161,6 @@ struct WorkshopCommands: Commands {
         if editing.isSaving { return false }
         if editing.parts.draft != nil { return editing.parts.canSave(jobs: editing.jobs) }
         if editing.tasks.draft != nil { return editing.tasks.canSave(jobs: editing.jobs) }
-        if editing.documents.draft != nil {
-            guard let owner = editing.documents.owner else { return false }
-            return editing.documents.canSave(jobs: editing.jobs) && editing.canWrite(owner)
-        }
-        if editing.photos.draft != nil {
-            guard let owner = editing.photos.owner else { return false }
-            return editing.photos.canSave(jobs: editing.jobs) && editing.canWrite(owner)
-        }
-        if editing.references.draft != nil {
-            guard let owner = editing.references.owner else { return false }
-            return editing.references.canSave && editing.canWrite(owner)
-        }
         switch navigation.selectedSection {
         case .workshop, .watches, .parts:
             if editing.jobs.isEditing { return editing.canSaveJob }
@@ -190,18 +178,6 @@ struct WorkshopCommands: Commands {
         }
         if editing.tasks.draft != nil {
             editing.tasks.saveCommand()
-            return
-        }
-        if editing.documents.draft != nil {
-            editing.documents.saveCommand()
-            return
-        }
-        if editing.photos.draft != nil {
-            editing.photos.saveCommand()
-            return
-        }
-        if editing.references.draft != nil {
-            editing.references.saveCommand()
             return
         }
         switch navigation.selectedSection {

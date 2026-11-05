@@ -81,9 +81,7 @@ struct JobStateTests {
             watches: WatchState(service: WatchService(coordinator: coordinator)),
             calibers: CaliberState(service: CaliberService(coordinator: coordinator)), jobs: state,
             notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
-            references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
-            photos: PhotoState(service: PhotoService(coordinator: coordinator)),
-            documents: DocumentState(service: DocumentService(coordinator: coordinator)),
+            material: MaterialState(service: MaterialService(coordinator: coordinator)),
             tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
             parts: PartState(service: PartService(coordinator: coordinator)))
         state.start(for: watch.id)

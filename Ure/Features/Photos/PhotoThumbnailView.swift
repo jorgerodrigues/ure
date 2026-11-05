@@ -1,18 +1,23 @@
 import SwiftUI
 
 struct PhotoThumbnailView: View {
-    @Environment(PhotoState.self) private var photos
+    @Environment(MaterialState.self) private var material
     @State private var image: CGImage?
     @State private var loadedAssetID: UUID?
     @State private var failed = false
     let photoID: UUID?
+    var fills = false
 
-    private var assetID: UUID? { photos.thumbnail(for: photoID)?.asset.id }
+    private var assetID: UUID? { material.photo(photoID)?.asset?.id }
 
     var body: some View {
         Group {
             if let image, loadedAssetID == assetID {
-                Image(decorative: image, scale: 1).resizable().scaledToFit()
+                if fills {
+                    Image(decorative: image, scale: 1).resizable().scaledToFill()
+                } else {
+                    Image(decorative: image, scale: 1).resizable().scaledToFit()
+                }
             } else {
                 Image(systemName: failed ? "photo.badge.exclamationmark" : "photo")
                     .foregroundStyle(.secondary)
@@ -30,7 +35,7 @@ struct PhotoThumbnailView: View {
         failed = false
         guard let assetID else { return }
         do {
-            let loaded = try await photos.image(for: assetID, thumbnail: true)
+            let loaded = try await material.image(for: assetID, thumbnail: true)
             guard !Task.isCancelled else { return }
             image = loaded
             loadedAssetID = assetID

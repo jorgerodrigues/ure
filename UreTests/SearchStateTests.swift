@@ -100,29 +100,15 @@ struct SearchStateTests {
             case .job(let id): records.append(("notes needle \(index)", .job, id, owner))
             case .caliber(let id): records.append(("notes needle \(index)", .caliber, id, owner))
             }
-            var referenceDraft = ReferenceFixture.draft
-            referenceDraft.title = "Link needle \(index)"
-            let item = try await ReferenceService(coordinator: coordinator).save(
-                referenceDraft, for: owner, editing: nil)
-            records.append((referenceDraft.title, .link, item.id, owner))
-            let photo = try #require(
-                await PhotoService(coordinator: coordinator).importFiles([source], for: owner)
-                    .first
-            ).outcome.get()
-            var photoDraft = PhotoDraft(item: photo.item)
-            photoDraft.title = "Photo needle \(index)"
-            _ = try await PhotoService(coordinator: coordinator).save(
-                photoDraft, for: owner, editing: photo.id)
-            records.append((photoDraft.title, .photo, photo.id, owner))
-            let document = try #require(
-                await DocumentService(coordinator: coordinator).importFiles([pdf], for: owner)
-                    .first
-            ).outcome.get()
-            var documentDraft = DocumentDraft(item: document.item)
-            documentDraft.title = "PDF needle \(index)"
-            _ = try await DocumentService(coordinator: coordinator).save(
-                documentDraft, for: owner, editing: document.id)
-            records.append((documentDraft.title, .document, document.id, owner))
+            let item = try await MaterialFixture.link(
+                titled: "Link needle \(index)", for: owner, in: coordinator)
+            records.append((item.title, .link, item.id, owner))
+            let photo = try await MaterialFixture.file(
+                source, titled: "Photo needle \(index)", for: owner, in: coordinator)
+            records.append((photo.item.title, .photo, photo.id, owner))
+            let document = try await MaterialFixture.file(
+                pdf, titled: "PDF needle \(index)", for: owner, in: coordinator)
+            records.append((document.item.title, .document, document.id, owner))
         }
         var partDraft = PartFixture.draft()
         partDraft.description = "Part needle"
@@ -156,9 +142,9 @@ struct SearchStateTests {
                     editing.calibers.selectedID == id && editing.jobs.selectedID == nil
                         && navigation.selection == .calibers)
             }
-            #expect(editing.references.selectedID == (kind == .link ? id : nil))
-            #expect(editing.photos.selectedID == (kind == .photo ? id : nil))
-            #expect(editing.documents.selectedID == (kind == .document ? id : nil))
+            let opensViewer = kind == .photo || kind == .document
+            #expect(editing.material.presented?.itemID == (opensViewer ? id : nil))
+            #expect(editing.material.presented?.page == (opensViewer ? owner : nil))
             #expect(editing.parts.selectedID == (kind == .part ? id : nil))
             #expect(editing.tasks.selectedID == nil)
             observation.cancel(); await observation.value
@@ -267,10 +253,8 @@ enum SearchEditingFixture {
             calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
             jobs: JobState(service: JobService(coordinator: coordinator)),
             notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
-            references: ReferenceState(
-                service: ReferenceService(coordinator: coordinator, openBrowser: { _ in false })),
-            photos: PhotoState(service: PhotoService(coordinator: coordinator)),
-            documents: DocumentState(service: DocumentService(coordinator: coordinator)),
+            material: MaterialState(
+                service: MaterialService(coordinator: coordinator, openBrowser: { _ in false })),
             tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
             parts: PartState(
                 service: PartService(coordinator: coordinator, openBrowser: { _ in false })))
@@ -279,16 +263,13 @@ enum SearchEditingFixture {
         [
             Task { await editing.watches.observe() }, Task { await editing.calibers.observe() },
             Task { await editing.jobs.observe() },
-            Task { await editing.references.observe() }, Task { await editing.photos.observe() },
-            Task { await editing.documents.observe() }, Task { await editing.tasks.observe() },
+            Task { await editing.material.observe() }, Task { await editing.tasks.observe() },
             Task { await editing.parts.observe() },
         ]
     }
     static func loaded(_ editing: WorkshopEditing) -> Bool {
         !editing.watches.isLoading && !editing.calibers.isLoading && !editing.jobs.isLoading
-            && !editing.references.isLoading
-            && !editing.photos.isLoading
-            && !editing.documents.isLoading && !editing.tasks.isLoading && !editing.parts.isLoading
+            && !editing.material.isLoading && !editing.tasks.isLoading && !editing.parts.isLoading
     }
     static func waitUntil(_ condition: () -> Bool) async throws {
         for _ in 0..<500 {

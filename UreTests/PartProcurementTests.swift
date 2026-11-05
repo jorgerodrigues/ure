@@ -312,11 +312,12 @@ nonisolated struct PartProcurementTests {
             root: fixture.root, dependencies: LibraryDependencies(now: { clock }))
         let before = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let photoService = PhotoService(coordinator: coordinator)
+        let material = MaterialService(coordinator: coordinator)
         let source = try fixture.source(type: .png)
         let bytes = try Data(contentsOf: source)
-        let photo = try await photoService.importFiles([source], for: .job(job.id))[0].outcome.get()
-        let watch = try await photoService.setCover(photo.id, for: job.watchID)
+        let photo = try await material.importFiles([source], for: .job(job.id))[0].outcome.get()
+        try await material.setCover(photo.id, for: job.watchID)
+        let watch = try #require(try await coordinator.read(WatchQueries.fetchAll).first)
         let taskService = JobTaskService(coordinator: coordinator)
         _ = try await taskService.save(JobTaskFixture.draft(.done), for: job.id, editing: nil)
         let second = try await taskService.save(
@@ -340,8 +341,10 @@ nonisolated struct PartProcurementTests {
         #expect(try await reopened.read(JobTaskQueries.fetchAll) == tasks)
         #expect(try await reopened.read(ActivityQueries.fetchAll) == events)
         #expect(try await reopened.read(WatchQueries.fetchAll) == [watch])
-        #expect(try await reopened.read(PhotoQueries.fetchAll) == [photo])
-        #expect(try Data(contentsOf: await reopened.originalURL(for: photo.asset.id)) == bytes)
+        #expect(try await reopened.read(MaterialQueries.fetchAll) == [photo])
+        #expect(
+            try Data(contentsOf: await reopened.originalURL(for: try #require(photo.asset).id))
+                == bytes)
         let ordered = try await change(
             part, to: .ordered, service: PartService(coordinator: reopened))
         #expect(ordered.record.orderedAt == clock && ordered.links == part.links)

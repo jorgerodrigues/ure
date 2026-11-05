@@ -1,16 +1,18 @@
 import SwiftUI
 
+// The watch cover is a photo from the watch's material or its jobs' material.
 struct WatchCoverView: View {
-    @Environment(PhotoState.self) private var photos
+    @Environment(MaterialState.self) private var material
     @Environment(JobState.self) private var jobs
     @Environment(WorkshopEditing.self) private var editing
     let watch: WatchRecord
 
-    private var choices: [PhotoRecord] {
+    private var choices: [MaterialRecord] {
         let jobIDs = Set(jobs.jobs.filter { $0.watchID == watch.id }.map(\.id))
-        return photos.photos.filter { photo in
-            if photo.item.watchID == watch.id { return true }
-            if let jobID = photo.item.jobID { return jobIDs.contains(jobID) }
+        return material.records.filter { record in
+            guard record.item.kind == .photo else { return false }
+            if record.item.watchID == watch.id { return true }
+            if let jobID = record.item.jobID { return jobIDs.contains(jobID) }
             return false
         }
     }
@@ -24,27 +26,24 @@ struct WatchCoverView: View {
                 ForEach(choices) { photo in WatchCoverOption(photo: photo, watchID: watch.id) }
             }
             .disabled(
-                watch.archivedAt != nil || editing.isSaving || photos.isLoading
-                    || photos.loadError != nil
+                watch.archivedAt != nil || editing.isSaving || material.isLoading
+                    || material.loadError != nil
                     || jobs.isLoading || jobs.loadError != nil || choices.isEmpty)
             Button("Remove Cover", action: removeCover)
                 .disabled(watch.archivedAt != nil || editing.isSaving || watch.coverPhotoID == nil)
-            if let error = photos.operationError {
-                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
-            }
         }
     }
 
-    private func removeCover() { photos.setCover(nil, for: watch.id) }
+    private func removeCover() { material.setCover(nil, for: watch.id) }
 }
 
 private struct WatchCoverOption: View {
-    @Environment(PhotoState.self) private var photos
-    let photo: PhotoRecord
+    @Environment(MaterialState.self) private var material
+    let photo: MaterialRecord
     let watchID: UUID
 
     var body: some View {
         Button("\(photo.item.title) (\(photo.item.jobID == nil ? "Watch" : "Job"))", action: choose)
     }
-    private func choose() { photos.setCover(photo.id, for: watchID) }
+    private func choose() { material.setCover(photo.id, for: watchID) }
 }

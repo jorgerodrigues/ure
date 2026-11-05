@@ -54,9 +54,7 @@ struct WorkshopEditingTests {
             watches: watches, calibers: calibers,
             jobs: JobState(service: JobService(coordinator: coordinator)),
             notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
-            references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
-            photos: PhotoState(service: PhotoService(coordinator: coordinator)),
-            documents: DocumentState(service: DocumentService(coordinator: coordinator)),
+            material: MaterialState(service: MaterialService(coordinator: coordinator)),
             tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
             parts: PartState(service: PartService(coordinator: coordinator)))
         calibers.create()
@@ -106,9 +104,7 @@ struct WorkshopEditingTests {
             watches: watches, calibers: calibers,
             jobs: JobState(service: JobService(coordinator: coordinator)),
             notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
-            references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
-            photos: PhotoState(service: PhotoService(coordinator: coordinator)),
-            documents: DocumentState(service: DocumentService(coordinator: coordinator)),
+            material: MaterialState(service: MaterialService(coordinator: coordinator)),
             tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
             parts: PartState(service: PartService(coordinator: coordinator)))
         calibers.create()
@@ -138,9 +134,7 @@ struct WorkshopEditingTests {
             watches: watches, calibers: calibers,
             jobs: JobState(service: JobService(coordinator: coordinator)),
             notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
-            references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
-            photos: PhotoState(service: PhotoService(coordinator: coordinator)),
-            documents: DocumentState(service: DocumentService(coordinator: coordinator)),
+            material: MaterialState(service: MaterialService(coordinator: coordinator)),
             tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
             parts: PartState(service: PartService(coordinator: coordinator)))
         watches.create()

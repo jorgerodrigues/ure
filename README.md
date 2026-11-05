@@ -1,6 +1,6 @@
 # Ure
 
-A native Mac app for watch repair and restoration. The current implementation includes the native shell, recoverable library, watch records, shared caliber records, job intake with repair history, one notes text per record, technical reference links, and local photos. Further repair features follow in the [planning backlog](docs/planning/issues.md).
+A native Mac app for watch repair and restoration. The current implementation includes the native shell, recoverable library, watch records, shared caliber records, job intake with repair history, one notes text per record, and photos, PDFs and links as material on each record. Further repair features follow in the [planning backlog](docs/planning/issues.md).
 
 Start with the [local handover guide](docs/handover.md). The [release acceptance report](docs/planning/release-acceptance.md) records executed checks and remaining native and minimum-OS gates. First-release acceptance is still pending.
 
@@ -71,19 +71,19 @@ Select a row to open that exact watch and job in Workshop. The existing editors,
 
 ## Search
 
-Use **Search Library** in the toolbar or **Shift-Command-F** for global search. Results group watches, calibers, jobs, parts, links, photos, and PDFs. A word in a record's notes finds that watch, caliber, or job. Each result names its watch, job, or shared caliber. Selecting it opens the exact saved record through the existing draft guard. Closed jobs remain searchable. **Include Archived** also searches archived watches, jobs, calibers, and their owned records. Use Archive to read archived owners and closed jobs.
+Use **Search Library** in the toolbar or **Shift-Command-F** for global search. Results group watches, calibers, jobs, parts, links, photos, and PDFs. A photo or PDF opens in its viewer, and a link opens its record. A word in a record's notes finds that watch, caliber, or job. Each result names its watch, job, or shared caliber. Selecting it opens the exact saved record through the existing draft guard. Closed jobs remain searchable. **Include Archived** also searches archived watches, jobs, calibers, and their owned records. Use Archive to read archived owners and closed jobs.
 
-Search matches saved watch identity, caliber designation, job titles, the notes of watches, calibers, and jobs, part descriptions, manufacturer references, and library item titles and captions. It preserves leading zeros and punctuation. Unicode case matching uses the same rule in every local filter. SQL characters such as `%`, `_`, and quotes are literal search text. PDF contents and text within images are not indexed.
+Search matches saved watch identity, caliber designation, job titles, the notes of watches, calibers, and jobs, part descriptions, manufacturer references, and material titles. It preserves leading zeros and punctuation. Unicode case matching uses the same rule in every local filter. SQL characters such as `%`, `_`, and quotes are literal search text. PDF contents and text within images are not indexed.
 
-The normal Watches, Calibers, Workshop, and Parts lists have local search. Job history, parts, links, photos, and PDFs also have local text filters. Photo text combines with the stage filter. Part text covers descriptions and manufacturer references. Filtering keeps an already open detail readable.
+The normal Watches, Calibers, Workshop, and Parts lists have local search. Job history and parts also have local text filters. Part text covers descriptions and manufacturer references. Filtering keeps an already open detail readable.
 
 ## Archive and removal
 
 Use **Archive Watch** or **Archive Caliber** in its saved detail or the Record menu. A watch cannot archive while it has an open job. **Unarchive** restores normal list visibility. Existing watch links to archived calibers stay readable. Archived owners reject changes until restored. Closed jobs require Reopen, and their watch must first be unarchived.
 
-Tasks, photos, PDFs, and external references have a **Remove** action in saved detail. Removal requires confirmation. Task confirmation lists its part links. Parts and historical activity summaries stay saved. Part link removal stays in the part editor and commits with **Save**. Part requirements use **Cancelled** rather than deletion.
+Tasks have a **Remove** action in saved detail. Removal requires confirmation. Task confirmation lists its part links. Parts and historical activity summaries stay saved. Part link removal stays in the part editor and commits with **Save**. Part requirements use **Cancelled** rather than deletion.
 
-Removing a photo clears its cover reference and any pin. Removed file items close their viewers. The database commits before unreferenced originals are removed. Failed file cleanup retries at startup. Originals still used by another item stay saved. There is no permanent watch or job deletion.
+Material is removed at once, and **Command-Z** brings it back. See [Material](#material). There is no permanent watch or job deletion.
 
 ## Parts overview
 
@@ -159,35 +159,31 @@ A failed save keeps the text on screen, says that it did not save, and offers **
 
 Libraries from before W033 had separate note records. The upgrade joins each record's notes into its notes text, oldest first. Each old note starts with its date, kind, and title.
 
-## Technical reference links
+## Material
 
-Use **Add Link** in a watch, job, or caliber reference section. Each link belongs to that scope only. Enter a title and a complete HTTP or HTTPS URL. Add optional source description and plain-text notes to keep the evidence in context. Several links can coexist in each scope.
+Every watch, caliber, and job has one **Material** section. It shows the record's photos, PDFs, and links as tiles, in the order they were added. Each tile has a title and a line such as "Photo · 12 Oct". Material from another year also shows the year.
 
-Use **Save**, **Cancel**, or **Command-S**. Invalid URLs and failed writes keep the draft. Reference drafts use the existing Save, Discard, or Stay guard for navigation, window closure, and quitting. Closed-job references remain readable. Reopen the job before adding or editing its links.
+Drop photos or PDFs on the strip under the tiles, or click the strip to choose them in the file picker. Content detection accepts JPEG, PNG, HEIC, and PDF regardless of extension. The limits are 100 MB per original and 200 files per batch. Each file has its own result, and successful files stay when another file fails or the batch is cancelled. Protected PDFs, including owner-restricted copies that open without a password, are unsupported. Moving or deleting the source does not affect the managed original. A new file is titled by its filename.
 
-Select a saved link to read its details. **Open in Browser** opens its saved URL in the default browser. Links are labelled **External reference**. Their linked content is not saved offline. Loading, selecting, and saving do not open a browser or fetch the page.
+Click the strip and press **Command-V** to paste a link. Dropping a web link from a browser also adds it. Only a complete HTTP or HTTPS address becomes a link. Other text shows a short explanation and adds nothing. A new link is titled by its host, such as "example.org". The strip's shortcut menu also has **Paste Link**.
 
-## Local photos
+Click a tile's title to rename it. The title saves as you type, like notes, and **Command-Z** undoes a rename. **Esc** puts back the title from when you started typing. A blank title puts back the old one when you leave it.
 
-Use **Import Photos** in a watch, job, or caliber detail. The system file picker accepts several files. You can also drop local files onto the photo section. Imports accept JPEG, PNG, and HEIC by detected content. The approved limits are 100 MB per original and 200 files per batch. Each file has its own result. Successful imports remain saved when another file fails or the batch is cancelled. Moving or deleting the source does not affect the managed original.
+Click a photo or PDF tile to open it in the photo viewer or PDF reader. Use **Fit**, **Zoom In**, and **Zoom Out**, or pinch to zoom. Focus a photo and use arrow keys, drag, or scroll to pan. **Option-Command-Left Arrow** and **Option-Command-Right Arrow** move between the record's photos, or between a PDF's pages. **Export Original** preserves the imported bytes. A failed thumbnail shows a placeholder, and a failed load offers Retry. Click a link tile to open it in the default browser. Ure never fetches a link's page on its own.
 
-Photos start as **Unclassified**. Open a photo and choose **Edit Photo** to change its title, caption, and stage. Stages are Unclassified, Before, During, and After. The stage filter shows only photos in the current owner scope. Editing uses Save, Cancel, Command-S, and the shared unsaved-draft guard. Closed-job photos remain readable and exportable. Reopen the job to import or edit its photos. The service rejects stale saves after closure.
+Choose **Remove** from a tile's shortcut menu, or **Remove** in the viewer, to remove material at once. **Command-Z** brings it back, with its cover if it was one, and **Shift-Command-Z** removes it again. Its original file stays until Undo can no longer bring it back, which is the next time Ure opens the library. Originals still used by other material stay saved.
 
-Select a photo to view its original. Use **Fit**, **Zoom In**, and **Zoom Out**, or pinch to zoom. Focus the photo and use arrow keys, drag, or scroll to pan. Option-Command-Left Arrow and Option-Command-Right Arrow select the previous and next photos in the filtered scope. **Export Original** uses a save panel and preserves the imported bytes. A failed thumbnail shows a placeholder. It does not remove the photo or prevent original viewing. A failed viewer load offers Retry, and Export Original remains available.
+A watch or job page also shows its caliber's material as chips, such as "From Omega 552:". They open the same way. The material stays on the caliber and is never copied. Remove or rename it on the caliber page.
 
-Use **Choose Cover** in the watch detail to select a photo from that watch or one of its jobs. **Remove Cover** clears the reference. Watch rows use the cover thumbnail. Caliber photos stay in their shared caliber scope and cannot become a watch cover.
+Use **Choose Cover** in the watch detail to select a photo from that watch or one of its jobs. **Remove Cover** clears it. Watch rows use the cover thumbnail. Caliber photos stay in the caliber and cannot become a watch cover.
 
-## Technical PDF documents
+Closed-job and archived material stays readable and exportable. Reopen the job or unarchive the record to add, rename, or remove its material.
 
-Use **Import PDFs** in a watch, job, or caliber reference section. Choose several local files or drop them onto the PDF area. Content detection accepts PDFs regardless of extension. The limits are 100 MB per original and 200 files per batch. Each file has its own result. Successful imports remain saved when another file fails or the batch is cancelled. Protected PDFs, including owner-restricted copies that open without a password, are unsupported.
-
-Document rows show **PDF · Offline**. Select one to read its managed original with PDFKit. Use **Previous Page**, **Next Page**, Option-Command-Left/Right Arrow, **Fit**, **Zoom In**, and **Zoom Out**. PDF loading runs off the main actor. A failed load offers Retry. **Export Original** preserves the imported bytes and stays available after a reader failure when the original remains accessible.
-
-Use **Edit Document** to change its title, optional HTTP/HTTPS source URL, source description, and notes. Save, Cancel, Command-S, and the shared draft guard apply. **Open Source** opens the saved URL only after that action. It does not download the document. Closed-job documents remain readable and exportable. Reopen the job before importing or editing documents. The service also rejects stale saves after closure.
+Libraries from before W034 kept a photo stage, a caption, a PDF's source URL, a source description, and notes on each item. The upgrade writes those values into the owner's notes under "From the old record", each item starting with its kind and title. An Unclassified stage was the default, so it is not written. No original file moves or changes.
 
 ## Bench references
 
-Open a saved job and use **Pin Reference** to choose one saved photo, PDF, or external link from that job, its watch, or its current caliber. The pin stays in place while you open notes, photos, references, or intake editors. Switching jobs clears unrelated pins. A watch reference stays for another job on that watch. A caliber reference stays for a job whose watch uses the same caliber.
+Open a saved job and use **Pin Reference** to choose one saved photo, PDF, or link from that job, its watch, or its current caliber. The pin stays in place while you open notes, material, or intake editors. Switching jobs clears unrelated pins. A watch reference stays for another job on that watch. A caliber reference stays for a job whose watch uses the same caliber.
 
 Use **Toggle Reference Pane** or **Shift-Command-R** to collapse or show the pane. It appears beside the editor when there is room. At narrower widths, widen the window or use **Open Reference Window** with **Option-Command-R**. The reference window has reading, zoom, explicit browser opening, and original export controls. New, Save, and section-changing commands are disabled while that window is active. Closing it leaves the main editor's draft in place.
 
@@ -195,7 +191,7 @@ The app restores the last selected saved job and its valid pin. Pane visibility 
 
 ## Managed original import infrastructure
 
-W009 ([PR #36](https://github.com/jorgerodrigues/ure/pull/36)) adds the internal `FileImportService` API for JPEG, PNG, HEIC, and PDF originals. The approved limits are 100 MB (100,000,000 bytes) per original and 200 files per batch. It detects content rather than trusting extensions, keeps unchanged original bytes, and stores file size, SHA-256, dimensions, and orientation. Each import uses a generated storage key. Source filenames stay metadata only. Cancellation and per-file failures preserve committed assets. Startup recovery removes unreferenced interrupted imports through the coordinator's mutation gate. Photo import controls are available in W010. PDF import controls are available in W011.
+W009 ([PR #36](https://github.com/jorgerodrigues/ure/pull/36)) adds the internal `FileImportService` API for JPEG, PNG, HEIC, and PDF originals. The approved limits are 100 MB (100,000,000 bytes) per original and 200 files per batch. It detects content rather than trusting extensions, keeps unchanged original bytes, and stores file size, SHA-256, dimensions, and orientation. Each import uses a generated storage key. Source filenames stay metadata only. Cancellation and per-file failures preserve committed assets. Startup recovery removes unreferenced interrupted imports through the coordinator's mutation gate. The Material section adds photos and PDFs through it.
 
 ## Local library and recovery
 
@@ -280,6 +276,8 @@ The Release configuration enables optimization and whole-module compilation. The
 - [W028 restore activation verification](docs/planning/restore-activation-verification.md)
 - [Design: brand, app icon, and macOS 27 screen rules](docs/design/README.md)
 - [Paper design foundations and local installation verification](docs/planning/design-install-verification.md)
+- [W033 record notes verification](docs/planning/record-notes-verification.md)
+- [W034 material verification](docs/planning/material-verification.md)
 
 The user approved the current-platform direction and W002's SQLite/GRDB storage design on 1 October 2026. Shared caliber records and the repair history rule were approved on 2 October 2026. Watch, caliber, intake, stage, and condition forms use explicit Save and Cancel editing. W003, W004, and W005 are merged through [PR #29](https://github.com/jorgerodrigues/ure/pull/29), [PR #31](https://github.com/jorgerodrigues/ure/pull/31), and [PR #32](https://github.com/jorgerodrigues/ure/pull/32). W006 is merged in [PR #33](https://github.com/jorgerodrigues/ure/pull/33). W007 is merged in [PR #34](https://github.com/jorgerodrigues/ure/pull/34). W008 is implemented in [PR #35](https://github.com/jorgerodrigues/ure/pull/35). Native UI and device checks are deferred to release acceptance by agreement. GitHub holds story descriptions, acceptance criteria, and current status. The repository holds the specification and verification evidence.
 

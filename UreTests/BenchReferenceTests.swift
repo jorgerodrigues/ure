@@ -155,21 +155,20 @@ struct BenchReferenceTests {
         _ = try await coordinator.open()
         let owners = try await ReferenceFixture.owners(coordinator)
         let source = try fixture.source(type: .png)
-        let photo = try await PhotoService(coordinator: coordinator).importFiles(
-            [source], for: owners[0])[0].outcome.get()
+        let photo = try await MaterialFixture.file(source, for: owners[0], in: coordinator)
         let snapshot = try await coordinator.read(BenchSnapshot.fetch)
         let job = try #require(snapshot.jobs.first)
         let preferences = try BenchTestPreferences(root: fixture.root)
         defer { preferences.remove() }
         preferences.store.value = BenchPreference(jobID: job.id, itemID: photo.id)
         try FileManager.default.removeItem(
-            at: try await coordinator.originalURL(for: photo.asset.id))
+            at: try await coordinator.originalURL(for: try #require(photo.asset).id))
         let state = preferences.state(coordinator)
         state.apply(snapshot)
         await state.validatePin()
         #expect(state.pinnedID == nil && state.pinMessage != nil)
         #expect(preferences.store.value.itemID == nil)
-        #expect(try await coordinator.read(PhotoQueries.fetchAll) == [photo])
+        #expect(try await coordinator.read(MaterialQueries.fetchAll) == [photo])
         try await coordinator.close()
     }
 
@@ -187,34 +186,19 @@ struct BenchReferenceTests {
         bench.apply(try await coordinator.read(BenchSnapshot.fetch))
         let job = try #require(bench.snapshot.jobs.first)
         bench.selectJob(job.id)
-        let references = ReferenceState(service: ReferenceService(coordinator: coordinator))
-        let observation = Task { await references.observe() }
-        defer { observation.cancel() }
-        try await waitUntil { !references.isLoading }
-        references.create(for: .job(job.id))
-        references.draft?.title = "Unfinished bench reference"
-        let editing = WorkshopEditing(
-            watches: WatchState(service: WatchService(coordinator: coordinator)),
-            calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
-            jobs: JobState(service: JobService(coordinator: coordinator)),
-            notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
-            references: references,
-            photos: PhotoState(service: PhotoService(coordinator: coordinator)),
-            documents: DocumentState(service: DocumentService(coordinator: coordinator)),
-            tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
-            parts: PartState(service: PartService(coordinator: coordinator)))
+        let editing = MaterialEditingFixture.editing(coordinator)
+        editing.watches.create()
+        editing.watches.draft?.name = "Unfinished bench watch"
         bench.pin(items[0].id)
         bench.togglePane()
-        #expect(references.draft?.title == "Unfinished bench reference")
+        #expect(editing.watches.draft?.name == "Unfinished bench watch")
         var navigated = false
         editing.requestNavigation { navigated = true }
         #expect(editing.showsUnsavedChanges && !navigated)
         editing.stay()
-        #expect(references.draft?.title == "Unfinished bench reference")
+        #expect(editing.watches.draft?.name == "Unfinished bench watch")
         #expect(bench.reference?.item == items[0])
         #expect(try await coordinator.read(LibraryItemQueries.fetchAll).count == items.count)
-        observation.cancel()
-        await observation.value
         try await coordinator.close()
     }
 
@@ -228,25 +212,20 @@ struct BenchReferenceTests {
         let snapshot = try await coordinator.read(BenchSnapshot.fetch)
         let job = try #require(snapshot.jobs.first)
         let source = try DocumentFixture.source(in: fixture)
-        let document = try await DocumentService(coordinator: coordinator).importFiles(
-            [source], for: .job(job.id))[0].outcome.get()
+        let document = try #require(
+            try await MaterialFixture.file(source, for: .job(job.id), in: coordinator).asset)
         let photoSource = try fixture.source(type: .png)
-        let photo = try await PhotoService(coordinator: coordinator).importFiles(
-            [photoSource], for: owners[0])[0].outcome.get()
+        let photo = try #require(
+            try await MaterialFixture.file(photoSource, for: owners[0], in: coordinator).asset)
         var closure = JobTransitionDraft(stage: .completed)
         closure.outcome = "Closed for reference"
         _ = try await JobService(coordinator: coordinator).transition(job.id, using: closure)
         let before = try await coordinator.read(LibraryItemQueries.fetchAll)
-        var reader = ReferenceReader(coordinator: coordinator)
-        var browserCount = 0
-        reader.openBrowser = { _ in
-            browserCount += 1; return true
-        }
-        #expect(try await reader.document(for: document.asset.id).pageCount == 3)
-        #expect(try await reader.image(for: photo.asset.id).width > 0)
-        #expect(browserCount == 0)
+        let reader = ReferenceReader(coordinator: coordinator)
+        #expect(try await reader.document(for: document.id).pageCount == 3)
+        #expect(try await reader.image(for: photo.id).width > 0)
         let destination = fixture.directory.appending(path: "reference-export.pdf")
-        try await reader.export(document.asset.id, to: destination)
+        try await reader.export(document.id, to: destination)
         #expect(try Data(contentsOf: destination) == Data(contentsOf: source))
         #expect(try await coordinator.read(LibraryItemQueries.fetchAll) == before)
         #expect(try await coordinator.read(JobQueries.fetchAll).first?.stage == .completed)
@@ -267,8 +246,8 @@ struct BenchReferenceTests {
         var items: [Ure.LibraryItem] = []
         for owner in owners {
             items.append(
-                try await ReferenceService(coordinator: coordinator).save(
-                    ReferenceFixture.draft, for: owner, editing: nil))
+                try await MaterialFixture.link(
+                    titled: "Technical sheet", for: owner, in: coordinator))
         }
         return items
     }

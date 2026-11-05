@@ -93,7 +93,7 @@ nonisolated struct PartDraft: Equatable, Sendable {
         if compatibility == .confirmed && JobDraft.optional(compatibilityNote) == nil {
             fields[.compatibilityNote] = "Enter evidence for confirmed compatibility."
         }
-        for link in links where ReferenceDraft.parsedURL(link.url) == nil {
+        for link in links where WebLink.url(from: link.url) == nil {
             fields[.link(link.id)] = "Enter a complete HTTP or HTTPS URL with a host."
         }
         guard fields.isEmpty, let quantity else { throw PartValidationError(fields: fields) }

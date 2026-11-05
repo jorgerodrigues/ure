@@ -150,9 +150,7 @@ struct WorkshopOverviewStateTests {
             calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
             jobs: JobState(service: JobService(coordinator: coordinator)),
             notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
-            references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
-            photos: PhotoState(service: PhotoService(coordinator: coordinator)),
-            documents: DocumentState(service: DocumentService(coordinator: coordinator)),
+            material: MaterialState(service: MaterialService(coordinator: coordinator)),
             tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
             parts: PartState(service: PartService(coordinator: coordinator)))
     }

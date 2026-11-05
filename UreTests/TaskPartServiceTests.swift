@@ -225,11 +225,12 @@ nonisolated struct TaskPartServiceTests {
         let parts = PartService(coordinator: coordinator)
         let needed = try await parts.save(partDraft, for: job.id, editing: nil)
         let ordered = try await TaskPartFixture.change(needed, to: .ordered, using: parts)
-        let photos = PhotoService(coordinator: coordinator)
+        let material = MaterialService(coordinator: coordinator)
         let source = try fixture.source(type: .png)
         let bytes = try Data(contentsOf: source)
-        let photo = try await photos.importFiles([source], for: .job(job.id))[0].outcome.get()
-        let watch = try await photos.setCover(photo.id, for: job.watchID)
+        let photo = try await material.importFiles([source], for: .job(job.id))[0].outcome.get()
+        try await material.setCover(photo.id, for: job.watchID)
+        let watch = try #require(try await coordinator.read(WatchQueries.fetchAll).first)
         let events = try await coordinator.read(ActivityQueries.fetchAll)
         try await coordinator.mutate { db, _, _ in try TaskPartMigrationFixture.removeLinks(in: db)
         }
@@ -242,8 +243,10 @@ nonisolated struct TaskPartServiceTests {
         #expect(try await reopened.read(ActivityQueries.fetchAll) == events)
         #expect(try await reopened.read(JobQueries.fetchAll) == [job])
         #expect(try await reopened.read(WatchQueries.fetchAll) == [watch])
-        #expect(try await reopened.read(PhotoQueries.fetchAll) == [photo])
-        #expect(try Data(contentsOf: await reopened.originalURL(for: photo.asset.id)) == bytes)
+        #expect(try await reopened.read(MaterialQueries.fetchAll) == [photo])
+        #expect(
+            try Data(contentsOf: await reopened.originalURL(for: try #require(photo.asset).id))
+                == bytes)
         #expect(try await reopened.read(TaskPartQueries.fetchAll).isEmpty)
         var draft = JobTaskDraft(task: done)
         draft.status = .waiting

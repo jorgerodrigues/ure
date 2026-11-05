@@ -47,18 +47,14 @@ struct BenchReferenceView: View {
                     Text("External reference · Linked content is not saved offline.")
                         .foregroundStyle(.secondary)
                 }
-                VStack(alignment: .leading, spacing: 8) {
-                    if let caption = reference.item.caption, !caption.isEmpty { Text(caption) }
-                    if !reference.item.sourceURL.isEmpty {
-                        Text(reference.item.sourceURL)
+                if let url = reference.item.url {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(url)
                         Button("Open in Browser", action: openSource)
                     }
-                    if !reference.item.sourceDescription.isEmpty {
-                        Text(reference.item.sourceDescription)
-                    }
-                    if !reference.item.notes.isEmpty { Text(reference.item.notes) }
-                }.frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
+                }
                 if let operationError {
                     Label(operationError, systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.red)
@@ -77,7 +73,7 @@ struct BenchReferenceView: View {
 
     private func openSource() {
         guard let reference else { return }
-        do { try reader.openSource(reference.item) } catch {
+        do { try reader.openLink(reference.item) } catch {
             operationError = error.localizedDescription
         }
     }

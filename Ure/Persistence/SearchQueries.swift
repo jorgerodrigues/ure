@@ -11,6 +11,13 @@ nonisolated enum SearchKind: String, Codable, CaseIterable, Identifiable, Sendab
     case document = "Document"
 
     var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .document: "PDF"
+        default: rawValue
+        }
+    }
 }
 
 nonisolated struct SearchResult: Decodable, Equatable, Identifiable, Sendable, FetchableRecord {

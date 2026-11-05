@@ -129,7 +129,7 @@ nonisolated struct PartService: Sendable {
 
     @MainActor
     func open(_ link: PartLink) throws {
-        guard let url = ReferenceDraft.parsedURL(link.url) else { throw ReferenceError.invalidURL }
-        guard openBrowser(url) else { throw ReferenceError.browserUnavailable }
+        guard let url = WebLink.url(from: link.url) else { throw LinkError.invalidURL }
+        guard openBrowser(url) else { throw LinkError.browserUnavailable }
     }
 }

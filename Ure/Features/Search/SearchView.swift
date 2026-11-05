@@ -37,7 +37,7 @@ struct SearchView: View {
                     List {
                         ForEach(SearchKind.allCases) { kind in
                             if !search.results(for: kind).isEmpty {
-                                Section(kind.rawValue) {
+                                Section(kind.title) {
                                     ForEach(search.results(for: kind)) { result in
                                         SearchResultRow(result: result)
                                     }
@@ -84,7 +84,7 @@ private struct SearchResultRow: View {
         }
         .buttonStyle(.plain)
         .disabled(editing.isSaving || editing.isNavigationPending)
-        .accessibilityLabel("\(result.kind.rawValue): \(result.title), \(result.context)")
+        .accessibilityLabel("\(result.kind.title): \(result.title), \(result.context)")
         .accessibilityIdentifier("searchResult-\(result.id)")
     }
 

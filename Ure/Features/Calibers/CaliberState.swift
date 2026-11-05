@@ -24,6 +24,11 @@ final class CaliberState {
     }
 
     var selectedCaliber: CaliberRecord? { calibers.first { $0.id == selectedID } }
+
+    func caliber(_ id: UUID?) -> CaliberRecord? {
+        guard let id else { return nil }
+        return calibers.first { $0.id == id }
+    }
     var hasUnsavedChanges: Bool { draft != originalDraft }
     var canSave: Bool { draft != nil && !isSaving }
     var isNavigationPending: Bool { pendingNavigation != nil }
