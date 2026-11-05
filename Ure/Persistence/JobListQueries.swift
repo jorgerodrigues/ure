@@ -34,11 +34,11 @@ nonisolated enum JobListQueries {
             sql: "SELECT * FROM checklistStep WHERE jobID IN (\(listed)) ORDER BY position, id",
             arguments: arguments)
         let parts = try PartRecord.fetchAll(
-            db, sql: "SELECT * FROM partRequirement WHERE jobID IN (\(listed))",
+            db, sql: "SELECT * FROM part WHERE jobID IN (\(listed))",
             arguments: arguments)
         let watchesByID = Dictionary(uniqueKeysWithValues: watches.map { ($0.id, $0) })
         let stepsByJob = Dictionary(grouping: steps, by: \.jobID)
-        let partsByJob = Dictionary(grouping: parts, by: \.jobID)
+        let partsByJob = Dictionary(grouping: parts) { $0.jobID }
         return jobs.map { job in
             let jobSteps = stepsByJob[job.id] ?? []
             let jobParts = partsByJob[job.id] ?? []
@@ -48,7 +48,7 @@ nonisolated enum JobListQueries {
             return JobListRow(
                 job: job, watch: job.watchID.flatMap { watchesByID[$0] },
                 progress: ChecklistProgress(records: jobSteps),
-                partsToBuy: jobParts.filter { $0.status == .needed }.count, updatedAt: updatedAt)
+                partsToBuy: jobParts.filter { $0.stage == .needed }.count, updatedAt: updatedAt)
         }
     }
 }

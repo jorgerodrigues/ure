@@ -8,8 +8,8 @@ final class WorkshopApplicationDelegate: NSObject, NSApplicationDelegate {
         guard let restore else { return .terminateNow }
         if restore.isActivating { return .terminateCancel }
         let editing = restore.session.editing
-        if editing.isSaving || editing.isNavigationPending { return .terminateCancel }
-        guard editing.hasUnsavedFields else { return reviewDrafts(sender, restore: restore) }
+        if editing.isSaving { return .terminateCancel }
+        guard editing.hasUnsavedFields else { return finish(sender, restore: restore) }
         Task { await saveFieldsThenTerminate(sender, restore: restore) }
         return .terminateLater
     }
@@ -20,7 +20,7 @@ final class WorkshopApplicationDelegate: NSObject, NSApplicationDelegate {
             sender.reply(toApplicationShouldTerminate: false)
             return
         }
-        switch reviewDrafts(sender, restore: restore) {
+        switch finish(sender, restore: restore) {
         case .terminateNow: sender.reply(toApplicationShouldTerminate: true)
         case .terminateCancel: sender.reply(toApplicationShouldTerminate: false)
         default: break
@@ -37,18 +37,12 @@ final class WorkshopApplicationDelegate: NSObject, NSApplicationDelegate {
         return alert.runModal() == .alertSecondButtonReturn
     }
 
-    private func reviewDrafts(
+    // Quits at once, or first discards a restore that was staged.
+    private func finish(
         _ sender: NSApplication, restore: RestoreState
     ) -> NSApplication.TerminateReply {
-        let editing = restore.session.editing
-        if !editing.hasUnsavedChanges {
-            if restore.staged == nil, !restore.isStaging { return .terminateNow }
-            finishTermination(sender, restore: restore)
-            return .terminateLater
-        }
-        editing.requestNavigation(
-            { self.finishTermination(sender, restore: restore) },
-            onCancel: { sender.reply(toApplicationShouldTerminate: false) })
+        if restore.staged == nil, !restore.isStaging { return .terminateNow }
+        finishTermination(sender, restore: restore)
         return .terminateLater
     }
 
@@ -118,11 +112,7 @@ struct WorkshopWindowGuard: NSViewRepresentable {
         func windowShouldClose(_ sender: NSWindow) -> Bool {
             if editing.isSaving { return false }
             editing.saveFieldsNow()
-            if !editing.hasUnsavedChanges {
-                return originalDelegate?.windowShouldClose?(sender) ?? true
-            }
-            editing.requestNavigation { [weak sender] in sender?.performClose(nil) }
-            return false
+            return originalDelegate?.windowShouldClose?(sender) ?? true
         }
 
         override func responds(to selector: Selector) -> Bool {

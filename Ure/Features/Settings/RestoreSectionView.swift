@@ -47,11 +47,9 @@ struct RestoreSectionView: View {
                     .disabled(!restore.canRestore)
                     .accessibilityIdentifier("restoreLibraryBackup")
             }
-            if restore.session.editing.hasUnsavedChanges || restore.session.editing.isSaving {
-                Text(
-                    "Save or cancel all drafts and wait for pending saves and imports before restoring."
-                )
-                .foregroundStyle(.secondary)
+            if restore.session.editing.hasUnsavedFields || restore.session.editing.isSaving {
+                Text("Wait for your typing, pending saves and imports to finish before restoring.")
+                    .foregroundStyle(.secondary)
             }
             if let message = restore.message { Text(message).textSelection(.enabled) }
             if let error = restore.errorMessage {
@@ -88,7 +86,7 @@ private struct RestoreCountRow: View {
         case "job": "Jobs"
         case "checklistStep": "Checklist steps"
         case "jobTask": "Tasks"
-        case "partRequirement": "Parts"
+        case "part", "partRequirement": "Parts"
         case "partLink": "Part links"
         case "taskPart": "Task part links"
         case "libraryItem": "Material"

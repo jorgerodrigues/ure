@@ -8,7 +8,8 @@ nonisolated struct BackupSummary: Equatable, Sendable {
     let estimatedByteCount: Int64
 
     var itemCount: Int {
-        ["watch", "caliber", "job", "checklistStep", "partRequirement", "libraryItem"]
+        // Backups made before v26 count their parts as part requirements.
+        ["watch", "caliber", "job", "checklistStep", "part", "partRequirement", "libraryItem"]
             .reduce(0) { $0 + (counts[$1] ?? 0) }
     }
 }

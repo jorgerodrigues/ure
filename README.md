@@ -55,11 +55,11 @@ This builds a locally signed Release with Hardened Runtime, verifies its signatu
 
 Local runs use ad-hoc signing. No Apple developer account is required. App Sandbox is enabled. Xcode disables Hardened Runtime for ordinary ad-hoc builds; `make install` explicitly enables it and omits debug entitlements. The current bundle identifier is `local.ure.app`; settle an owner-controlled identifier before distribution and before storing valuable data.
 
-The sidebar has two groups. Workshop holds Jobs and Parts, and Library holds Watches and Calibers. Each section shows a plain count: the jobs in the Jobs list, the parts still to buy, and the watches and calibers that are not archived. Use **Command-1** through **Command-4** to select Jobs, Parts, Watches, and Calibers. **Command-comma** opens Settings. Startup creates or reopens the local library and opens the job you worked on last. Watches and Calibers each have a list and a page you write on, with archived records folded away at the end of the list. Parts shows requirements from open jobs.
+The sidebar has two groups. Workshop holds Jobs and Parts, and Library holds Watches and Calibers. Each section shows a plain count: the jobs in the Jobs list, the parts still to buy, and the watches and calibers that are not archived. Use **Command-1** through **Command-4** to select Jobs, Parts, Watches, and Calibers. **Command-comma** opens Settings. Startup creates or reopens the local library and opens the job you worked on last. Watches and Calibers each have a list and a page you write on, with archived records folded away at the end of the list. Parts lists the parts to buy, ordered, and in hand, with the spares in the drawer.
 
 The toolbar has the section's New button, such as **New Job**, and a search field with the prompt **Search**. **Command-N** runs the same New command. **Command-F** puts the cursor in the search field from every section. Every toolbar button is also a menu command with the same name.
 
-Use **Option-Command-E** to edit the displayed part, **Command-S** to save, and **Command-period** to cancel editing. **Command-[** goes back to the job or watch through the draft guard, with the name its toolbar button has, such as **Back to Job**. The Record menu also has removal and archive actions. These commands follow the displayed record and its permissions. Editing commands are disabled in the read-only reference window. **Pin Reference** is also in the View menu.
+Every record saves as you type, so nothing asks to be saved and **Command-S** has nothing to save. **Command-[** goes back to the job or watch, with the name its toolbar button has, such as **Back to Job**. The Record menu also has removal and archive actions, such as **Delete Part**. These commands follow the displayed record and its permissions. Editing commands are disabled in the read-only reference window. **Pin Reference** is also in the View menu.
 
 Focus a photo and use the arrow keys to pan. Fit and Zoom controls remain available by keyboard. Use **Option-Command-Left Arrow** and **Option-Command-Right Arrow** for the previous or next photo or PDF page. Plain arrows remain available for text, lists, and photo panning. Reference content scrolls so long titles, filenames, and notes do not hide its actions.
 
@@ -75,23 +75,23 @@ Open jobs put the latest saved job, step, or part change first, and done jobs th
 
 Use **Search Library** in the Edit menu, or **Shift-Command-F**, for global search. Results group watches, calibers, jobs, parts, links, photos, and PDFs. A photo or PDF opens in its viewer, and a link opens its record. A word in a record's notes finds that watch, caliber, or job. Each result names its watch, job, or shared caliber. Selecting it opens the exact saved record through the existing draft guard. Done jobs remain searchable. Search always includes archived watches and calibers and their owned records, and marks them as archived.
 
-Search matches saved watch identity, the watch's owner and contact, caliber designation, job titles, the notes of watches, calibers, and jobs, part descriptions, manufacturer references, and material titles. It preserves leading zeros and punctuation. Unicode case matching uses the same rule in every local filter. SQL characters such as `%`, `_`, and quotes are literal search text. PDF contents and text within images are not indexed.
+Search matches saved watch identity, the watch's owner and contact, caliber designation, job titles, the notes of watches, calibers, and jobs, part names, descriptions, and notes, and material titles. It preserves leading zeros and punctuation. Unicode case matching uses the same rule in every local filter. SQL characters such as `%`, `_`, and quotes are literal search text. PDF contents and text within images are not indexed.
 
-The Jobs, Parts, Watches, and Calibers lists search with the toolbar's **Search** field. Job history and parts also have local text filters. Part text covers descriptions and manufacturer references. Filtering keeps an already open detail readable.
+The Jobs, Parts, Watches, and Calibers lists search with the toolbar's **Search** field. Job history also has a local text filter. Part text covers a part's name, description, and notes. Filtering keeps an already open detail readable.
 
 ## Archive and removal
 
 Use **Archive Watch** or **Archive Caliber** in the Record menu, or right-click the record in its list. Any watch can be archived, even one with an open job, and that job stays in Jobs and can still change. **Command-Z** undoes an archive or an unarchive. Archived watches and calibers fold away in the **Archived** section at the end of their list, and their page offers **Unarchive** in the toolbar. They stay in search. Existing watch links to archived calibers stay readable. Archived records reject changes until restored.
 
-A checklist step goes with **Backspace** on a step without text or with **Delete Step**, and **Command-Z** brings it back. Part link removal stays in the part editor and commits with **Save**. Part requirements use **Cancelled** rather than deletion.
+A checklist step goes with **Backspace** on a step without text or with **Delete Step**, and **Command-Z** brings it back. A part goes with **Delete Part** in the Record menu or its right-click menu, and **Command-Z** brings it back with its links.
 
 Material is removed at once, and **Command-Z** brings it back. See [Material](#material). There is no permanent watch or job deletion.
 
-## Parts overview
+## Parts
 
-Parts shows requirements from open jobs in every procurement status. Each row names its watch, job, stage, manufacturer reference, quantity, and status. The most recently saved parts appear first. Filter by Needed, Ordered, Arrived, Installed, or Cancelled. Text search matches the part description, manufacturer reference, watch identity, or job title. Text and status filters combine.
+Parts groups the parts on their way under **To buy**, **Ordered**, and **In hand**, newest change first. Each part is on a job that is open, or a spare in the drawer, which its row marks with a drawer and "Spare". Fitted parts and the parts of Done jobs stay on their job's page. The toolbar says how many are to buy and ordered, such as "2 to buy · 2 ordered", and the sidebar counts the parts to buy. Search matches the part's name, description, and notes, its job, and its watch.
 
-Select a row to open that exact part in its job. Part links open only through their explicit **Open** buttons. **Edit Part**, **Save**, **Cancel**, and **Command-S** use the existing procurement service and draft protection. Committed changes refresh both the overview and job list. Filters retain the selected detail and show a message when excluded. Setting a job to Done removes its parts from the overview and keeps them on the job's page. **Clear Filters** resets text and status. Loading failures show an error and Retry. Bench references remain available in Parts.
+Select a part to open its page. It shows the state as a pop-up with the days the part reached, the name, the job and watch, the description and quantity, the saved links with **Open**, and the notes. Everything saves as you type. Use **New Part** or **Command-N** in Parts to make a spare named "New Part", in hand from today, with the cursor in its name.
 
 ## Watch records
 
@@ -129,19 +129,15 @@ Each change saves without a button: a step's text half a second after you stop t
 
 Libraries from before W039 had tasks with five statuses, details, waiting and skipped reasons, and links to the job's parts. The upgrade makes each task a step in the same order, ticks the Done and Skipped ones, and adds a heading where the group label changes. It writes each task's detail and reasons into the job's notes under "From the old record", after a line such as "Step · Let down the mainspring". The links between tasks and parts go, and the parts stay.
 
-## Required parts
+## Parts on a job
 
-Use **Add Part** in a job detail. Enter a description and a positive whole-number quantity, default 1. Track each separate unit or lot with its own requirement. Manufacturer reference is optional text and keeps leading zeros and punctuation. Compatibility is Unchecked, Confirmed, or Unsuitable. Confirmed requires an evidence note. New parts start Needed or Arrived if the complete lot is already on hand.
+Each part takes one line on its job's page: its state, its name, its description, its quantity when it is more than one, and the day of its state. Type a name on the **Add a part** line and press **Return**. The part is added, Needed, and the line is empty for the next one. **Return** on an empty line moves on to the checklist. While you type, the spares in hand whose name matches show under the line. Press **Down Arrow** to highlight one, then **Return**, or click it, to put that spare on the job. **Esc** empties the line.
 
-Use **Add link** during creation or editing. Each link holds only a complete HTTP or HTTPS URL. A part can have no links or several links. Each saved link has an explicit **Open** action. Saving, loading, and selecting parts do not fetch external content or open the browser. Removing a saved link requires confirmation and takes effect after Save.
+Click a part's state to move it on: Needed, Ordered, In hand, then Fitted. Each records the day. **Command-Z** puts back the state before, with its day. The part's page sets any state from its pop-up. Going back keeps the day of the state the part goes back to and clears the later ones. Right-click a part to set its state, open it, or delete it. The arrow at the end of a line opens the part's page, with **Back to Job**. Parts and checklist steps are independent: a fitted part never ticks a step.
 
-Part editing uses **Save**, **Cancel**, **Command-S**, and the shared draft guard. A failed save keeps all draft fields and links. Pending saves block duplicate writes. A Done job's parts still change. Setting a job to Done keeps every part's status.
+A part's name is required, its description is free text, and its quantity is a whole number above 0. Saved links stay on their parts and open only through **Open**. Prices and buying options come later.
 
-Use **Edit Part** to choose Needed, Ordered, Arrived, Installed, or Cancelled. Save records the current milestone dates. Arrived means the whole lot is on hand. Installed means fitted. Installing from Needed, Ordered, or Cancelled requires confirmation that the whole lot is on hand. Save records arrival and installation together. There is no partial-delivery counter.
-
-Ordering saves an optional order reference. Correcting Arrived, Installed, or Cancelled back to Ordered keeps the order reference. Moving back to Needed clears the current order details.
-
-Backward corrections, cancellation, and restoring a cancelled part require a reason. Save clears milestone dates that no longer apply. Cancellation keeps the order reference for reading. Cancel in the editor discards the draft. A status changed by another saved action requires cancelling and reopening the stale editor. Procurement never changes a checklist step or the job's state.
+Libraries from before W040 had part requirements with five statuses, a manufacturer reference, a compatibility, an order reference, and a status reason. The upgrade makes each a part on its job. The old description becomes the name and the manufacturer reference the description. Arrived becomes In hand and Installed becomes Fitted, with their dates. The compatibility, order reference, and status reason go into the part's notes under "From the old record". A cancelled part goes into its job's notes with its values and links, after a line such as "Part · Hands".
 
 ## Notes
 

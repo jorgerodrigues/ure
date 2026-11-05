@@ -7,7 +7,7 @@ struct WorkshopSidebar: View {
     @Environment(WorkshopNavigation.self) private var navigation
     @Environment(WorkshopEditing.self) private var editing
     @Environment(JobListState.self) private var jobList
-    @Environment(PartsOverviewState.self) private var partsOverview
+    @Environment(PartListState.self) private var partList
     @Environment(WatchState.self) private var watches
     @Environment(CaliberState.self) private var calibers
 
@@ -38,8 +38,8 @@ struct WorkshopSidebar: View {
             guard !jobList.isLoading, jobList.loadError == nil else { return nil }
             return jobList.listedRows.count
         case .parts:
-            guard !partsOverview.isLoading, partsOverview.loadError == nil else { return nil }
-            return partsOverview.toBuyCount
+            guard !partList.isLoading, partList.loadError == nil else { return nil }
+            return partList.toBuyCount
         case .watches:
             guard !watches.isLoading, watches.loadError == nil else { return nil }
             return watches.activeCount

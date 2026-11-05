@@ -35,7 +35,7 @@ nonisolated struct JobMigrationTests {
                 tables: try String.fetchAll(
                     db, sql: "SELECT name FROM sqlite_schema WHERE type = 'table'"),
                 steps: try ChecklistQueries.fetchAll(db),
-                parts: try PartRecord.fetchAll(db, sql: "SELECT * FROM partRequirement"),
+                parts: try PartRecord.fetchAll(db, sql: "SELECT * FROM part"),
                 triggers: try String.fetchAll(
                     db, sql: "SELECT name FROM sqlite_schema WHERE type = 'trigger' ORDER BY name"),
                 integrity: try String.fetchOne(db, sql: "PRAGMA integrity_check"),
@@ -53,7 +53,8 @@ nonisolated struct JobMigrationTests {
         #expect(stored.steps.map(\.id) == [LegacyJobFixture.taskID, LegacyJobFixture.skipped])
         #expect(stored.steps.map(\.isTicked) == [false, true])
         #expect(stored.parts.map(\.id) == [LegacyJobFixture.partID])
-        #expect(stored.parts.first?.statusReason == "Wrong size")
+        // v26 then makes the requirement a part, with its status reason in its notes.
+        #expect(stored.parts.first?.notes == "From the old record\n\nStatus reason: Wrong size")
         #expect(stored.triggers == ["watch_cover_insert", "watch_cover_update"])
         // A removed value is found through the job's notes, and a waiting job through its title.
         #expect(
@@ -83,7 +84,7 @@ nonisolated struct JobMigrationTests {
         let staged = try await coordinator.stageRestore(from: package)
         #expect(
             staged.summary.appliedMigrations == [
-                "v23-job-states", "v24-checklist-steps", "v25-jobs-without-watch",
+                "v23-job-states", "v24-checklist-steps", "v25-jobs-without-watch", "v26-parts",
             ])
         #expect(staged.summary.counts["job"] == LegacyJobFixture.jobs.count)
         // The staged library is already upgraded, so its history is gone.

@@ -96,7 +96,7 @@ nonisolated struct PerformanceMeasurements: Sendable {
             try MaterialQueries.fetchAll(db).map { $0.id.uuidString }
         }
         try await measure("parts", into: &report) { db in
-            try PartsOverviewQueries.fetch(db).map { $0.id.uuidString }
+            try PartListQueries.fetch(db).map { $0.id.uuidString }
         }
         try await measure("bench", into: &report) { db in
             try BenchSnapshot.fetch(db).items.map { $0.id.uuidString }

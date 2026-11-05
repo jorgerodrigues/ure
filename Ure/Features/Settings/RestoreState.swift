@@ -31,7 +31,6 @@ final class RestoreState {
     var canRestore: Bool {
         guard case .ready = library.phase else { return false }
         return !isBusy && !backup.isExporting && !session.editing.isSaving
-            && !session.editing.hasUnsavedChanges && !session.editing.isNavigationPending
             && !session.editing.hasUnsavedFields
     }
 

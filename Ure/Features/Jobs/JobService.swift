@@ -109,7 +109,7 @@ nonisolated struct JobService: Sendable {
                 job.title == Self.newTitle, job.problem == nil, job.waitingFor == nil,
                 (try RecordNotesQueries.fetch(.job(id), in: db) ?? "").isEmpty
             else { return false }
-            for table in ["checklistStep", "partRequirement", "libraryItem"] {
+            for table in ["checklistStep", "part", "libraryItem"] {
                 let count =
                     try Int.fetchOne(
                         db, sql: "SELECT count(*) FROM \(table) WHERE jobID = ?",

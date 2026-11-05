@@ -1,110 +1,13 @@
 import Foundation
 import GRDB
+import Synchronization
 import Testing
 
 @testable import Ure
 
 nonisolated struct PartServiceTests {
-    @Test(arguments: PartCompatibility.allCases)
-    func referencesAndSeveralURLOnlyLinksSurviveRestart(compatibility: PartCompatibility)
-        async throws
-    {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        let job = try await JobTaskFixture.job(coordinator)
-        let service = PartService(coordinator: coordinator)
-        var draft = PartFixture.draft()
-        draft.manufacturerReference = "0012.3–Å/04"
-        draft.compatibility = compatibility
-        draft.compatibilityNote = "Compared with the original and caliber sheet."
-        draft.links = [PartLinkDraft(url: "https://example.org/parts/0012?variant=A")]
-        let first = try await service.save(draft, for: job.id, editing: nil)
-        var edit = PartDraft(part: first)
-        edit.links.append(PartLinkDraft(url: "http://example.org/reference#drawing"))
-        let saved = try await service.save(edit, for: job.id, editing: first.id)
-        #expect(saved.record.manufacturerReference == "0012.3–Å/04")
-        #expect(saved.record.status == .needed && saved.record.quantity == 1)
-        #expect(saved.record.compatibility == compatibility)
-        #expect(saved.links.first == first.links.first)
-        #expect(saved.links.map(\.url) == edit.links.map(\.url))
-        #expect(try await coordinator.read(JobQueries.fetchAll) == [job])
-        try await coordinator.close()
-        let reopened = fixture.coordinator()
-        _ = try await reopened.open()
-        #expect(try await reopened.read(PartQueries.fetchAll) == [saved])
-        try await reopened.close()
-    }
-
-    @Test(arguments: ["", "0", "-1", "1.5", "+2", "2e3", "NaN", "１２", "9999999999999999999999"])
-    func quantityMustBeAPositiveWholeNumber(quantity: String) async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        let job = try await JobTaskFixture.job(coordinator)
-        var draft = PartFixture.draft()
-        draft.quantity = quantity
-        await #expect(throws: PartValidationError.self) {
-            try await PartService(coordinator: coordinator).save(draft, for: job.id, editing: nil)
-        }
-        #expect(try await coordinator.read(PartQueries.fetchAll).isEmpty)
-        try await coordinator.close()
-    }
-
     @Test
-    func optionalReferencesLinksAndCompatibilityValidation() async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        let job = try await JobTaskFixture.job(coordinator)
-        let service = PartService(coordinator: coordinator)
-        let first = try await service.save(PartFixture.draft(), for: job.id, editing: nil)
-        #expect(first.links.isEmpty && first.record.manufacturerReference == nil)
-        var draft = PartDraft(part: first)
-        draft.quantity = " 002 "
-        draft.compatibility = .confirmed
-        draft.compatibilityNote = " \n\t "
-        await #expect(throws: PartValidationError.self) {
-            try await service.save(draft, for: job.id, editing: first.id)
-        }
-        draft.compatibility = .unsuitable
-        let unsuitable = try await service.save(draft, for: job.id, editing: first.id)
-        #expect(unsuitable.record.compatibility == .unsuitable && unsuitable.record.quantity == 2)
-        draft.description = " \n\t "
-        await #expect(throws: PartValidationError.self) {
-            try await service.save(draft, for: job.id, editing: first.id)
-        }
-        for url in [
-            "", "file:///tmp/a", "javascript:alert(1)", "ftp://example.org/a", "https://",
-            "https://example.org/a b",
-        ] {
-            var invalid = PartDraft(part: unsuitable)
-            invalid.links = [PartLinkDraft(url: url)]
-            await #expect(throws: PartValidationError.self) {
-                try await service.save(invalid, for: job.id, editing: first.id)
-            }
-        }
-        for sql in [
-            "UPDATE partRequirement SET quantity = 0", "UPDATE partRequirement SET quantity = 1.5",
-            "UPDATE partRequirement SET description = ''",
-            "UPDATE partRequirement SET compatibility = 'Confirmed'",
-            "UPDATE partRequirement SET compatibility = 'Unknown'",
-            "UPDATE partRequirement SET jobID = 'MISSING'",
-            "UPDATE partRequirement SET status = 'Unknown'",
-        ] {
-            await #expect(throws: DatabaseError.self) {
-                try await coordinator.mutate { db, _, _ in try db.execute(sql: sql) }
-            }
-        }
-        #expect(try await coordinator.read(PartQueries.fetchAll) == [unsuitable])
-        try await coordinator.close()
-    }
-
-    @Test
-    func ownershipFailuresAndLinkFailureRollBackEveryChange() async throws {
+    func aPartTakesOneLineAndGoesToTheEndOfItsJob() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -112,120 +15,230 @@ nonisolated struct PartServiceTests {
         let job = try await JobTaskFixture.job(coordinator)
         let other = try await JobTaskFixture.job(coordinator)
         let service = PartService(coordinator: coordinator)
-        var draft = PartFixture.draft()
-        draft.links = [PartLinkDraft(url: "https://example.org/first")]
-        let first = try await service.save(draft, for: job.id, editing: nil)
-        await #expect(throws: PartError.jobMismatch) {
-            try await service.save(draft, for: other.id, editing: first.id)
-        }
-        await #expect(throws: PartError.linkMismatch) {
-            try await service.save(draft, for: other.id, editing: nil)
-        }
-        await #expect(throws: PartError.missingRecord) {
-            try await service.save(draft, for: job.id, editing: UUID())
-        }
-        await #expect(throws: JobError.missingRecord) {
-            try await service.save(PartFixture.draft(), for: UUID(), editing: nil)
-        }
-        var duplicate = PartDraft(part: first)
-        duplicate.links += duplicate.links
-        await #expect(throws: PartError.linkMismatch) {
-            try await service.save(duplicate, for: job.id, editing: first.id)
-        }
+
+        let mainspring = try await service.add(named: "  Mainspring GR 3800 ", to: job.id)
+        let crystal = try await service.add(named: "Crystal", to: job.id)
+        let crown = try await service.add(named: "Crown", to: other.id)
+        let gasket = try await service.add(named: "Gasket", to: job.id)
+        #expect(mainspring.name == "Mainspring GR 3800" && mainspring.jobID == job.id)
+        #expect(mainspring.stage == .needed && mainspring.quantity == 1)
+        #expect(mainspring.orderedAt == nil && mainspring.inHandAt == nil)
+        #expect(mainspring.description == nil && mainspring.notes.isEmpty)
+        #expect([mainspring, crystal, gasket].map(\.position) == [0, 1, 2])
+        #expect(crown.position == 0)
+        #expect(try await service.add(named: " \n", to: job.id).name == PartService.newName)
+        #expect(
+            try await coordinator.read(PartQueries.fetchAll).filter { $0.jobID == job.id }.map(
+                \.name) == ["Mainspring GR 3800", "Crystal", "Gasket", "New Part"])
+
+        // A part of an archived job can't be added or changed. A Done job takes parts.
         try await coordinator.mutate { db, _, _ in
             try db.execute(
-                sql: """
-                    CREATE TRIGGER failPartLink BEFORE INSERT ON partLink
-                    WHEN NEW.url LIKE '%failed%' BEGIN SELECT RAISE(ABORT, 'fixture disk failure'); END
-                    """)
+                sql: "UPDATE job SET archivedAt = 1 WHERE id = ?", arguments: [other.id.uuidString])
         }
-        var edit = PartDraft(part: first)
-        edit.description = "Changed description"
-        edit.links = [PartLinkDraft(url: "https://example.org/failed")]
-        await #expect(throws: DatabaseError.self) {
-            try await service.save(edit, for: job.id, editing: first.id)
+        await #expect(throws: ArchiveError.archived) {
+            try await service.add(named: "Hands", to: other.id)
         }
-        await #expect(throws: DatabaseError.self) {
-            try await service.save(edit, for: job.id, editing: nil)
-        }
-        #expect(try await coordinator.read(PartQueries.fetchAll) == [first])
-        try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failPartLink")
-        }
-        let saved = try await service.save(edit, for: job.id, editing: first.id)
-        #expect(saved.links.count == 1 && saved.links.first?.url == edit.links.first?.url)
-        #expect(try await coordinator.read { try PartLink.fetchAll($0) } == saved.links)
+        await #expect(throws: ArchiveError.archived) { try await service.advance(crown.id) }
+        _ = try await JobService(coordinator: coordinator).setStage(job.id, to: .done)
+        #expect(try await service.add(named: "Hands", to: job.id).position == 4)
         try await coordinator.close()
     }
 
-    @Test(arguments: [JobStage.waiting, .done])
-    func aJobInAnyStateKeepsItsPartsAndTakesChanges(stage: JobStage) async throws {
+    @Test
+    func theStateMovesOnWithItsDayAndFittedIsTheLast() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let clock = PartClock()
+        let coordinator = fixture.coordinator(dependencies: LibraryDependencies(now: clock.now))
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        let service = PartService(coordinator: coordinator)
+        let part = try await service.add(named: "Mainspring", to: job.id)
+
+        clock.set(1_000)
+        let ordered = try await service.advance(part.id)
+        #expect(ordered.prior == PartStageValue(stage: .needed))
+        #expect(ordered.part.stage == .ordered && ordered.part.orderedAt == clock.date(1_000))
+        clock.set(2_000)
+        let inHand = try await service.advance(part.id).part
+        #expect(inHand.stage == .inHand && inHand.orderedAt == clock.date(1_000))
+        #expect(inHand.inHandAt == clock.date(2_000) && inHand.fittedAt == nil)
+        clock.set(3_000)
+        let fitted = try await service.advance(part.id)
+        #expect(fitted.part.stage == .fitted && fitted.part.fittedAt == clock.date(3_000))
+        #expect(fitted.prior == PartStageValue(part: inHand))
+        clock.set(4_000)
+        let again = try await service.advance(part.id)
+        #expect(again.part == fitted.part && again.prior == PartStageValue(part: fitted.part))
+
+        // Going back keeps the days the part still has reached and clears the rest.
+        let back = try await service.setStage(part.id, to: .ordered).part
+        #expect(back.orderedAt == clock.date(1_000) && back.inHandAt == nil && back.fittedAt == nil)
+        let needed = try await service.setStage(part.id, to: .needed).part
+        #expect(needed.orderedAt == nil && needed.inHandAt == nil && needed.fittedAt == nil)
+        // Skipping a state records only the day of the state reached.
+        clock.set(5_000)
+        let skipped = try await service.setStage(part.id, to: .inHand).part
+        #expect(skipped.orderedAt == nil && skipped.inHandAt == clock.date(5_000))
+
+        // Undo puts back a state exactly, with its days.
+        let restored = try await service.restoreStage(
+            part.id, to: PartStageValue(part: fitted.part))
+        #expect(PartStageValue(part: restored) == PartStageValue(part: fitted.part))
+
+        // The library refuses a day that the state has not reached.
+        await #expect(throws: DatabaseError.self) {
+            try await coordinator.mutate { db, _, _ in
+                try db.execute(
+                    sql: "UPDATE part SET stage = 'Needed' WHERE id = ?",
+                    arguments: [part.id.uuidString])
+            }
+        }
+        try await coordinator.close()
+    }
+
+    @Test
+    func aSpareIsInHandAndGoesToAJobOnlyFromTheDrawer() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let clock = PartClock()
+        clock.set(7_000)
+        let coordinator = fixture.coordinator(dependencies: LibraryDependencies(now: clock.now))
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        let service = PartService(coordinator: coordinator)
+        _ = try await service.add(named: "Mainspring", to: job.id)
+
+        let spare = try await service.add(named: "", to: nil)
+        #expect(spare.isSpare && spare.name == PartService.newName)
+        #expect(spare.stage == .inHand && spare.inHandAt == clock.date(7_000))
+
+        let used = try await service.useSpare(spare.id, on: job.id)
+        #expect(used.jobID == job.id && used.position == 1 && used.stage == .inHand)
+        #expect(used.inHandAt == clock.date(7_000))
+        await #expect(throws: PartError.spareTaken) {
+            try await service.useSpare(spare.id, on: job.id)
+        }
+        // Undo puts the spare back in the drawer.
+        let back = try await service.place(spare.id, at: PartPlacement(part: spare))
+        #expect(back.isSpare && back.position == spare.position)
+
+        // A spare still to buy can't go on a job yet.
+        let needed = try await service.setStage(spare.id, to: .needed).part
+        #expect(needed.isSpare)
+        await #expect(throws: PartError.spareTaken) {
+            try await service.useSpare(spare.id, on: job.id)
+        }
+        try await coordinator.close()
+    }
+
+    @Test
+    func eachFactSavesOnItsOwnAndRefusesWhatItDoesNotTake() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
         let service = PartService(coordinator: coordinator)
-        let saved = try await service.save(PartFixture.draft(), for: job.id, editing: nil)
-        let jobs = JobService(coordinator: coordinator)
-        #expect(try await jobs.setStage(job.id, to: stage).job.stage == stage)
-        #expect(try await coordinator.read(PartQueries.fetchAll) == [saved])
-        var edit = PartDraft(part: saved)
-        edit.quantity = "3"
-        #expect(try await service.save(edit, for: job.id, editing: saved.id).record.quantity == 3)
-        let added = try await service.save(PartFixture.draft(), for: job.id, editing: nil)
-        #expect(try await coordinator.read(PartQueries.fetchAll).count == 2)
-        _ = try await jobs.setStage(job.id, to: .inProgress)
-        #expect(try await coordinator.read { try PartQueries.fetch(added.id, in: $0) } == added)
+        let part = try await service.add(named: "Crystal", to: job.id)
+
+        #expect(
+            try await service.update(part.id, .name(" Crystal 30.0 mm ")).name == "Crystal 30.0 mm")
+        await #expect(throws: PartValidationError.self) {
+            try await service.update(part.id, .name("  "))
+        }
+        #expect(
+            try await service.update(part.id, .description(" Domed sapphire ")).description
+                == "Domed sapphire")
+        #expect(try await service.update(part.id, .description(" ")).description == nil)
+        #expect(try await service.update(part.id, .quantity(" 2 ")).quantity == 2)
+        #expect(try await service.update(part.id, .quantity("٣")).quantity == 3)
+        for text in ["0", "-1", "1.5", "two", "", "½"] {
+            await #expect(throws: PartError.invalidQuantity, "\(text)") {
+                try await service.update(part.id, .quantity(text))
+            }
+        }
+        let notes = "From Cousins, 3 November.\n  Keep the old one.  "
+        let noted = try await service.update(part.id, .notes(notes))
+        #expect(noted.notes == notes && noted.quantity == 3 && noted.name == "Crystal 30.0 mm")
+        // A value already saved changes nothing, not even the edit time.
+        #expect(try await service.update(part.id, .notes(notes)) == noted)
+        // Search finds the part by what its notes say.
+        #expect(
+            try await coordinator.read { try SearchQueries.fetch("keep the old one", in: $0) }.map(
+                \.recordID) == [part.id])
         try await coordinator.close()
     }
 
     @Test
-    func migrationPreservesExistingRecordsAndOriginals() async throws {
+    func aRemovedPartComesBackWithItsLinks() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
-        let before = try await coordinator.open()
+        _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let steps = try await ChecklistService(coordinator: coordinator).save(
-            [ChecklistStep(id: UUID(), text: "Clean all parts", isTicked: true)], for: job.id)
-        try await coordinator.mutate { db, originals, _ in
-            try Data("Original bytes".utf8).write(to: originals.appending(path: "evidence.bin"))
-            try PartMigrationFixture.removeParts(in: db)
-        }
-        try await coordinator.close()
-        let reopened = fixture.coordinator()
-        let after = try await reopened.open()
-        #expect(after.generationID != before.generationID)
-        #expect(try await reopened.read(JobQueries.fetchAll) == [job])
-        #expect(try await reopened.read(ChecklistQueries.fetchAll) == steps)
-        #expect(try await reopened.read(PartQueries.fetchAll).isEmpty)
+        let service = PartService(coordinator: coordinator)
+        let part = try await service.update(
+            try await service.add(named: "Mainspring", to: job.id).id, .notes("Keep this"))
+        let link = PartLink(
+            id: UUID(), partID: part.id, position: 0, url: "https://example.org/gr3800",
+            createdAt: Date(timeIntervalSince1970: 30), updatedAt: Date(timeIntervalSince1970: 31))
+        try await coordinator.mutate { db, _, _ in try link.insert(db) }
+
+        let removed = try await service.remove(part.id)
+        #expect(removed.part == part && removed.links == [link])
+        #expect(try await coordinator.read(PartQueries.library) == PartLibrary())
+        let restored = try await service.restore(removed)
+        #expect(restored == part)
         #expect(
-            try Data(
-                contentsOf: LibraryFiles.generation(after.generationID, in: fixture.root).appending(
-                    path: "originals/evidence.bin")) == Data("Original bytes".utf8))
-        _ = try await PartService(coordinator: reopened).save(
-            PartFixture.draft(), for: job.id, editing: nil)
-        try await reopened.close()
+            try await coordinator.read(PartQueries.library)
+                == PartLibrary(parts: [part], links: [part.id: [link]]))
+        #expect(
+            try await coordinator.read { try SearchQueries.fetch("keep this", in: $0) }.map(
+                \.recordID) == [part.id])
+        try await coordinator.close()
+    }
+
+    @Test
+    @MainActor
+    func savedLinksOpenOnlyWhenAskedAndSayWhenTheyCannot() throws {
+        let opened = OpenedLinks()
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        let service = PartService(coordinator: coordinator) { url in
+            opened.urls.append(url)
+            return true
+        }
+        let link = PartLink(
+            id: UUID(), partID: UUID(), position: 0, url: "https://example.org/gr3800",
+            createdAt: .now, updatedAt: .now)
+        try service.open(link)
+        #expect(opened.urls.map(\.absoluteString) == ["https://example.org/gr3800"])
+        let broken = PartLink(
+            id: UUID(), partID: UUID(), position: 0, url: "example", createdAt: .now,
+            updatedAt: .now)
+        #expect(throws: LinkError.invalidURL) { try service.open(broken) }
+        let closed = PartService(coordinator: coordinator) { _ in false }
+        #expect(throws: LinkError.browserUnavailable) { try closed.open(link) }
     }
 }
 
-nonisolated enum PartFixture {
-    static func draft() -> PartDraft {
-        var draft = PartDraft()
-        draft.description = "Setting lever spring Å時計"
-        return draft
+// A clock a test sets, so each state's day is known.
+nonisolated final class PartClock: Sendable {
+    private let seconds = Mutex<Double>(1_700_000_000)
+
+    var now: @Sendable () -> Date {
+        { [self] in seconds.withLock { Date(timeIntervalSince1970: $0) } }
     }
+
+    func set(_ offset: Double) { seconds.withLock { $0 = 1_700_000_000 + offset } }
+
+    func date(_ offset: Double) -> Date { Date(timeIntervalSince1970: 1_700_000_000 + offset) }
 }
 
-nonisolated enum PartMigrationFixture {
-    static func removeParts(in db: Database) throws {
-        try TaskPartMigrationFixture.removeLinks(in: db)
-        try db.drop(table: "partLink")
-        try db.drop(table: "partRequirement")
-        try db.execute(sql: "ALTER TABLE job DROP COLUMN unfinishedPartsReason")
-        try db.execute(
-            sql:
-                "DELETE FROM grdb_migrations WHERE identifier IN ('v13-part-requirements', 'v14-supplier-options', 'v15-part-procurement')"
-        )
-    }
+// The links a test's browser was asked to open.
+final class OpenedLinks {
+    var urls: [URL] = []
 }

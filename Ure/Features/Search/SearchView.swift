@@ -82,7 +82,7 @@ private struct SearchResultRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(editing.isSaving || editing.isNavigationPending)
+        .disabled(editing.isSaving)
         .accessibilityLabel("\(result.kind.title): \(result.title), \(result.context)")
         .accessibilityIdentifier("searchResult-\(result.id)")
     }

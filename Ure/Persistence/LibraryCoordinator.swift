@@ -401,9 +401,11 @@ actor LibraryCoordinator {
             .values(in: database)
     }
 
-    func partsOverviewValues() throws -> AsyncValueObservation<[OverviewPart]> {
+    // The parts in the Parts list: those still to buy, ordered or in hand, on open jobs or in
+    // the drawer.
+    func partListValues() throws -> AsyncValueObservation<[PartListRow]> {
         guard let database else { throw LibraryError.notOpen }
-        return ValueObservation.tracking(PartsOverviewQueries.fetch).values(in: database)
+        return ValueObservation.tracking(PartListQueries.fetch).values(in: database)
     }
 
     func searchValues(text: String) throws -> AsyncValueObservation<[SearchResult]> {
@@ -418,9 +420,9 @@ actor LibraryCoordinator {
         return ValueObservation.tracking(ChecklistQueries.fetchAll).values(in: database)
     }
 
-    func partValues() throws -> AsyncValueObservation<[PartRequirement]> {
+    func partValues() throws -> AsyncValueObservation<PartLibrary> {
         guard let database else { throw LibraryError.notOpen }
-        return ValueObservation.tracking(PartQueries.fetchAll).values(in: database)
+        return ValueObservation.tracking(PartQueries.library).values(in: database)
     }
 
     func materialValues() throws -> AsyncValueObservation<[MaterialRecord]> {

@@ -34,6 +34,8 @@ nonisolated struct SearchResult: Decodable, Equatable, Identifiable, Sendable, F
 
     var id: String { "\(kind.rawValue)-\(recordID.uuidString)" }
     var context: String {
+        // A part with no job is a spare in the drawer.
+        if kind == .part, jobID == nil { return "Spare" }
         if let jobTitle, let watchName { return "\(watchName) · \(jobTitle)" }
         if let jobTitle { return "No watch yet · \(jobTitle)" }
         if let watchName { return "Watch · \(watchName)" }
@@ -74,11 +76,11 @@ nonisolated enum SearchQueries {
                         r.archivedAt IS NOT NULL OR w.archivedAt IS NOT NULL, r.searchKey
                     FROM job r LEFT JOIN watch w ON w.id = r.watchID
                     UNION ALL
-                    SELECT r.id, 'Part', r.description, w.id, j.id, NULL,
+                    SELECT r.id, 'Part', r.name, w.id, j.id, NULL,
                         w.name, j.title, NULL,
                         w.archivedAt IS NOT NULL OR j.archivedAt IS NOT NULL, r.searchKey
-                    FROM partRequirement r
-                    JOIN job j ON j.id = r.jobID LEFT JOIN watch w ON w.id = j.watchID
+                    FROM part r
+                    LEFT JOIN job j ON j.id = r.jobID LEFT JOIN watch w ON w.id = j.watchID
                     UNION ALL
                     SELECT r.id, r.kind, r.title, w.id, j.id, c.id,
                         w.name, j.title, \(caliberTitle("c")),

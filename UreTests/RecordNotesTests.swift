@@ -67,7 +67,7 @@ nonisolated struct RecordNotesMigrationTests {
         #expect(
             staged.summary.appliedMigrations == [
                 "v19-record-notes", "v20-material", "v21-caliber-facts", "v22-watch-owner",
-                "v23-job-states", "v24-checklist-steps", "v25-jobs-without-watch",
+                "v23-job-states", "v24-checklist-steps", "v25-jobs-without-watch", "v26-parts",
             ])
         #expect(staged.summary.counts["note"] == nil && staged.summary.counts["watch"] == 2)
         let result = try await coordinator.activateRestore(staged)
@@ -306,7 +306,7 @@ struct RecordNotesStateTests {
         jobNotes.change(to: "Typed before leaving", undoManager: nil)
         var navigated = false
         editing.requestNavigation { navigated = true }
-        #expect(navigated && !editing.showsUnsavedChanges && !editing.hasUnsavedChanges)
+        #expect(navigated)
         try await waitUntil { !notes.hasUnsavedChanges }
         #expect(try await service.text(for: owners[1]) == "Typed before leaving")
         try await coordinator.close()

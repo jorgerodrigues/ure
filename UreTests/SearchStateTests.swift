@@ -20,48 +20,40 @@ struct SearchStateTests {
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
         let editing = SearchEditingFixture.make(coordinator)
-        let overview = PartsOverviewState(coordinator: coordinator)
+        let list = PartListState(coordinator: coordinator)
         var observations = SearchEditingFixture.observe(editing)
-        observations += [Task { await search.observe() }, Task { await overview.observe() }]
+        observations += [Task { await search.observe() }, Task { await list.observe() }]
         defer { observations.forEach { $0.cancel() } }
         try await SearchEditingFixture.waitUntil {
             !search.isLoading && search.loadError == nil && !editing.parts.isLoading
-                && !overview.isLoading
+                && !list.isLoading
         }
         #expect(search.results.isEmpty)
-        var draft = PartFixture.draft()
-        draft.manufacturerReference = "0012–Å/stock"
-        draft.links = [PartLinkDraft(url: "https://example.org/part")]
         let service = PartService(coordinator: coordinator)
-        let part = try await service.save(draft, for: job.id, editing: nil)
+        let part = try await service.add(named: "Mainspring", to: job.id)
+        _ = try await service.update(part.id, .description("0012–Å/stock"))
         try await SearchEditingFixture.waitUntil {
             search.results.first?.recordID == part.id && editing.parts.parts.count == 1
-                && overview.rows.count == 1
+                && list.rows.count == 1
         }
-        overview.searchText = "0012–å/stock"
-        #expect(overview.filteredRows.map(\.id) == [part.id])
-        #expect(editing.parts.records(for: job.id, matching: "0012–å/stock").map(\.id) == [part.id])
-        var edit = PartDraft(part: part)
-        edit.manufacturerReference = "replacement"
-        edit.status = .arrived
-        try await JobTaskFixture.failWrites(coordinator, on: "partRequirement")
+        list.searchText = "0012–å/stock"
+        #expect(list.filteredRows.map(\.id) == [part.id])
+        try await JobTaskFixture.failWrites(coordinator, on: "part")
         await #expect(throws: DatabaseError.self) {
-            try await service.save(edit, for: job.id, editing: part.id)
+            try await service.update(part.id, .description("replacement"))
         }
         #expect(search.results.first?.recordID == part.id)
         #expect(
             try await coordinator.read { try SearchQueries.fetch("replacement", in: $0) }.isEmpty)
-        try await JobTaskFixture.allowWrites(coordinator, on: "partRequirement")
-        let saved = try await service.save(edit, for: job.id, editing: part.id)
+        try await JobTaskFixture.allowWrites(coordinator, on: "part")
+        _ = try await service.update(part.id, .description("replacement"))
         try await SearchEditingFixture.waitUntil {
-            search.results.isEmpty && overview.filteredRows.isEmpty
+            search.results.isEmpty && list.filteredRows.isEmpty
         }
         #expect(
             try await coordinator.read { try SearchQueries.fetch("replacement", in: $0) }.map(
                 \.recordID) == [part.id])
-        edit = PartDraft(part: saved)
-        edit.manufacturerReference = ""
-        _ = try await service.save(edit, for: job.id, editing: part.id)
+        _ = try await service.update(part.id, .description(""))
         #expect(
             try await coordinator.read { try SearchQueries.fetch("replacement", in: $0) }.isEmpty)
         observations.forEach { $0.cancel() }
@@ -109,11 +101,9 @@ struct SearchStateTests {
                 pdf, titled: "PDF needle \(index)", for: owner, in: coordinator)
             records.append((document.item.title, .document, document.id, owner))
         }
-        var partDraft = PartFixture.draft()
-        partDraft.description = "Part needle"
-        let part = try await PartService(coordinator: coordinator).save(
-            partDraft, for: jobID, editing: nil)
-        records.append((partDraft.description, .part, part.id, .job(jobID)))
+        let partName = "Part needle"
+        let part = try await PartService(coordinator: coordinator).add(named: partName, to: jobID)
+        records.append((partName, .part, part.id, .job(jobID)))
         let observations = SearchEditingFixture.observe(editing)
         defer { observations.forEach { $0.cancel() } }
         try await SearchEditingFixture.waitUntil { SearchEditingFixture.loaded(editing) }
@@ -166,39 +156,48 @@ struct SearchStateTests {
         try await SearchEditingFixture.waitUntil {
             editing.jobs.jobs.first { $0.id == jobID }?.stage == .done
         }
-        search.text = partDraft.description
+        search.text = partName
         let observation = Task { await search.observe() }
         defer { observation.cancel() }
         try await SearchEditingFixture.waitUntil { search.results.first?.recordID == part.id }
         search.open("Part-\(part.id.uuidString)", editing: editing, navigation: navigation)
         // A part of a Done job opens from search and can still change.
-        #expect(
-            editing.parts.selectedID == part.id
-                && editing.parts.canWrite(jobID, jobs: editing.jobs))
+        #expect(editing.parts.selectedID == part.id && editing.canWrite(part))
         observation.cancel(); await observation.value
+        // A spare in the drawer has no job, so it opens in Parts.
+        let spare = try await PartService(coordinator: coordinator).add(
+            named: "Spare needle", to: nil)
+        search.text = spare.name
+        let spareSearch = Task { await search.observe() }
+        defer { spareSearch.cancel() }
+        try await SearchEditingFixture.waitUntil {
+            search.results.first?.recordID == spare.id && editing.parts.part(spare.id) != nil
+        }
+        #expect(search.results.first?.context == "Spare")
+        search.open("Part-\(spare.id.uuidString)", editing: editing, navigation: navigation)
+        #expect(
+            navigation.selection == .parts && editing.parts.selectedID == spare.id
+                && editing.jobs.selectedID == nil && editing.watches.selectedID == nil)
+        spareSearch.cancel(); await spareSearch.value
         observations.forEach { $0.cancel() }
         for observation in observations { await observation.value }
         try await coordinator.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func navigationProtectsDraftsAndRemovedResultsLeaveCurrentSelectionUntouched() async throws {
+    func aRemovedPartLeavesTheCurrentSelectionUntouched() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let first = try await JobTaskFixture.job(coordinator)
         let second = try await JobTaskFixture.job(coordinator)
-        var draft = PartFixture.draft()
-        draft.description = "Needle part"
-        let part = try await PartService(coordinator: coordinator).save(
-            draft, for: second.id, editing: nil)
-        let bench = try await PartService(coordinator: coordinator).save(
-            PartFixture.draft(), for: first.id, editing: nil)
+        let part = try await PartService(coordinator: coordinator).add(
+            named: "Needle part", to: second.id)
         let editing = SearchEditingFixture.make(coordinator)
         let navigation = WorkshopNavigation(configuration: AppConfiguration.current)
         let search = SearchState(coordinator: coordinator)
-        search.text = draft.description
+        search.text = part.name
         let observations = SearchEditingFixture.observe(editing) + [Task { await search.observe() }]
         defer { observations.forEach { $0.cancel() } }
         try await SearchEditingFixture.waitUntil {
@@ -206,34 +205,13 @@ struct SearchStateTests {
         }
         editing.watches.select(first.watchID)
         editing.jobs.open(first)
-        editing.parts.open(bench, for: first.id)
-        editing.parts.edit(jobs: editing.jobs)
-        editing.parts.draft?.description = "Keep correction"
         search.present()
         search.open("Part-\(part.id.uuidString)", editing: editing, navigation: navigation)
-        #expect(editing.showsUnsavedChanges && editing.watches.selectedID == first.watchID)
-        editing.stay()
-        #expect(editing.parts.draft?.description == "Keep correction" && search.isPresented)
-        editing.parts.draft?.description = ""
-        search.open("Part-\(part.id.uuidString)", editing: editing, navigation: navigation)
-        await editing.saveAndContinue()
-        #expect(
-            editing.parts.saveError != nil && editing.watches.selectedID == first.watchID
-                && search.isPresented)
-        editing.parts.draft?.description = "Keep correction"
-        search.open("Part-\(part.id.uuidString)", editing: editing, navigation: navigation)
-        await editing.saveAndContinue()
         #expect(
             editing.watches.selectedID == second.watchID && editing.jobs.selectedID == second.id
-                && editing.parts.selectedID == part.id)
-        editing.parts.edit(jobs: editing.jobs)
-        editing.parts.draft?.description = "Draft discarded"
-        search.open("Part-\(part.id.uuidString)", editing: editing, navigation: navigation)
-        editing.discardAndContinue()
-        #expect(editing.parts.draft == nil && editing.parts.selectedID == part.id)
+                && editing.parts.selectedID == part.id && !search.isPresented)
         try await coordinator.mutate { db, _, _ in
-            try db.execute(
-                sql: "DELETE FROM partRequirement WHERE id = ?", arguments: [part.id.uuidString])
+            try db.execute(sql: "DELETE FROM part WHERE id = ?", arguments: [part.id.uuidString])
         }
         try await SearchEditingFixture.waitUntil {
             search.results.isEmpty && !editing.parts.parts.contains { $0.id == part.id }

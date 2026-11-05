@@ -40,7 +40,7 @@ nonisolated struct ChecklistMigrationTests {
                 tables: try String.fetchAll(
                     db, sql: "SELECT name FROM sqlite_schema WHERE type = 'table'"),
                 columns: try db.columns(in: "checklistStep").map(\.name),
-                parts: try PartRecord.fetchAll(db, sql: "SELECT * FROM partRequirement"),
+                parts: try PartRecord.fetchAll(db, sql: "SELECT * FROM part"),
                 integrity: try String.fetchOne(db, sql: "PRAGMA integrity_check"),
                 foreignKeys: try Row.fetchAll(db, sql: "PRAGMA foreign_key_check").count
             )
@@ -76,7 +76,9 @@ nonisolated struct ChecklistMigrationTests {
         try LegacyChecklistFixture.package(at: package)
         let staged = try await coordinator.stageRestore(from: package)
         #expect(
-            staged.summary.appliedMigrations == ["v24-checklist-steps", "v25-jobs-without-watch"])
+            staged.summary.appliedMigrations == [
+                "v24-checklist-steps", "v25-jobs-without-watch", "v26-parts",
+            ])
         #expect(
             staged.summary.counts["checklistStep"]
                 == LegacyChecklistFixture.jobs.map(\.expectedLines.count).reduce(0, +))
@@ -219,10 +221,25 @@ nonisolated enum TaskPartMigrationFixture {
     }
 }
 
+// Puts a library back to the schema before v13, without part requirements.
+nonisolated enum PartRequirementMigrationFixture {
+    static func removeParts(in db: Database) throws {
+        try TaskPartMigrationFixture.removeLinks(in: db)
+        try db.drop(table: "partLink")
+        try db.drop(table: "partRequirement")
+        try db.execute(sql: "ALTER TABLE job DROP COLUMN unfinishedPartsReason")
+        try db.execute(
+            sql: """
+                DELETE FROM grdb_migrations WHERE identifier IN
+                    ('v13-part-requirements', 'v14-supplier-options', 'v15-part-procurement')
+                """)
+    }
+}
+
 // Puts a library back to the schema before v11, without tasks.
 nonisolated enum JobTaskMigrationFixture {
     static func removeTasks(in db: Database) throws {
-        try PartMigrationFixture.removeParts(in: db)
+        try PartRequirementMigrationFixture.removeParts(in: db)
         try db.execute(sql: "DELETE FROM grdb_migrations WHERE identifier = 'v12-task-order'")
         try db.drop(table: "jobTask")
         try db.execute(sql: "ALTER TABLE job DROP COLUMN unfinishedTasksReason")

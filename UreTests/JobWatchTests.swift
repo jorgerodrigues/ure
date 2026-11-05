@@ -31,8 +31,8 @@ struct JobWatchTests {
             try await ChecklistService(coordinator: coordinator).save(
                 [ChecklistStep(id: UUID(), text: "Fit the new crystal")], for: id
             ).first)
-        let part = try await PartService(coordinator: coordinator).save(
-            PartFixture.draft(), for: id, editing: nil)
+        let part = try await PartService(coordinator: coordinator).add(
+            named: "Sapphire 30.0 mm", to: id)
         let link = try await MaterialFixture.link(
             titled: "Crystal sizes", for: .job(id), in: coordinator)
         _ = try await service.setStage(id, to: .waiting)
@@ -54,7 +54,7 @@ struct JobWatchTests {
             try await reopened.read { try ChecklistQueries.ordered(for: id, in: $0) }.map(\.id)
                 == [step.id])
         #expect(
-            try await reopened.read(PartsOverviewQueries.fetch).map(\.id) == [part.id])
+            try await reopened.read(PartListQueries.fetch).map(\.id) == [part.id])
         #expect(
             try await reopened.read(LibraryItemQueries.fetchAll).map(\.id).contains(link.id))
         let rows = try await reopened.read { try JobListQueries.fetch($0, doneSince: .distantPast) }

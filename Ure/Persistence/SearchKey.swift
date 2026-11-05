@@ -17,7 +17,7 @@ nonisolated enum SearchKey {
     }
 
     enum Table: String, CaseIterable {
-        case watch, caliber, job, libraryItem, partRequirement
+        case watch, caliber, job, libraryItem, part
 
         var fields: [String] {
             switch self {
@@ -29,7 +29,7 @@ nonisolated enum SearchKey {
             case .caliber: ["designation", "manufacturer", "notes"]
             case .job: ["title", "notes"]
             case .libraryItem: ["title"]
-            case .partRequirement: ["description", "manufacturerReference"]
+            case .part: ["name", "description", "notes"]
             }
         }
     }

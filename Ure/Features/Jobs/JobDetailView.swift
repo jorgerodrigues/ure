@@ -9,8 +9,8 @@ struct JobDetailView: View {
 
     var body: some View {
         Group {
-            if let job = jobs.selectedJob, parts.isPresenting(for: job.id) {
-                PartDetailView(jobID: job.id)
+            if let job = jobs.selectedJob, let part = parts.selectedPart, part.jobID == job.id {
+                PartDetailView(showsBack: true)
             } else if let job = jobs.selectedJob, material.isPresenting(on: .job(job.id)) {
                 MaterialViewerView(page: .job(job.id))
             } else if let job = jobs.selectedJob {
@@ -69,7 +69,7 @@ private struct JobPage: View {
                 if let error = jobs.saveError {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                 }
-                PartSectionView(jobID: job.id)
+                PartSectionView(jobID: job.id).zIndex(1)
                 ChecklistSectionView(jobID: job.id)
                 MaterialSectionView(owner: .job(job.id), caliber: caliber, style: .page)
                 NotesSectionView(owner: .job(job.id), style: .page, edited: job.updatedAt)
