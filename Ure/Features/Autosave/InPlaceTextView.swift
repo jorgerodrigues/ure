@@ -34,6 +34,8 @@ struct InPlaceTextView: NSViewRepresentable {
         view.setPrompt(field.prompt)
         view.setLabel(field.label)
         view.isEditable = isEditable
+        // A field that stops taking changes while you type in it ends the edit, which saves it.
+        if !isEditable, view.currentEditor() != nil { view.window?.makeFirstResponder(nil) }
         if let editor = view.currentEditor() as? NSTextView {
             if editor.string != text { editor.string = text }
         } else if view.stringValue != text {

@@ -36,7 +36,9 @@ final class FactField {
     let label: String
     let prompt: String
     let editor: AutosaveField
-    private(set) var suggestion: String?
+    // A suggestion holds only for the text it was made for, so Undo or any other change of
+    // the text drops it.
+    private var offer: Offer?
     @ObservationIgnored private let rule: FactRule
     @ObservationIgnored private let suggestions: () -> [String]
     private var flagsWhileEditing = false
@@ -61,6 +63,11 @@ final class FactField {
     var saveError: String? { editor.saveError }
     var hasUnsavedChanges: Bool { editor.hasUnsavedChanges }
 
+    var suggestion: String? {
+        guard let offer, offer.typed == editor.text else { return nil }
+        return offer.suggestion
+    }
+
     // Why the text does not save yet, and the value the record keeps meanwhile. It shows once
     // focus has left the field, so a half-typed number is never called wrong.
     var problem: String? {
@@ -74,37 +81,37 @@ final class FactField {
 
     func beginEditing() {
         flagsWhileEditing = problem != nil
-        suggestion = nil
+        offer = nil
         editor.beginEditing()
     }
 
     func change(to newText: String, undoManager: UndoManager?) {
         let isTypingOn = newText.count > editor.text.count && newText.hasPrefix(editor.text)
         editor.change(to: newText, undoManager: undoManager)
-        suggestion = isTypingOn ? match(for: newText) : nil
+        offer = isTypingOn ? match(for: newText).map { Offer(typed: newText, suggestion: $0) } : nil
     }
 
     // Puts the whole suggestion in the field. False when there is none.
     @discardableResult
     func acceptSuggestion(undoManager: UndoManager?) -> Bool {
         guard let suggestion else { return false }
-        self.suggestion = nil
+        offer = nil
         editor.change(to: suggestion, undoManager: undoManager)
         return true
     }
 
-    func dismissSuggestion() { suggestion = nil }
+    func dismissSuggestion() { offer = nil }
 
     // Saves at once. Once saved, the field shows the text the way it shows a saved value.
     func endEditing() {
-        suggestion = nil
+        offer = nil
         flagsWhileEditing = false
         editor.endEditing()
         Task { await showSavedText() }
     }
 
     func revert(undoManager: UndoManager?) {
-        suggestion = nil
+        offer = nil
         editor.revert(undoManager: undoManager)
     }
 
@@ -131,4 +138,9 @@ final class FactField {
                     of: text, options: [.anchored, .caseInsensitive, .diacriticInsensitive]) != nil
         }
     }
+}
+
+private struct Offer {
+    let typed: String
+    let suggestion: String
 }

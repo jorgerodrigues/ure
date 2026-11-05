@@ -2,9 +2,10 @@ import Foundation
 
 // A number typed into a fact field, read the way you would write it on paper: "35", "35mm" or
 // "35,0 mm". The region's decimal mark separates the fraction. Spaces, the region's grouping
-// mark and the other of "." and "," can group thousands, and each group after the first has
-// three digits. A unit after the number must be one the field knows. Everything else is not a
-// number yet. Numbers show in the region format with the field's unit.
+// mark and the other of "." and "," can group the digits. The last group has three digits and
+// the others two or three, which also takes Indian grouping such as "12,34,567". A unit after
+// the number must be one the field knows. Everything else is not a number yet. Numbers show in
+// the region format, in its digits, with the field's unit.
 nonisolated struct NumberEntry: Sendable {
     enum Minimum: Sendable {
         case zero
@@ -108,7 +109,7 @@ nonisolated struct NumberEntry: Sendable {
     }
 
     // The number as plain ASCII digits with "." before the fraction, or nil when it is not a
-    // number or its grouping is not in threes.
+    // number or its grouping does not end in three digits.
     private static func digits(
         _ number: String, decimal: Character, groups: Set<Character>
     ) -> String? {
@@ -121,20 +122,28 @@ nonisolated struct NumberEntry: Sendable {
         }
         if wholeGroups.count > 1 {
             guard wholeGroups.allSatisfy({ !$0.isEmpty && $0.allSatisfy(isDigit) }),
-                (1...3).contains(wholeGroups[0].count),
-                wholeGroups.dropFirst().allSatisfy({ $0.count == 3 })
+                (1...3).contains(wholeGroups[0].count), wholeGroups.last?.count == 3,
+                wholeGroups.dropFirst().allSatisfy({ (2...3).contains($0.count) })
             else { return nil }
         } else if !whole.allSatisfy(isDigit) {
             return nil
         }
-        let wholeDigits = wholeGroups.joined()
+        let wholeDigits = ascii(wholeGroups.joined())
         guard !wholeDigits.isEmpty || !fraction.isEmpty else { return nil }
         let integer = wholeDigits.isEmpty ? "0" : wholeDigits
-        return fraction.isEmpty ? integer : "\(integer).\(fraction)"
+        return fraction.isEmpty ? integer : "\(integer).\(ascii(fraction))"
     }
 
+    // A decimal digit in any script, such as "٣" in an Arabic region, which shows numbers
+    // in its own digits.
     private static func isDigit(_ character: Character) -> Bool {
-        character.isASCII && character.isNumber
+        guard character.unicodeScalars.count == 1, let scalar = character.unicodeScalars.first
+        else { return false }
+        return scalar.properties.numericType == .decimal
+    }
+
+    private static func ascii(_ digits: some StringProtocol) -> String {
+        digits.compactMap(\.wholeNumberValue).map(String.init).joined()
     }
 
     private static func withoutTrailingDot(_ unit: String) -> String {

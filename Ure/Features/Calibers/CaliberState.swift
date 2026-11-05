@@ -102,7 +102,8 @@ final class CaliberState {
 
     func toggleArchiveCommand() { Task { await toggleArchive() } }
 
-    // Facts still saving finish first, so archiving never turns them into failed saves.
+    // Facts still saving finish first. A fact that does not save stops the archive, because
+    // an archived caliber's facts can't be corrected.
     @discardableResult
     func toggleArchive() async -> Bool {
         guard !isSaving, let record = selectedCaliber else { return false }
@@ -110,7 +111,12 @@ final class CaliberState {
         saveError = nil
         defer { isSaving = false }
         if record.archivedAt == nil, let facts = facts[record.id] {
-            for field in facts.all where field.hasUnsavedChanges { _ = await field.flush() }
+            for field in facts.all where field.hasUnsavedChanges {
+                guard await field.flush() else {
+                    saveError = "A fact on this page did not save. Correct it or undo it first."
+                    return false
+                }
+            }
         }
         do {
             let saved = try await ArchiveService(coordinator: service.coordinator).setCaliber(

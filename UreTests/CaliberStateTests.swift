@@ -187,6 +187,19 @@ struct CaliberStateTests {
         await #expect(throws: ArchiveError.archived) {
             try await service.update(caliber.id, .maker("Changed while archived"))
         }
+        #expect(await state.toggleArchive())
+        let beatRate = try #require(state.facts(for: caliber.id)?.beatRate)
+        beatRate.beginEditing()
+        beatRate.change(to: "fast", undoManager: nil)
+        beatRate.endEditing()
+        #expect(await !state.toggleArchive())
+        #expect(state.saveError != nil && beatRate.text == "fast")
+        #expect(try await coordinator.read(CaliberQueries.fetchAll).first?.archivedAt == nil)
+        beatRate.beginEditing()
+        beatRate.change(to: "28800", undoManager: nil)
+        #expect(await state.toggleArchive())
+        let saved = try #require(try await coordinator.read(CaliberQueries.fetchAll).first)
+        #expect(saved.beatRate == 28_800 && saved.archivedAt != nil && state.saveError == nil)
         observation.cancel()
         await observation.value
         try await coordinator.close()

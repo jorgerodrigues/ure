@@ -63,6 +63,7 @@ nonisolated struct NumberEntryTests {
             (CaliberNumbers.liftAngle, "52.5°", 52.5),
             (CaliberNumbers.liftAngle, "52.5 degrees", 52.5),
             (CaliberNumbers.powerReserve, "1,234.5 hrs", 1_234.5),
+            (CaliberNumbers.jewels, "12,34,567", 1_234_567),
             (CaliberNumbers.jewels, "17", 17),
             (CaliberNumbers.jewels, "", nil),
         ]
@@ -71,6 +72,7 @@ nonisolated struct NumberEntryTests {
         }
         for (entry, text) in [
             (CaliberNumbers.liftAngle, "52,5"), (CaliberNumbers.beatRate, "28,80"),
+            (CaliberNumbers.beatRate, "2,88,00"), (CaliberNumbers.beatRate, "1234,567"),
             (CaliberNumbers.beatRate, "28.800.1"), (CaliberNumbers.beatRate, "nan"),
             (CaliberNumbers.beatRate, String(repeating: "9", count: 400)),
         ] {
@@ -92,7 +94,16 @@ nonisolated struct NumberEntryTests {
         #expect(
             CaliberNumbers.beatRate.normalized("28800vph", locale: portugal) == "28\u{a0}800 vph")
         #expect(CaliberNumbers.beatRate.normalized("not yet", locale: portugal) == "not yet")
-        for locale in [portugal, unitedStates, Locale(identifier: "de_CH")] {
+        let egypt = Locale(identifier: "ar_EG")
+        #expect(try CaliberNumbers.liftAngle.value(from: "٥٢٫٥°", locale: egypt) == 52.5)
+        #expect(try CaliberNumbers.beatRate.value(from: "28800 vph", locale: egypt) == 28_800)
+        #expect(throws: NumberEntryProblem.self) {
+            try CaliberNumbers.jewels.value(from: "1½", locale: unitedStates)
+        }
+        for locale in [
+            portugal, unitedStates, Locale(identifier: "de_CH"), Locale(identifier: "ar_EG"),
+            Locale(identifier: "fa_IR"), Locale(identifier: "hi_IN@numbers=deva"),
+        ] {
             for value in [0.5, 17, 2_500, 28_800, 1_234_567.125] {
                 let text = CaliberNumbers.powerReserve.text(for: value, locale: locale)
                 #expect(
@@ -219,6 +230,30 @@ struct FactFieldTests {
         #expect(field.suggestion == nil)
         try await waitUntil { !field.hasUnsavedChanges }
         #expect(store.texts == ["M"])
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func undoDropsASuggestionMadeForTheTextItTookAway() async throws {
+        let store = SavedTexts()
+        let field = FactField(
+            label: "Winding", prompt: "Manual, Automatic or Quartz", actionName: "Winding",
+            text: "", rule: .anyText, suggestions: { ["Manual", "Automatic", "Quartz"] },
+            save: store.save, pause: PauseGate().pause)
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        field.beginEditing()
+        undo.beginUndoGrouping()
+        field.change(to: "Au", undoManager: undo)
+        undo.endUndoGrouping()
+        #expect(field.suggestion == "Automatic")
+        undo.undo()
+        #expect(field.text.isEmpty && field.suggestion == nil)
+        #expect(!field.acceptSuggestion(undoManager: undo))
+        undo.redo()
+        #expect(field.text == "Au" && field.suggestion == "Automatic")
+        field.endEditing()
+        try await waitUntil { !field.hasUnsavedChanges }
+        #expect(store.texts.last == "Au")
     }
 
     @Test(.timeLimit(.minutes(1)))

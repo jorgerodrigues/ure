@@ -72,8 +72,9 @@ private struct CaliberFactRows: View {
     let caliberID: UUID
     let facts: CaliberFacts
 
+    // While the caliber archives, its facts can't change, so the archive's save covers them.
     var body: some View {
-        let isEditable = editing.canWrite(.caliber(caliberID))
+        let isEditable = editing.canWrite(.caliber(caliberID)) && !calibers.isSaving
         FactRow(
             field: facts.name, isEditable: isEditable, identifier: "caliberName",
             requestsFocus: calibers.nameToFocus == caliberID, didFocus: calibers.nameFocused)
