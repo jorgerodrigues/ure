@@ -29,6 +29,8 @@ final class MaterialState {
     private(set) var isImporting = false
     @ObservationIgnored private var importTask: Task<Void, Never>?
     @ObservationIgnored private var changeTask: Task<Void, Never>?
+    // The latest removal of each material, so Undo restores what that removal took away.
+    @ObservationIgnored private var removals: [UUID: RemovedMaterial] = [:]
     @ObservationIgnored private weak var undoManager: UndoManager?
 
     init(
@@ -40,7 +42,13 @@ final class MaterialState {
     }
 
     var isBusy: Bool { isChanging || pendingChanges > 0 || isExporting || isImporting }
-    var hasUnsavedTitles: Bool { titleFields.values.contains { $0.hasUnsavedChanges } }
+    // Titles of material on screen that still have to save. A removed material's title does not
+    // count, because nothing shows it until Undo brings the material back.
+    var hasUnsavedTitles: Bool { !unsavedTitleFields.isEmpty }
+
+    private var unsavedTitleFields: [AutosaveField] {
+        records.compactMap { titleFields[$0.id] }.filter(\.hasUnsavedChanges)
+    }
 
     // Material in the order it was added.
     func records(for owner: LibraryItemOwner) -> [MaterialRecord] {
@@ -93,24 +101,26 @@ final class MaterialState {
         titleFields[id] = AutosaveField(
             text: record.item.title, actionName: "Rename",
             save: { [service] title in try await service.rename(id, to: title, for: owner) },
-            pause: pause)
+            pause: pause, accepts: Self.isTitle)
+    }
+
+    private static func isTitle(_ text: String) -> Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     // Leaving a blank title puts back the title it had when editing began.
     func endEditingTitle(_ field: AutosaveField, undoManager: UndoManager?) {
-        if field.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            field.revert(undoManager: undoManager)
-        }
+        if !Self.isTitle(field.text) { field.revert(undoManager: undoManager) }
         field.endEditing()
     }
 
     func saveTitlesNow() {
-        for field in titleFields.values where field.hasUnsavedChanges { field.saveNow() }
+        for field in unsavedTitleFields { field.saveNow() }
     }
 
     func saveAllTitles() async -> Bool {
         var succeeded = true
-        for field in titleFields.values where field.hasUnsavedChanges {
+        for field in unsavedTitleFields {
             if await !field.flush() { succeeded = false }
         }
         return succeeded
@@ -172,8 +182,11 @@ final class MaterialState {
         }
     }
 
+    // Shows material that the library has not reported yet. Material it already reported keeps
+    // its current title, which may have changed since.
     private func insert(_ record: MaterialRecord) {
-        if !records.contains(where: { $0.id == record.id }) { records.append(record) }
+        guard !records.contains(where: { $0.id == record.id }) else { return }
+        records.append(record)
         adoptTitle(of: record)
     }
 
@@ -260,8 +273,11 @@ final class MaterialState {
         defer { isChanging = false }
         errors[page] = nil
         await changeTask?.value
+        // A title still being typed saves first, so Undo brings the material back with it.
+        if let field = titleFields[record.id] { _ = await field.flush() }
         do {
             let removed = try await service.remove(record.id, from: page)
+            removals[record.id] = removed
             records.removeAll { $0.id == record.id }
             if presented?.itemID == record.id { presented = nil }
             registerRestore(removed, page: page, undoManager: undoManager)
@@ -302,7 +318,9 @@ final class MaterialState {
         _ removed: RemovedMaterial, page: LibraryItemOwner, undoManager: UndoManager?
     ) {
         registerRemoval(removed, page: page, undoManager: undoManager)
-        enqueue(page: page) { [service] in try await service.restore(removed) }
+        enqueue(page: page) { [service] in
+            try await service.restore(self.removals[removed.item.id] ?? removed)
+        }
     }
 
     private func removeAgain(
@@ -311,12 +329,12 @@ final class MaterialState {
         registerRestore(removed, page: page, undoManager: undoManager)
         if presented?.itemID == removed.item.id { presented = nil }
         enqueue(page: page) { [service] in
-            _ = try await service.remove(removed.item.id, from: page)
+            self.removals[removed.item.id] = try await service.remove(removed.item.id, from: page)
         }
     }
 
     private func enqueue(
-        page: LibraryItemOwner, _ change: @escaping @Sendable () async throws -> Void
+        page: LibraryItemOwner, _ change: @escaping () async throws -> Void
     ) {
         let previous = changeTask
         errors[page] = nil

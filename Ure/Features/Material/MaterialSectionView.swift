@@ -36,7 +36,7 @@ struct MaterialSectionView: View {
             }
         }
         .fileImporter(
-            isPresented: $showsImporter, allowedContentTypes: [.image, .pdf],
+            isPresented: $showsImporter, allowedContentTypes: [.item],
             allowsMultipleSelection: true, onCompletion: pickedFiles)
     }
 
@@ -311,7 +311,7 @@ private struct ChipFlowLayout: Layout {
         for row in rows(for: subviews, width: bounds.width) {
             var x = bounds.minX
             for index in row.indices {
-                let size = subviews[index].sizeThatFits(.unspecified)
+                let size = chipSize(subviews[index], width: bounds.width)
                 subviews[index].place(
                     at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
                 x += size.width + spacing
@@ -330,7 +330,7 @@ private struct ChipFlowLayout: Layout {
         var rows: [Row] = []
         var current = Row()
         for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
+            let size = chipSize(subviews[index], width: width)
             let needed = current.indices.isEmpty ? size.width : current.width + spacing + size.width
             if needed > width, !current.indices.isEmpty {
                 rows.append(current)
@@ -343,6 +343,13 @@ private struct ChipFlowLayout: Layout {
         }
         if !current.indices.isEmpty { rows.append(current) }
         return rows
+    }
+
+    // A chip is never wider than the row, so a long title truncates instead of overflowing.
+    private func chipSize(_ subview: LayoutSubview, width: CGFloat) -> CGSize {
+        let natural = subview.sizeThatFits(.unspecified)
+        guard width.isFinite, natural.width > width else { return natural }
+        return subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
     }
 }
 

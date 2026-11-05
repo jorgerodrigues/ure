@@ -4,6 +4,7 @@ import Observation
 // One text field that saves as you type. A change saves after a pause in typing, when focus
 // leaves, and when the app asks for every field to save. Each burst of typing is one Undo step,
 // and Undo and Redo save again. Esc puts back the text the field had when focus entered it.
+// Undo never offers back a text the field does not accept, such as a blank title.
 @Observable
 final class AutosaveField {
     static let typingPause: Duration = .milliseconds(500)
@@ -16,6 +17,7 @@ final class AutosaveField {
     @ObservationIgnored private let actionName: String
     @ObservationIgnored private let save: (String) async throws -> Void
     @ObservationIgnored private let pause: (Duration) async throws -> Void
+    @ObservationIgnored private let accepts: (String) -> Bool
     @ObservationIgnored private var scheduledSave: Task<Void, Never>?
     @ObservationIgnored private var runningSave: Task<Bool, Never>?
     @ObservationIgnored private var textBeforeEditing: String?
@@ -24,13 +26,15 @@ final class AutosaveField {
 
     init(
         text: String, actionName: String, save: @escaping (String) async throws -> Void,
-        pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+        pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        accepts: @escaping (String) -> Bool = { _ in true }
     ) {
         self.text = text
         savedText = text
         self.actionName = actionName
         self.save = save
         self.pause = pause
+        self.accepts = accepts
     }
 
     var hasUnsavedChanges: Bool { text != savedText || isSaving }
@@ -130,7 +134,7 @@ final class AutosaveField {
     }
 
     private func registerUndo(restoring value: String, with undoManager: UndoManager?) {
-        guard let undoManager else { return }
+        guard let undoManager, accepts(value) else { return }
         self.undoManager = undoManager
         undoManager.registerUndo(withTarget: self) { [weak undoManager] field in
             MainActor.assumeIsolated {

@@ -89,6 +89,42 @@ struct MaterialStateTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
+    func undoAfterRedoRestoresTheCoverChosenInBetween() async throws {
+        let fixture = ImportFixture()
+        defer { fixture.remove() }
+        let coordinator = LibraryCoordinator(root: fixture.root)
+        _ = try await coordinator.open()
+        let owners = try await ReferenceFixture.owners(coordinator)
+        let service = MaterialService(coordinator: coordinator)
+        let photo = try await MaterialFixture.file(
+            try fixture.source(type: .png), for: owners[0], in: coordinator)
+        let watch = try #require(try await coordinator.read(WatchQueries.fetchAll).first)
+        let state = MaterialState(service: service)
+        let observation = Task { await state.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { state.records.count == 1 }
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        undo.beginUndoGrouping()
+        #expect(
+            await state.remove(try #require(state.records.first), on: owners[0], undoManager: undo))
+        undo.endUndoGrouping()
+        undo.undo()
+        await state.waitForChanges()
+        try await waitUntil { state.records.count == 1 }
+        try await service.setCover(photo.id, for: watch.id)
+        undo.redo()
+        await state.waitForChanges()
+        #expect(try await coordinator.read(WatchQueries.fetchAll).first?.coverPhotoID == nil)
+        undo.undo()
+        await state.waitForChanges()
+        try await waitUntil { state.records.count == 1 }
+        #expect(try await coordinator.read(WatchQueries.fetchAll).first?.coverPhotoID == photo.id)
+        observation.cancel()
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
     func aTitleSavesAsYouTypeAndABlankTitlePutsBackTheOldOne() async throws {
         let fixture = ImportFixture()
         defer { fixture.remove() }
@@ -139,6 +175,95 @@ struct MaterialStateTests {
         #expect(
             try await coordinator.read(LibraryItemQueries.fetchAll).first?.title
                 == "Typed before quitting")
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func undoNeverBringsBackABlankTitle() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let owner = try #require(try await ReferenceFixture.owners(coordinator).first)
+        let service = MaterialService(coordinator: coordinator)
+        let link = try await service.addLink(
+            try #require(URL(string: "https://example.org")), for: owner)
+        let gate = MaterialPauseGate()
+        let state = MaterialState(service: service, pause: gate.pause)
+        let observation = Task { await state.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { state.records.count == 1 }
+        let field = try #require(state.titleField(for: link.id))
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+
+        field.beginEditing()
+        undo.beginUndoGrouping()
+        field.change(to: "", undoManager: undo)
+        undo.endUndoGrouping()
+        try await gate.elapse()
+        try await waitUntil { field.savedText.isEmpty }
+        // A burst that starts from a blank title registers no Undo, so it needs no group.
+        field.change(to: "Supplier page", undoManager: undo)
+        try await gate.elapse()
+        try await waitUntil { field.savedText == "Supplier page" }
+        state.endEditingTitle(field, undoManager: undo)
+        try await waitUntil { state.records.first?.item.title == "Supplier page" }
+        undo.undo()
+        try await waitUntil {
+            !field.hasUnsavedChanges && state.records.first?.item.title == "example.org"
+        }
+        #expect(field.text == "example.org" && !undo.canUndo)
+
+        field.beginEditing()
+        undo.beginUndoGrouping()
+        field.change(to: " ", undoManager: undo)
+        undo.endUndoGrouping()
+        try await gate.elapse()
+        try await waitUntil { field.savedText == " " }
+        state.endEditingTitle(field, undoManager: undo)
+        try await waitUntil { !field.hasUnsavedChanges && field.text == "example.org" }
+        while undo.canUndo {
+            undo.undo()
+            try await waitUntil { !field.hasUnsavedChanges }
+            #expect(!field.text.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+        #expect(
+            try await coordinator.read(LibraryItemQueries.fetchAll).first?.title == "example.org")
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func removingMaterialSavesItsTypedTitleFirstAndLeavesNothingUnsaved() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let owner = try #require(try await ReferenceFixture.owners(coordinator).first)
+        let service = MaterialService(coordinator: coordinator)
+        let link = try await service.addLink(
+            try #require(URL(string: "https://example.org")), for: owner)
+        let gate = MaterialPauseGate()
+        let state = MaterialState(service: service, pause: gate.pause)
+        let observation = Task { await state.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { state.records.count == 1 }
+        let field = try #require(state.titleField(for: link.id))
+        field.beginEditing()
+        field.change(to: "Typed before removal", undoManager: nil)
+        #expect(state.hasUnsavedTitles)
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        undo.beginUndoGrouping()
+        let record = try #require(state.records.first)
+        #expect(await state.remove(record, on: owner, undoManager: undo))
+        undo.endUndoGrouping()
+        #expect(!state.hasUnsavedTitles && state.records.isEmpty)
+        undo.undo()
+        await state.waitForChanges()
+        try await waitUntil { state.records.count == 1 }
+        #expect(state.records.first?.item.title == "Typed before removal")
+        #expect(!state.hasUnsavedTitles)
         try await coordinator.close()
     }
 
