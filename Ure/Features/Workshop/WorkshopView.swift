@@ -9,7 +9,6 @@ struct WorkshopView: View {
     @Environment(JobState.self) private var jobs
     @Environment(WorkshopOverviewState.self) private var workshop
     @Environment(PartsOverviewState.self) private var partsOverview
-    @Environment(NoteState.self) private var notes
     @Environment(JobTaskState.self) private var tasks
     @Environment(PartState.self) private var parts
     @Environment(ReferenceState.self) private var references
@@ -75,7 +74,6 @@ struct WorkshopView: View {
         .task(jobs.observe)
         .task(id: workshop.observationRevision, workshop.observe)
         .task(id: partsOverview.observationRevision, partsOverview.observe)
-        .task(notes.observe)
         .task(tasks.observe)
         .task(parts.observe)
         .task(references.observe)
@@ -203,7 +201,7 @@ struct WorkshopView: View {
         didRestoreSelection = true
         guard !editing.hasUnsavedChanges, !editing.isSaving, watches.draft == nil,
             navigation.selectedSection == .workshop, calibers.selectedID == nil,
-            calibers.draft == nil, !jobs.isEditing, notes.draft == nil, references.draft == nil,
+            calibers.draft == nil, !jobs.isEditing, references.draft == nil,
             photos.draft == nil, documents.draft == nil, tasks.draft == nil, parts.draft == nil,
             watches.selectedID == nil, jobs.selectedID == nil,
             let job = jobs.jobs.first(where: { $0.id == bench.jobID })

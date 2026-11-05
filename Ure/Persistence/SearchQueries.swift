@@ -5,7 +5,6 @@ nonisolated enum SearchKind: String, Codable, CaseIterable, Identifiable, Sendab
     case watch = "Watch"
     case caliber = "Caliber"
     case job = "Job"
-    case note = "Note"
     case part = "Part"
     case link = "Link"
     case photo = "Photo"
@@ -34,20 +33,11 @@ nonisolated struct SearchResult: Decodable, Equatable, Identifiable, Sendable, F
         return kind.rawValue
     }
 
-    var noteOwner: NoteOwner? {
+    var itemOwner: LibraryItemOwner? {
         if let jobID { return .job(jobID) }
         if let caliberID { return .caliber(caliberID) }
         if let watchID { return .watch(watchID) }
         return nil
-    }
-
-    var itemOwner: LibraryItemOwner? {
-        switch noteOwner {
-        case .job(let id): .job(id)
-        case .watch(let id): .watch(id)
-        case .caliber(let id): .caliber(id)
-        case nil: nil
-        }
     }
 }
 
@@ -76,15 +66,6 @@ nonisolated enum SearchQueries {
                         w.name, r.title, NULL,
                         r.archivedAt IS NOT NULL OR w.archivedAt IS NOT NULL, r.searchKey
                     FROM job r JOIN watch w ON w.id = r.watchID
-                    UNION ALL
-                    SELECT r.id, 'Note', r.title, w.id, j.id, c.id,
-                        w.name, j.title, c.designation || coalesce(' · ' || c.variant, ''),
-                        w.archivedAt IS NOT NULL OR j.archivedAt IS NOT NULL
-                            OR c.archivedAt IS NOT NULL, r.searchKey
-                    FROM note r
-                    LEFT JOIN job j ON j.id = r.jobID
-                    LEFT JOIN watch w ON w.id = coalesce(r.watchID, j.watchID)
-                    LEFT JOIN caliber c ON c.id = r.caliberID
                     UNION ALL
                     SELECT r.id, 'Part', r.description, w.id, j.id, NULL,
                         w.name, j.title, NULL,

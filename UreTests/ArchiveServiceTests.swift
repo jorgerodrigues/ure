@@ -86,8 +86,8 @@ nonisolated struct ArchiveServiceTests {
                 CaliberDraft(caliber: archived), editing: caliber.id)
         }
         await #expect(throws: ArchiveError.archived) {
-            try await NoteService(coordinator: coordinator).save(
-                NoteDraft(), for: .caliber(caliber.id), editing: nil)
+            try await RecordNotesService(coordinator: coordinator).save(
+                "Shared finding", for: .caliber(caliber.id))
         }
         await #expect(throws: ArchiveError.archived) {
             try await ReferenceService(coordinator: coordinator).save(

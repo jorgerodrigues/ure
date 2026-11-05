@@ -12,7 +12,7 @@ struct JobTimelineView: View {
         Form {
             Section {
                 Text(
-                    "Saved changes and job notes, newest first. This is a repair history, not a complete audit log."
+                    "Saved changes, newest first. This is a repair history, not a complete audit log."
                 )
                 .foregroundStyle(.secondary)
             }
@@ -23,7 +23,7 @@ struct JobTimelineView: View {
                     Label(error, systemImage: "exclamationmark.triangle")
                     Button("Retry", action: retry)
                 } else if timeline.entries.isEmpty {
-                    Text("No activity or job notes yet.").foregroundStyle(.secondary)
+                    Text("No activity yet.").foregroundStyle(.secondary)
                 } else {
                     ForEach(timeline.entries) { entry in
                         JobTimelineRow(
@@ -73,9 +73,6 @@ private struct JobTimelineRow: View {
             Text(entry.title).font(.headline)
             if let subject = entry.subject { Text(subject) }
             Text(entry.summary)
-            if let body = entry.body {
-                Text(body).fixedSize(horizontal: false, vertical: true)
-            }
             if !entry.prior.isEmpty {
                 DisclosureGroup("Previous and new values") {
                     JobTimelineValues(title: "Previous", fields: entry.prior)

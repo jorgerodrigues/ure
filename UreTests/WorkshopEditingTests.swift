@@ -53,7 +53,7 @@ struct WorkshopEditingTests {
         let editing = WorkshopEditing(
             watches: watches, calibers: calibers,
             jobs: JobState(service: JobService(coordinator: coordinator)),
-            notes: NoteState(service: NoteService(coordinator: coordinator)),
+            notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
             references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
             photos: PhotoState(service: PhotoService(coordinator: coordinator)),
             documents: DocumentState(service: DocumentService(coordinator: coordinator)),
@@ -105,7 +105,7 @@ struct WorkshopEditingTests {
         let editing = WorkshopEditing(
             watches: watches, calibers: calibers,
             jobs: JobState(service: JobService(coordinator: coordinator)),
-            notes: NoteState(service: NoteService(coordinator: coordinator)),
+            notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
             references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
             photos: PhotoState(service: PhotoService(coordinator: coordinator)),
             documents: DocumentState(service: DocumentService(coordinator: coordinator)),
@@ -137,7 +137,7 @@ struct WorkshopEditingTests {
         let editing = WorkshopEditing(
             watches: watches, calibers: calibers,
             jobs: JobState(service: JobService(coordinator: coordinator)),
-            notes: NoteState(service: NoteService(coordinator: coordinator)),
+            notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
             references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
             photos: PhotoState(service: PhotoService(coordinator: coordinator)),
             documents: DocumentState(service: DocumentService(coordinator: coordinator)),

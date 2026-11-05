@@ -1,6 +1,6 @@
 # Ure
 
-A native Mac app for watch repair and restoration. The current implementation includes the native shell, recoverable library, watch records, shared caliber records, job intake with repair history, scoped notes, technical reference links, and local photos. Further repair features follow in the [planning backlog](docs/planning/issues.md).
+A native Mac app for watch repair and restoration. The current implementation includes the native shell, recoverable library, watch records, shared caliber records, job intake with repair history, one notes text per record, technical reference links, and local photos. Further repair features follow in the [planning backlog](docs/planning/issues.md).
 
 Start with the [local handover guide](docs/handover.md). The [release acceptance report](docs/planning/release-acceptance.md) records executed checks and remaining native and minimum-OS gates. First-release acceptance is still pending.
 
@@ -24,7 +24,7 @@ The matrix covers imports, new and replacement exports, upgrades, restore stagin
 
 Run `make performance XCODE_EXTRA_FLAGS=SDK_STAT_CACHE_ENABLE=NO` to build the optimized `UrePerformanceHarness` command-line target and measure W031's synthetic library. Python 3 uses only its standard library. This command does not start the app or UI automation.
 
-The fixture has 500 watches, 1,000 jobs, 10,000 tasks, and 5,000 photo items with separate managed originals. It also has notes, part links, archived records, and Unicode and punctuation identifiers. Three deterministic JPEG templates cover 640 × 480, 2400 × 1600, and 6000 × 4000 images. The logical original size is about 4.6 GB. Each fresh measurement process opens through `LibraryCoordinator` with `URE_TESTING=1` and an injected library location.
+The fixture has 500 watches, 1,000 jobs, 10,000 tasks, and 5,000 photo items with separate managed originals. It also has job notes, part links, archived records, and Unicode and punctuation identifiers. Three deterministic JPEG templates cover 640 × 480, 2400 × 1600, and 6000 × 4000 images. The logical original size is about 4.6 GB. Each fresh measurement process opens through `LibraryCoordinator` with `URE_TESTING=1` and an injected library location.
 
 The driver retains raw samples and `summary.json` under `.build/performance-runs/<run-id>/`. It checks exact result IDs, task and part counts, database integrity, and every original's size and SHA-256. It reports warm queries, thumbnail decoding, coordinator open time, and resident memory during 20 large-image open/release cycles. A successful command means the measurements and data checks completed. It does not mean all performance acceptance passed. Native usable-window, scrolling, task input, and viewer memory acceptance remain W032 gates. See the [W031 verification report](docs/planning/performance-verification.md).
 
@@ -71,17 +71,17 @@ Select a row to open that exact watch and job in Workshop. The existing editors,
 
 ## Search
 
-Use **Search Library** in the toolbar or **Shift-Command-F** for global search. Results group watches, calibers, jobs, notes, parts, links, photos, and PDFs. Each result names its watch, job, or shared caliber. Selecting it opens the exact saved record through the existing draft guard. Closed jobs remain searchable. **Include Archived** also searches archived watches, jobs, calibers, and their owned records. Use Archive to read archived owners and closed jobs.
+Use **Search Library** in the toolbar or **Shift-Command-F** for global search. Results group watches, calibers, jobs, parts, links, photos, and PDFs. A word in a record's notes finds that watch, caliber, or job. Each result names its watch, job, or shared caliber. Selecting it opens the exact saved record through the existing draft guard. Closed jobs remain searchable. **Include Archived** also searches archived watches, jobs, calibers, and their owned records. Use Archive to read archived owners and closed jobs.
 
-Search matches saved watch identity, caliber designation, job titles, note titles and bodies, part descriptions, manufacturer references, and library item titles and captions. It preserves leading zeros and punctuation. Unicode case matching uses the same rule in every local filter. SQL characters such as `%`, `_`, and quotes are literal search text. PDF contents and text within images are not indexed.
+Search matches saved watch identity, caliber designation, job titles, the notes of watches, calibers, and jobs, part descriptions, manufacturer references, and library item titles and captions. It preserves leading zeros and punctuation. Unicode case matching uses the same rule in every local filter. SQL characters such as `%`, `_`, and quotes are literal search text. PDF contents and text within images are not indexed.
 
-The normal Watches, Calibers, Workshop, and Parts lists have local search. Job history, notes, parts, links, photos, and PDFs also have local text filters. Photo text combines with the stage filter. Part text covers descriptions and manufacturer references. Filtering keeps an already open detail readable.
+The normal Watches, Calibers, Workshop, and Parts lists have local search. Job history, parts, links, photos, and PDFs also have local text filters. Photo text combines with the stage filter. Part text covers descriptions and manufacturer references. Filtering keeps an already open detail readable.
 
 ## Archive and removal
 
 Use **Archive Watch** or **Archive Caliber** in its saved detail or the Record menu. A watch cannot archive while it has an open job. **Unarchive** restores normal list visibility. Existing watch links to archived calibers stay readable. Archived owners reject changes until restored. Closed jobs require Reopen, and their watch must first be unarchived.
 
-Tasks, notes, photos, PDFs, and external references have a **Remove** action in saved detail. Removal requires confirmation. Task confirmation lists its part links. Parts and historical activity summaries stay saved. Part link removal stays in the part editor and commits with **Save**. Part requirements use **Cancelled** rather than deletion.
+Tasks, photos, PDFs, and external references have a **Remove** action in saved detail. Removal requires confirmation. Task confirmation lists its part links. Parts and historical activity summaries stay saved. Part link removal stays in the part editor and commits with **Save**. Part requirements use **Cancelled** rather than deletion.
 
 Removing a photo clears its cover reference and any pin. Removed file items close their viewers. The database commits before unreferenced originals are removed. Failed file cleanup retries at startup. Originals still used by another item stay saved. There is no permanent watch or job deletion.
 
@@ -101,7 +101,7 @@ Use **Save** or **Command-S** to commit the draft. **Cancel** discards it. Chang
 
 Use **Add Caliber** in Calibers or **Command-N** while that section is selected. Only the exact designation is required. Variant and manufacturer remain separate fields. Unknown numeric specifications stay empty. Beat rate and lift angle must be finite and positive. Jewel count and nominal power reserve may also be zero. Add a source note for technical claims. The library starts without seeded caliber facts.
 
-Select a caliber in the watch editor, or choose **Unknown** to clear its link. Several watches can share one caliber. Its saved specifications appear in each linked watch's detail. The caliber detail lists linked watches and opens their records. Clearing one link preserves the caliber and all other watch links. Caliber editing uses the same Save, Cancel, Command-S, and draft protection as watch editing. Shared notes are available in the caliber detail. Technical reference links are available in the caliber detail. Technical files follow in their own issues.
+Select a caliber in the watch editor, or choose **Unknown** to clear its link. Several watches can share one caliber. Its saved specifications appear in each linked watch's detail. The caliber detail lists linked watches and opens their records. Clearing one link preserves the caliber and all other watch links. Caliber editing uses the same Save, Cancel, Command-S, and draft protection as watch editing. The caliber's notes are shared knowledge in the caliber detail. Technical reference links are available in the caliber detail. Technical files follow in their own issues.
 
 ## Job intake and repair history
 
@@ -109,7 +109,7 @@ Use **Start Job** in a watch's repair history. Only a job title is required. Rep
 
 Use **Edit Intake** to correct an open job's intake, including its identity snapshot. Those corrections apply to that job only. Job editing uses Save, Cancel, Command-S, and the existing draft protection. A failed write preserves the draft. Cancelling a new intake creates no history entry.
 
-A watch can have several repair jobs, with at most one open job. **Open Job** returns to that existing job. The database also enforces the rule when save requests compete. The watch's history opens earlier jobs for reading. **Back to Watch** returns to its identity and history. Job notes, tasks, and parts are available in the job detail.
+A watch can have several repair jobs, with at most one open job. **Open Job** returns to that existing job. The database also enforces the rule when save requests compete. The watch's history opens earlier jobs for reading. **Back to Watch** returns to its identity and history. The job's notes, tasks, and parts are available in the job detail.
 
 Use **Change Stage** for Planned, In progress, Waiting, Ready, Completed, or Cancelled. Waiting requires a reason. Completed requires an outcome and accepts optional recommendations. Cancelled requires a reason. Ready means ready for final review. Closing locks operational edits. **Reopen Job** selects an open stage and checks that no other job is open for this watch.
 
@@ -117,9 +117,9 @@ Use **Change Condition** to record Unknown, Running, Running poorly, Stopped, or
 
 ## Job activity
 
-Use **Show Activity** in a job to read saved changes and job notes together, newest first. Notes use their occurred dates. Editing a note updates its one entry. Equal dates keep a stable order.
+Use **Show Activity** in a job to read saved changes, newest first. Equal dates keep a stable order. Notes are not activity entries.
 
-Expand **Previous and new values** to read saved reasons, outcomes, milestones, and order references. **Open Job**, **Open Watch**, **Open Task**, **Open Part**, and **Open Note** show surviving sources. Removed tasks or parts keep their historical summaries. Closed sources remain readable. This is a repair history, not a complete audit log.
+Expand **Previous and new values** to read saved reasons, outcomes, milestones, and order references. **Open Job**, **Open Watch**, **Open Task**, and **Open Part** show surviving sources. Removed tasks or parts keep their historical summaries. Closed sources remain readable. This is a repair history, not a complete audit log.
 
 ## Job tasks
 
@@ -149,13 +149,15 @@ Ordering saves an optional order reference. Correcting Arrived, Installed, or Ca
 
 Backward corrections, cancellation, and restoring a cancelled part require a reason. Save clears milestone dates that no longer apply. Cancellation keeps the order reference for reading. Cancel in the editor discards the draft. A status changed by another saved action requires cancelling and reopening the stale editor. Procurement never changes task status, job stage, or watch condition. Use **Show Activity** to read the saved changes.
 
-## Scoped notes
+## Notes
 
-Use **Add Note** in a watch, job, or caliber detail. Each note belongs to that scope only. Select a saved note to read its full text and dates. A caliber note is shared knowledge in that caliber. It is never copied into a watch or job.
+Every watch, caliber, and job has one plain-text **Notes** section. Type in it. There is no Save button. A change saves half a second after you stop typing, again when you leave the notes, and before the app quits or the window closes. A caliber's notes are shared knowledge in that caliber. They are never copied into a watch or job.
 
-Enter a title, plain text, a kind, and an occurred date. Kinds are Observation, Research, Work log, and Measurement. Measurement uses the same plain-text editor. Text preserves Unicode, line breaks, and spacing. No rich text, HTML rendering, or structured instrument fields are added.
+**Command-Z** undoes a notes change, even after it saved, and **Shift-Command-Z** redoes it. **Esc** puts back the notes as they were when you started typing in them. **Command-D** types today's date. Text preserves Unicode, line breaks, and spacing. No rich text or Markdown rendering is added.
 
-Use **Save**, **Cancel**, or **Command-S**. Editing text keeps the occurred date unless you change it. Created and updated times are separate. Failed saves keep the draft. Switching notes, records, or sections, closing the window, and quitting use the existing Save, Discard, or Stay guard. Closed-job notes remain readable. **Add Note** and **Edit Note** are disabled until the job is reopened. The service also rejects closed-job saves, including an editor opened before closure.
+A failed save keeps the text on screen, says that it did not save, and offers **Try Again**. Quitting with notes that did not save asks before it quits. Closed-job and archived notes stay readable but cannot change until the job is reopened or the record is unarchived.
+
+Libraries from before W033 had separate note records. The upgrade joins each record's notes into its notes text, oldest first. Each old note starts with its date, kind, and title.
 
 ## Technical reference links
 

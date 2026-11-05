@@ -82,7 +82,6 @@ final class SearchState {
             }
             editing.tasks.close()
             editing.parts.close()
-            editing.notes.close()
             editing.references.close()
             editing.photos.close()
             editing.documents.close()
@@ -109,14 +108,6 @@ final class SearchState {
         switch result.kind {
         case .watch, .caliber, .job:
             return {}
-        case .note:
-            guard !editing.notes.isLoading, editing.notes.loadError == nil,
-                let owner = result.noteOwner,
-                let note = editing.notes.records(for: owner).first(where: {
-                    $0.id == result.recordID
-                })
-            else { return nil }
-            return { editing.notes.open(note, for: owner) }
         case .part:
             guard !editing.parts.isLoading, editing.parts.loadError == nil,
                 let jobID = result.jobID,

@@ -114,13 +114,10 @@ nonisolated enum PerformanceFixture {
 
     private static func seedChildren(_ db: Database, jobID: String, index: Int) throws {
         try db.execute(
-            sql: """
-                INSERT INTO note (id, jobID, title, body, kind, occurredAt, createdAt, updatedAt)
-                VALUES (?, ?, ?, ?, 'Observation', ?, ?, ?)
-                """,
+            sql: "UPDATE job SET notes = ? WHERE id = ?",
             arguments: [
-                try id(7, index).uuidString, jobID, "Synthetic note \(index)",
-                String(repeating: "Ühren inspection notes. ", count: 50), date, date, date,
+                "Synthetic notes \(index)\n"
+                    + String(repeating: "Ühren inspection notes. ", count: 50), jobID,
             ])
         let partID = try id(8, index).uuidString
         try db.execute(

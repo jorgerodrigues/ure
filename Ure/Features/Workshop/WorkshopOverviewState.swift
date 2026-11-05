@@ -83,7 +83,6 @@ final class WorkshopOverviewState {
             }
             editing.tasks.close()
             editing.parts.close()
-            editing.notes.close()
             editing.references.close()
             editing.photos.close()
             editing.documents.close()

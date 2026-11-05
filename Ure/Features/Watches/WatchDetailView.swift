@@ -3,7 +3,6 @@ import SwiftUI
 struct WatchDetailView: View {
     @Environment(WatchState.self) private var watches
     @Environment(JobState.self) private var jobs
-    @Environment(NoteState.self) private var notes
     @Environment(DocumentState.self) private var documents
     @Environment(PhotoState.self) private var photos
     @Environment(ReferenceState.self) private var references
@@ -25,8 +24,6 @@ struct WatchDetailView: View {
         } else if let watch = watches.selectedWatch, references.isPresenting(for: .watch(watch.id))
         {
             ReferenceDetailView(owner: .watch(watch.id))
-        } else if let watch = watches.selectedWatch, notes.isPresenting(for: .watch(watch.id)) {
-            NoteDetailView(owner: .watch(watch.id))
         } else if let watch = watches.selectedWatch {
             Form {
                 RecordHeading(title: watch.name, subtitle: watch.condition.rawValue)
@@ -80,7 +77,7 @@ struct WatchDetailView: View {
                     WatchValue(label: "Condition note", value: watch.conditionNote)
                 }
                 WatchJobHistoryView(watch: watch)
-                NoteSectionView(owner: .watch(watch.id))
+                NotesSectionView(owner: .watch(watch.id))
                 PhotoSectionView(owner: .watch(watch.id))
                 ReferenceSectionView(owner: .watch(watch.id))
             }

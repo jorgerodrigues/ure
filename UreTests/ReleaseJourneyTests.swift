@@ -16,6 +16,13 @@ nonisolated struct ReleaseJourneyTests {
         var coordinator = LibraryCoordinator(root: fixture.root)
         _ = try await coordinator.open()
         let retained = try await records(coordinator)
+        if start != "fresh" {
+            let jobID = try #require(UUID(uuidString: "00000000-0000-4000-8000-000000000006"))
+            let joined = try await RecordNotesService(coordinator: coordinator).text(
+                for: .job(jobID))
+            #expect(joined.contains("Research · Observation – æøå\nMeasured 0.12 mm"))
+            #expect(joined.contains("Keep Unicode: 時計 and æøå."))
+        }
         let retainedAssets = try await coordinator.read(FileAssetQueries.fetchAll)
         var watchDraft = WatchDraft()
         watchDraft.name = "Release bench – Å時計"
@@ -25,11 +32,8 @@ nonisolated struct ReleaseJourneyTests {
         jobDraft.title = "Inspect movement"
         let jobs = JobService(coordinator: coordinator)
         let job = try await jobs.save(jobDraft, for: watch.id, editing: nil)
-        var note = NoteDraft(occurredAt: Date(timeIntervalSince1970: 1_700_000_000))
-        note.title = "Finding"
-        note.body = "Unknown specifications. Keep 00042-A/7."
-        _ = try await NoteService(coordinator: coordinator).save(
-            note, for: .job(job.id), editing: nil)
+        try await RecordNotesService(coordinator: coordinator).save(
+            "Finding: unknown specifications. Keep 00042-A/7.", for: .job(job.id))
         var partDraft = PartFixture.draft()
         partDraft.manufacturerReference = "0012-A"
         var link = PartLinkDraft()

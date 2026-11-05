@@ -231,10 +231,8 @@ nonisolated struct JobTaskServiceTests {
             ).first)
         let photo = try result.outcome.get()
         _ = try await PhotoService(coordinator: coordinator).setCover(photo.id, for: job.watchID)
-        var noteDraft = NoteDraft()
-        noteDraft.title = "Keep this finding"
-        let note = try await NoteService(coordinator: coordinator).save(
-            noteDraft, for: .job(job.id), editing: nil)
+        try await RecordNotesService(coordinator: coordinator).save(
+            "Keep this finding", for: .job(job.id))
         let link = try await ReferenceService(coordinator: coordinator).save(
             ReferenceFixture.draft, for: .job(job.id), editing: nil)
         _ = try await JobService(coordinator: coordinator).transition(
@@ -258,7 +256,9 @@ nonisolated struct JobTaskServiceTests {
         #expect(try await reopened.read(WatchQueries.fetchAll) == watches)
         #expect(try await reopened.read(JobQueries.fetchAll) == jobs)
         #expect(try await reopened.read(ActivityQueries.fetchAll) == events)
-        #expect(try await reopened.read(NoteQueries.fetchAll) == [note])
+        #expect(
+            try await RecordNotesService(coordinator: reopened).text(for: .job(job.id))
+                .hasSuffix(" · Observation · Notes\nKeep this finding"))
         #expect(try await reopened.read(LibraryItemQueries.fetchAll).contains(link))
         #expect(try await reopened.read(PhotoQueries.fetchAll) == [photo])
         #expect(try Data(contentsOf: try await reopened.originalURL(for: photo.asset.id)) == bytes)

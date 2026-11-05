@@ -15,3 +15,5 @@ This records the source-sharing approval for the ongoing Ure implementation and 
 Use the review-with-claude skill's read-only configuration. Do not enable edit tools, blanket shell approval, or permission bypass. The reviewer must not edit files, commit, push, or post comments. The implementation agent checks each finding, makes the fixes, runs the required checks, and requests another independent review until clear.
 
 This approval does not authorize unrelated data transfers, other external destinations, or changes to the verification and merge gates. Automatic execution safeguards still apply. If a safeguard rejects an action, report its reason and obtain any approval it requires.
+
+On 4 November 2026, the user approved the Codex CLI review workflow, through the `review-with-codex` skill, for the Rework stories W033 to W042. Codex only reviews the branch. The implementation agent checks each finding, makes the fixes, and asks for another review until Codex reports the branch clean.

@@ -17,14 +17,14 @@ nonisolated enum SearchKey {
     }
 
     enum Table: String, CaseIterable {
-        case watch, caliber, job, note, libraryItem, partRequirement
+        case watch, caliber, job, libraryItem, partRequirement
 
         var fields: [String] {
             switch self {
-            case .watch: ["name", "brand", "model", "caseReference", "serial", "approximateYear"]
-            case .caliber: ["designation", "manufacturer", "variant"]
-            case .job: ["title"]
-            case .note: ["title", "body"]
+            case .watch:
+                ["name", "brand", "model", "caseReference", "serial", "approximateYear", "notes"]
+            case .caliber: ["designation", "manufacturer", "variant", "notes"]
+            case .job: ["title", "notes"]
             case .libraryItem: ["title", "caption"]
             case .partRequirement: ["description", "manufacturerReference"]
             }
@@ -38,23 +38,30 @@ nonisolated enum SearchKey {
                 "SELECT id, \(table.fields.joined(separator: ", ")) FROM \(table.rawValue) WHERE id = ?",
             arguments: [id.uuidString])
         {
-            try refresh(row, table: table, in: db)
+            try refresh(row, table: table.rawValue, fields: table.fields, in: db)
         }
     }
 
     static func backfill(_ table: Table, in db: Database) throws {
+        try backfill(table.rawValue, fields: table.fields, in: db)
+    }
+
+    // A migration passes the fields of its own schema, because later schemas change them.
+    static func backfill(_ table: String, fields: [String], in db: Database) throws {
         for row in try Row.fetchAll(
-            db, sql: "SELECT id, \(table.fields.joined(separator: ", ")) FROM \(table.rawValue)")
+            db, sql: "SELECT id, \(fields.joined(separator: ", ")) FROM \(table)")
         {
-            try refresh(row, table: table, in: db)
+            try refresh(row, table: table, fields: fields, in: db)
         }
     }
 
-    private static func refresh(_ row: Row, table: Table, in db: Database) throws {
+    private static func refresh(
+        _ row: Row, table: String, fields: [String], in db: Database
+    ) throws {
         let id: String = row["id"]
-        let fields: [String?] = table.fields.map { row[$0] }
+        let values: [String?] = fields.map { row[$0] }
         try db.execute(
-            sql: "UPDATE \(table.rawValue) SET searchKey = ? WHERE id = ?",
-            arguments: [make(fields), id])
+            sql: "UPDATE \(table) SET searchKey = ? WHERE id = ?",
+            arguments: [make(values), id])
     }
 }

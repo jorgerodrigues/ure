@@ -7,7 +7,6 @@ struct JobDetailView: View {
     @Environment(WorkshopNavigation.self) private var navigation
     @Environment(WorkshopEditing.self) private var editing
     @Environment(WatchState.self) private var watches
-    @Environment(NoteState.self) private var notes
     @Environment(DocumentState.self) private var documents
     @Environment(PhotoState.self) private var photos
     @Environment(ReferenceState.self) private var references
@@ -32,8 +31,6 @@ struct JobDetailView: View {
                 PhotoDetailView(owner: .job(job.id))
             } else if let job = jobs.selectedJob, references.isPresenting(for: .job(job.id)) {
                 ReferenceDetailView(owner: .job(job.id))
-            } else if let job = jobs.selectedJob, notes.isPresenting(for: .job(job.id)) {
-                NoteDetailView(owner: .job(job.id))
             } else if let job = jobs.selectedJob {
                 Form {
                     RecordHeading(title: job.title, subtitle: job.stage.rawValue)
@@ -98,7 +95,7 @@ struct JobDetailView: View {
                             .accessibilityIdentifier("showJobActivity")
                     }
                     PartSectionView(jobID: job.id)
-                    NoteSectionView(owner: .job(job.id))
+                    NotesSectionView(owner: .job(job.id))
                     PhotoSectionView(owner: .job(job.id))
                     ReferenceSectionView(owner: .job(job.id))
                 }

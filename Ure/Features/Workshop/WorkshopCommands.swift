@@ -29,6 +29,11 @@ struct WorkshopCommands: Commands {
                 .keyboardShortcut(".", modifiers: .command)
                 .disabled(allowsEditing != true || !editing.canCancelDraft)
         }
+        CommandGroup(after: .pasteboard) {
+            Button("Insert Today’s Date", action: insertToday)
+                .keyboardShortcut("d", modifiers: .command)
+                .disabled(allowsEditing != true || !editing.notes.isEditing)
+        }
         CommandGroup(after: .textEditing) {
             Button("Search Library", action: search.present)
                 .keyboardShortcut("f", modifiers: [.command, .shift])
@@ -168,10 +173,6 @@ struct WorkshopCommands: Commands {
             guard let owner = editing.references.owner else { return false }
             return editing.references.canSave && editing.canWrite(owner)
         }
-        if editing.notes.draft != nil {
-            guard let owner = editing.notes.owner else { return false }
-            return editing.notes.canSave && editing.canWrite(owner)
-        }
         switch navigation.selectedSection {
         case .workshop, .watches, .parts:
             if editing.jobs.isEditing { return editing.canSaveJob }
@@ -203,10 +204,6 @@ struct WorkshopCommands: Commands {
             editing.references.saveCommand()
             return
         }
-        if editing.notes.draft != nil {
-            editing.notes.saveCommand()
-            return
-        }
         switch navigation.selectedSection {
         case .workshop, .watches, .parts:
             if editing.jobs.isEditing {
@@ -231,6 +228,10 @@ struct WorkshopCommands: Commands {
                 editing.watches.create()
             }
         }
+    }
+
+    private func insertToday() {
+        NSApp.sendAction(#selector(NotesEditingView.insertToday(_:)), to: nil, from: nil)
     }
 
     private func closeWindow() {

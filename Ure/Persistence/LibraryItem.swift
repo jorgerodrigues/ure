@@ -14,7 +14,7 @@ nonisolated enum PhotoStage: String, Codable, CaseIterable, Sendable {
     case after = "After"
 }
 
-nonisolated enum LibraryItemOwner: Equatable, Sendable {
+nonisolated enum LibraryItemOwner: Hashable, Sendable {
     case watch(UUID)
     case job(UUID)
     case caliber(UUID)

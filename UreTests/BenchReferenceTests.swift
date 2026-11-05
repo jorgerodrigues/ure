@@ -174,7 +174,7 @@ struct BenchReferenceTests {
     }
 
     @Test
-    func pinAndPaneActionsLeaveUnsavedNoteAndNavigationGuardIntact() async throws {
+    func pinAndPaneActionsLeaveUnsavedDraftAndNavigationGuardIntact() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -187,31 +187,32 @@ struct BenchReferenceTests {
         bench.apply(try await coordinator.read(BenchSnapshot.fetch))
         let job = try #require(bench.snapshot.jobs.first)
         bench.selectJob(job.id)
-        let notes = NoteState(service: NoteService(coordinator: coordinator))
-        let observation = Task { await notes.observe() }
+        let references = ReferenceState(service: ReferenceService(coordinator: coordinator))
+        let observation = Task { await references.observe() }
         defer { observation.cancel() }
-        try await waitUntil { !notes.isLoading }
-        notes.create(for: .job(job.id))
-        notes.draft?.title = "Unfinished bench note"
+        try await waitUntil { !references.isLoading }
+        references.create(for: .job(job.id))
+        references.draft?.title = "Unfinished bench reference"
         let editing = WorkshopEditing(
             watches: WatchState(service: WatchService(coordinator: coordinator)),
             calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
-            jobs: JobState(service: JobService(coordinator: coordinator)), notes: notes,
-            references: ReferenceState(service: ReferenceService(coordinator: coordinator)),
+            jobs: JobState(service: JobService(coordinator: coordinator)),
+            notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
+            references: references,
             photos: PhotoState(service: PhotoService(coordinator: coordinator)),
             documents: DocumentState(service: DocumentService(coordinator: coordinator)),
             tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
             parts: PartState(service: PartService(coordinator: coordinator)))
         bench.pin(items[0].id)
         bench.togglePane()
-        #expect(notes.draft?.title == "Unfinished bench note")
+        #expect(references.draft?.title == "Unfinished bench reference")
         var navigated = false
         editing.requestNavigation { navigated = true }
         #expect(editing.showsUnsavedChanges && !navigated)
         editing.stay()
-        #expect(notes.draft?.title == "Unfinished bench note")
+        #expect(references.draft?.title == "Unfinished bench reference")
         #expect(bench.reference?.item == items[0])
-        #expect(try await coordinator.read(NoteQueries.fetchAll).isEmpty)
+        #expect(try await coordinator.read(LibraryItemQueries.fetchAll).count == items.count)
         observation.cancel()
         await observation.value
         try await coordinator.close()

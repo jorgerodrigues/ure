@@ -90,7 +90,6 @@ private struct RestoreCountRow: View {
         case "partRequirement": "Parts"
         case "partLink": "Part links"
         case "taskPart": "Task part links"
-        case "note": "Notes"
         case "libraryItem": "Photos, PDFs and references"
         case "fileAsset": "Original file records"
         case "activityEvent": "History entries"
