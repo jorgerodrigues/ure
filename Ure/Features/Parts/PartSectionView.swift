@@ -54,6 +54,7 @@ private struct PartLines: View {
             }
             if isEditable {
                 PartEntryLine(entry: state.entry(for: jobID))
+                PartUnsavedNames(entry: state.entry(for: jobID))
             } else if lines.isEmpty {
                 Text("No parts").foregroundStyle(.secondary)
             }
@@ -252,29 +253,41 @@ private struct PartEntryLine: View {
         }
     }
 
-    // Adds the typed part, or puts the highlighted spare on the job. The line empties at once,
-    // so the next part can follow while this one saves. A part that did not save comes back.
-    private func submit() {
-        let text = entry.text
-        let spare = entry.highlightedID
-        entry.clear()
-        Task {
-            let succeeded: Bool
-            if let spare {
-                succeeded = await parts.useSpare(spare, on: entry.jobID, undoManager: undoManager)
-            } else {
-                succeeded =
-                    await parts.add(named: text, to: entry.jobID, undoManager: undoManager) != nil
-            }
-            if !succeeded, entry.text.isEmpty { entry.change(to: text) }
-        }
-    }
+    private func submit() { parts.submitCommand(entry, undoManager: undoManager) }
 
     private func use(_ spare: PartRecord) {
         entry.clear()
         let jobID = entry.jobID
         Task { await parts.useSpare(spare.id, on: jobID, undoManager: undoManager) }
     }
+}
+
+// The part names typed on the line that did not save, with Try Again. They stay while you type
+// the next part.
+private struct PartUnsavedNames: View {
+    @Environment(PartState.self) private var parts
+    @Environment(\.undoManager) private var undoManager
+    let entry: PartEntry
+
+    var body: some View {
+        if !entry.unsaved.isEmpty {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Label {
+                    Text("Not saved yet: \(entry.unsaved.joined(separator: ", "))")
+                } icon: {
+                    Image(systemName: "exclamationmark.circle.fill")
+                }
+                .font(.system(size: NotesLayout.failureSize))
+                .foregroundStyle(.red)
+                Button("Try Again", action: retry)
+                    .controlSize(.small)
+            }
+            .padding(.top, PartLineLayout.messageTop)
+            .accessibilityElement(children: .contain)
+        }
+    }
+
+    private func retry() { parts.retryUnsavedCommand(entry, undoManager: undoManager) }
 }
 
 // The spares in hand whose name has what you typed, under the line you type in. The Down arrow

@@ -85,7 +85,11 @@ final class PartState {
         return entry
     }
 
-    var hasUnsavedFacts: Bool { facts.values.contains { $0.hasUnsavedChanges } }
+    // Typing that has not saved yet: a part's fields, and part names that did not save.
+    var hasUnsavedFacts: Bool {
+        facts.values.contains { $0.hasUnsavedChanges }
+            || entries.values.contains { !$0.unsaved.isEmpty }
+    }
 
     // Whether a part's notes have the cursor, so ⌘D can type today's date there.
     var isEditingNotes: Bool { facts.values.contains { $0.notes.isEditing } }
@@ -131,6 +135,43 @@ final class PartState {
         guard let made else { return nil }
         registerPresence(of: made.id, setting: false, actionName: Self.addActionName, undoManager)
         return made
+    }
+
+    // Return on a job's add line adds the typed part, or puts the highlighted spare on the job.
+    // The line empties at once, so the next part can follow while this one saves.
+    func submitCommand(_ entry: PartEntry, undoManager: UndoManager?) {
+        let text = entry.text
+        let spare = entry.highlightedID
+        entry.clear()
+        Task { await submit(text, spare: spare, on: entry, undoManager: undoManager) }
+    }
+
+    // A name that did not save stays under the line, with Try Again, also while you type the
+    // next one. A spare that could not be used stays in the drawer.
+    @discardableResult
+    func submit(
+        _ text: String, spare: UUID?, on entry: PartEntry, undoManager: UndoManager? = nil
+    ) async -> Bool {
+        if let spare { return await useSpare(spare, on: entry.jobID, undoManager: undoManager) }
+        guard await add(named: text, to: entry.jobID, undoManager: undoManager) == nil else {
+            return true
+        }
+        entry.keepUnsaved(text)
+        return false
+    }
+
+    func retryUnsavedCommand(_ entry: PartEntry, undoManager: UndoManager?) {
+        Task { await retryUnsaved(entry, undoManager: undoManager) }
+    }
+
+    // Adds the names that did not save, in the order they were typed, until one fails again.
+    func retryUnsaved(_ entry: PartEntry, undoManager: UndoManager? = nil) async {
+        for name in entry.unsaved {
+            guard await add(named: name, to: entry.jobID, undoManager: undoManager) != nil else {
+                return
+            }
+            entry.saved(name)
+        }
     }
 
     // ⌘N in Parts makes a spare named "New Part", in hand, selects it, and puts the cursor in
@@ -350,9 +391,15 @@ final class PartState {
                 adopt(try await service.restore(part))
                 removed[id] = nil
             } else {
-                // Typing still waiting on the part saves first, so Undo brings it back.
+                // Typing still waiting on the part saves first, so Undo brings it back. A text
+                // that did not save stops the removal, so it can be tried again. A text the
+                // part does not take, such as a quantity of 0, goes with the part.
                 for editor in facts[id]?.editors ?? [] where editor.hasUnsavedChanges {
-                    _ = await editor.flush()
+                    if await !editor.flush(), editor.saveError != nil {
+                        saveError =
+                            "A field on this part did not save. Try it again before you delete the part."
+                        return false
+                    }
                 }
                 let part = try await service.remove(id)
                 removed[id] = part
@@ -466,5 +513,14 @@ final class PartEntry {
     func clear() {
         text = ""
         highlightedID = nil
+    }
+
+    // The names typed on this line that did not save, in the order they were typed.
+    private(set) var unsaved: [String] = []
+
+    func keepUnsaved(_ name: String) { unsaved.append(name) }
+
+    func saved(_ name: String) {
+        if let index = unsaved.firstIndex(of: name) { unsaved.remove(at: index) }
     }
 }

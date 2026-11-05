@@ -130,6 +130,79 @@ struct PartStateTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
+    func aNameThatDidNotSaveStaysWithTryAgainWhileTheNextIsTyped() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        let parts = PartState(service: PartService(coordinator: coordinator))
+        let observation = Task { await parts.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { !parts.isLoading }
+        let entry = parts.entry(for: job.id)
+        entry.beginEditing()
+
+        // Return empties the line at once, so the next name can follow while this one saves.
+        entry.change(to: "Mainspring")
+        parts.submitCommand(entry, undoManager: nil)
+        #expect(entry.text.isEmpty)
+        try await waitUntil { parts.parts(on: job.id).map(\.name) == ["Mainspring"] }
+
+        try await JobTaskFixture.failWrites(coordinator, on: "part")
+        entry.change(to: "Crys")
+        #expect(!(await parts.submit("Crystal", spare: nil, on: entry)))
+        #expect(entry.unsaved == ["Crystal"] && entry.text == "Crys" && parts.hasUnsavedFacts)
+        #expect(!(await parts.submit("Gasket", spare: nil, on: entry)))
+        await parts.retryUnsaved(entry)
+        #expect(entry.unsaved == ["Crystal", "Gasket"])
+        try await JobTaskFixture.allowWrites(coordinator, on: "part")
+        await parts.retryUnsaved(entry)
+        #expect(entry.unsaved.isEmpty && !parts.hasUnsavedFacts)
+        #expect(parts.parts(on: job.id).map(\.name) == ["Mainspring", "Crystal", "Gasket"])
+        entry.endEditing()
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aDeletionWaitsForTypingThatDidNotSave() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        let parts = PartState(
+            service: PartService(coordinator: coordinator), pause: PauseGate().pause)
+        let observation = Task { await parts.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { !parts.isLoading }
+        let part = try #require(await parts.add(named: "Mainspring", to: job.id))
+        let facts = try #require(parts.facts(for: part.id))
+        facts.name.beginEditing()
+        facts.name.change(to: "Mainspring 1.10", undoManager: nil)
+
+        try await JobTaskFixture.failWrites(coordinator, on: "part")
+        #expect(!(await parts.remove(part.id)))
+        #expect(parts.part(part.id) != nil && parts.saveError != nil)
+        #expect(facts.name.text == "Mainspring 1.10" && facts.name.saveError != nil)
+        try await JobTaskFixture.allowWrites(coordinator, on: "part")
+        let undoManager = UndoManager()
+        undoManager.groupsByEvent = false
+        undoManager.beginUndoGrouping()
+        #expect(await parts.remove(part.id, undoManager: undoManager))
+        undoManager.endUndoGrouping()
+        undoManager.undo()
+        await parts.waitForPresenceChanges()
+        // The typing saved before the part went, so Undo brings it back with the new name.
+        #expect(try await stored(part.id, coordinator).name == "Mainspring 1.10")
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
     func spareSuggestionsMatchByNameAndOfferOnlySparesInHand() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
