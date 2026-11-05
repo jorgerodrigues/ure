@@ -67,6 +67,7 @@ nonisolated struct RecordNotesMigrationTests {
         #expect(
             staged.summary.appliedMigrations == [
                 "v19-record-notes", "v20-material", "v21-caliber-facts", "v22-watch-owner",
+                "v23-job-states",
             ])
         #expect(staged.summary.counts["note"] == nil && staged.summary.counts["watch"] == 2)
         let result = try await coordinator.activateRestore(staged)
@@ -134,7 +135,7 @@ nonisolated struct RecordNotesServiceTests {
     }
 
     @Test
-    func closedArchivedAndMissingRecordsRejectNotes() async throws {
+    func doneJobsTakeNotesButArchivedAndMissingRecordsDoNot() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -144,12 +145,10 @@ nonisolated struct RecordNotesServiceTests {
             throw NoteFixtureError()
         }
         let service = RecordNotesService(coordinator: coordinator)
-        var closure = JobTransitionDraft(stage: .cancelled)
-        closure.cancellationReason = "Customer collected the watch"
-        _ = try await JobService(coordinator: coordinator).transition(jobID, using: closure)
-        await #expect(throws: JobError.closedJob) {
-            try await service.save("Too late", for: .job(jobID))
-        }
+        _ = try await JobService(coordinator: coordinator).setStage(jobID, to: .done)
+        try await service.save("Customer collected the watch.", for: .job(jobID))
+        #expect(try await service.text(for: .job(jobID)) == "Customer collected the watch.")
+        try await service.save("", for: .job(jobID))
         _ = try await ArchiveService(coordinator: coordinator).setCaliber(
             caliberID, archived: true)
         await #expect(throws: ArchiveError.archived) {
@@ -399,10 +398,8 @@ nonisolated enum NoteFixture {
         let caliber = try await CaliberService(coordinator: coordinator).create(named: "0012–Å")
         let watch = try await WatchService(coordinator: coordinator).make(
             "Bench watch", caliberID: caliber.id)
-        var jobDraft = JobDraft()
-        jobDraft.title = "Inspect movement"
-        let job = try await JobService(coordinator: coordinator).save(
-            jobDraft, for: watch.id, editing: nil)
+        let job = try await JobService(coordinator: coordinator).start(
+            for: watch.id, title: "Inspect movement")
         return [.watch(watch.id), .job(job.id), .caliber(caliber.id)]
     }
 }
@@ -616,11 +613,8 @@ nonisolated enum LegacyLibraryFixture {
                 VALUES (?, 'Seamaster', 'Omega', ?, 10, 12), (?, 'Field watch', NULL, NULL, 10, 13)
                 """,
             arguments: [watchID.uuidString, caliberID.uuidString, quietWatchID.uuidString])
-        let snapshot = try String(
-            decoding: JSONEncoder().encode(
-                JobIntakeSnapshot(
-                    watchName: "Seamaster", brand: "Omega", model: nil, caseReference: nil,
-                    serial: nil, caliberDesignation: "552", caliberVariant: nil)), as: UTF8.self)
+        let snapshot =
+            #"{"version":1,"watchName":"Seamaster","brand":"Omega","caliberDesignation":"552"}"#
         try db.execute(
             sql: """
                 INSERT INTO job (id, watchID, title, stage, intakeSnapshot, createdAt, updatedAt)

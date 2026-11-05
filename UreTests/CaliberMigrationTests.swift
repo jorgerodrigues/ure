@@ -67,7 +67,10 @@ nonisolated struct CaliberMigrationTests {
         let package = fixture.directory.appending(path: "before-caliber-facts.watchbackup")
         try LegacyCaliberFixture.package(at: package)
         let staged = try await coordinator.stageRestore(from: package)
-        #expect(staged.summary.appliedMigrations == ["v21-caliber-facts", "v22-watch-owner"])
+        #expect(
+            staged.summary.appliedMigrations == [
+                "v21-caliber-facts", "v22-watch-owner", "v23-job-states",
+            ])
         #expect(staged.summary.counts["caliber"] == LegacyCaliberFixture.calibers.count)
         let result = try await coordinator.activateRestore(staged)
         #expect(result.outcome == .restored)

@@ -148,7 +148,6 @@ struct WatchStateTests {
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { state.watches.count == 2 }
-        let history = try await coordinator.read(ActivityQueries.fetchAll)
         state.select(job.watchID)
         #expect(!state.showsArchived)
         let undo = UndoManager()
@@ -179,7 +178,6 @@ struct WatchStateTests {
         #expect(try await archivedAt(job.watchID, coordinator) == nil)
         #expect(undo.undoMenuItemTitle == "Undo Unarchive Watch")
         #expect(try await coordinator.read { try JobQueries.fetch(job.id, in: $0) } == job)
-        #expect(try await coordinator.read(ActivityQueries.fetchAll) == history)
         #expect(try await coordinator.read(WorkshopQueries.fetch).map(\.id) == [job.id])
         state.discardUndo()
         #expect(!undo.canUndo)

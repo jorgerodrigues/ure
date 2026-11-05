@@ -30,14 +30,13 @@ struct PartsOverviewStateTests {
         }
         var arrived = PartDraft(part: part)
         arrived.status = .arrived
-        try await JobTaskFixture.failEvents(coordinator)
+        try await JobTaskFixture.failWrites(coordinator, on: "partRequirement")
         await #expect(throws: DatabaseError.self) {
             try await service.save(arrived, for: job.id, editing: part.id)
         }
         #expect(overview.rows.first?.part.status == .needed)
         #expect(editing.parts.records(for: job.id).first?.record.status == .needed)
-        try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failTaskEvent")
-        }
+        try await JobTaskFixture.allowWrites(coordinator, on: "partRequirement")
         _ = try await service.save(arrived, for: job.id, editing: part.id)
         try await waitUntil {
             overview.rows.first?.part.status == .arrived
@@ -45,25 +44,20 @@ struct PartsOverviewStateTests {
         }
         let watch = try await WatchService(coordinator: coordinator).update(
             job.watchID, .name("Corrected watch Å時計"))
-        var jobDraft = JobDraft(job: job)
-        jobDraft.title = "Corrected repair"
-        _ = try await JobService(coordinator: coordinator).save(
-            jobDraft, for: job.watchID, editing: job.id)
+        _ = try await JobService(coordinator: coordinator).update(
+            job.id, .title("Corrected repair"))
         try await waitUntil {
             overview.rows.first?.watch.name == watch.name
-                && overview.rows.first?.job.title == jobDraft.title
+                && overview.rows.first?.job.title == "Corrected repair"
         }
-        var closure = JobTransitionDraft(stage: .completed)
-        closure.outcome = "Reviewed"
-        let closed = try await JobService(coordinator: coordinator).transition(
-            job.id, using: closure)
+        let closed = try await JobService(coordinator: coordinator).setStage(job.id, to: .done).job
         try await waitUntil { overview.rows.isEmpty }
         #expect(
-            overview.selectionMessage(part: part, job: closed)?.contains("watch history") == true)
+            overview.selectionMessage(part: part, job: closed)
+                == "This job is done. Its parts stay on its page.")
         #expect(try await coordinator.read(PartQueries.fetchAll).first?.id == part.id)
-        _ = try await JobService(coordinator: coordinator).reopen(
-            job.id, using: JobTransitionDraft(stage: .ready))
-        try await waitUntil { overview.rows.first?.job.stage == .ready }
+        _ = try await JobService(coordinator: coordinator).setStage(job.id, to: .waiting)
+        try await waitUntil { overview.rows.first?.job.stage == .waiting }
         for observation in observations { observation.cancel(); await observation.value }
         try await coordinator.close()
     }
@@ -161,15 +155,14 @@ struct PartsOverviewStateTests {
         #expect(browser.opened.isEmpty)
         overview.open(UUID(), editing: editing)
         #expect(overview.navigationError != nil && editing.parts.selectedID == other.id)
-        var closure = JobTransitionDraft(stage: .cancelled)
-        closure.cancellationReason = "Stopped"
-        _ = try await JobService(coordinator: coordinator).transition(second.id, using: closure)
+        _ = try await JobService(coordinator: coordinator).setStage(second.id, to: .done)
         try await waitUntil {
-            overview.rows.count == 1 && editing.jobs.selectedJob?.stage == .cancelled
+            overview.rows.count == 1 && editing.jobs.selectedJob?.stage == .done
         }
         overview.open(other.id, editing: editing)
         #expect(overview.navigationError != nil && editing.parts.selectedID == other.id)
-        #expect(!editing.parts.canWrite(second.id, jobs: editing.jobs))
+        // A Done job's parts leave the overview but can still change on its page.
+        #expect(editing.parts.canWrite(second.id, jobs: editing.jobs))
         for observation in observations { observation.cancel(); await observation.value }
         try await coordinator.close()
     }

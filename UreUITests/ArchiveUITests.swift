@@ -23,7 +23,7 @@ nonisolated final class ArchiveUITests: XCTestCase {
         let title = app.textFields["jobTitle"]
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         title.typeText("Full service")
-        window.typeKey("s", modifierFlags: .command)
+        window.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(app.buttons["backToWatch"].waitForExistence(timeout: 5))
         app.buttons["backToWatch"].click()
         XCTAssertTrue(app.buttons["watchOpenJob"].waitForExistence(timeout: 5))

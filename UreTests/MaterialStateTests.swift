@@ -344,13 +344,13 @@ struct MaterialStateTests {
 }
 
 enum MaterialEditingFixture {
-    static func editing(_ coordinator: LibraryCoordinator, material: MaterialState? = nil)
-        -> WorkshopEditing
-    {
+    static func editing(
+        _ coordinator: LibraryCoordinator, material: MaterialState? = nil, jobs: JobState? = nil
+    ) -> WorkshopEditing {
         WorkshopEditing(
             watches: WatchState(service: WatchService(coordinator: coordinator)),
             calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
-            jobs: JobState(service: JobService(coordinator: coordinator)),
+            jobs: jobs ?? JobState(service: JobService(coordinator: coordinator)),
             notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
             material: material ?? MaterialState(service: MaterialService(coordinator: coordinator)),
             tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),

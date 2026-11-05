@@ -34,19 +34,14 @@ nonisolated struct WorkshopOverviewTests {
                     _ = try await parts.save(edit, for: job.id, editing: part.id)
                 }
             }
-            var transition = JobTransitionDraft(stage: stage)
-            transition.waitingReason = "Mainspring on order"
-            transition.outcome = "Reviewed"
-            transition.cancellationReason = "Stopped"
-            transition.unfinishedTasksReason = "Retained tasks"
-            transition.unfinishedPartsReason = "Retained requirements"
-            _ = try await jobs.transition(job.id, using: transition)
+            _ = try await jobs.setStage(job.id, to: stage)
+            if stage == .waiting { _ = try await jobs.update(job.id, .waitingFor("A mainspring")) }
             if stage.isOpen { openIDs.insert(job.id) } else { closedIDs.insert(job.id) }
         }
         let rows = try await coordinator.read(WorkshopQueries.fetch)
         #expect(Set(rows.map(\.id)) == openIDs)
-        #expect(rows.count == 4)
-        #expect(Set(rows.map { $0.job.stage }) == [.planned, .inProgress, .waiting, .ready])
+        #expect(rows.count == 2)
+        #expect(Set(rows.map { $0.job.stage }) == [.inProgress, .waiting])
         for row in rows {
             #expect(row.watch.id == row.job.watchID)
             #expect(row.progress.doneCount == 1 && row.progress.countedCount == 4)
@@ -54,7 +49,7 @@ nonisolated struct WorkshopOverviewTests {
             #expect(row.unresolvedPartCount == 2)
             #expect(row.updatedAt == date)
         }
-        #expect(rows.first { $0.job.stage == .waiting }?.job.waitingReason == "Mainspring on order")
+        #expect(rows.first { $0.job.stage == .waiting }?.job.waitingFor == "A mainspring")
         let saved = try await coordinator.read(JobQueries.fetchAll)
         #expect(closedIDs.isSubset(of: Set(saved.map(\.id))))
         try await coordinator.close()

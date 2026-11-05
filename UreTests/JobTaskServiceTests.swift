@@ -36,7 +36,7 @@ nonisolated struct JobTaskServiceTests {
     }
 
     @Test(arguments: JobTaskStatus.allCases, JobTaskStatus.allCases)
-    func statusChangesCommitHistoryWithoutChangingJob(from: JobTaskStatus, to: JobTaskStatus)
+    func statusChangesSaveWithoutChangingTheJob(from: JobTaskStatus, to: JobTaskStatus)
         async throws
     {
         let fixture = WatchFixture()
@@ -46,28 +46,15 @@ nonisolated struct JobTaskServiceTests {
         let job = try await JobTaskFixture.job(coordinator)
         let service = JobTaskService(coordinator: coordinator)
         let first = try await service.save(JobTaskFixture.draft(from), for: job.id, editing: nil)
-        let before = try await coordinator.read(ActivityQueries.fetchAll)
         var edit = JobTaskDraft(task: first)
         edit.status = to
         edit.waitingReason = "Need evidence"
         edit.skippedReason = "Not needed for this repair"
         let next = try await service.save(edit, for: job.id, editing: first.id)
-        #expect(next.id == first.id)
+        #expect(next.id == first.id && next.status == to)
         #expect(next.createdAt == first.createdAt)
         #expect(try await coordinator.read(JobQueries.fetchAll) == [job])
-        let events = try await coordinator.read(ActivityQueries.fetchAll)
-        if from == to {
-            #expect(events == before)
-        } else {
-            let event = try #require(events.last)
-            #expect(events.count == before.count + 1)
-            #expect(event.kind == .taskStatusChanged)
-            #expect(event.jobID == job.id)
-            #expect(event.priorValue == .task(JobTaskValue(task: first)))
-            #expect(event.nextValue == .task(JobTaskValue(task: next)))
-            _ = try await service.save(edit, for: job.id, editing: first.id)
-            #expect(try await coordinator.read(ActivityQueries.fetchAll) == events)
-        }
+        #expect(try await service.save(edit, for: job.id, editing: first.id) == next)
         #expect(try await coordinator.read(JobTaskQueries.fetchAll) == [next])
         try await coordinator.close()
     }
@@ -92,7 +79,6 @@ nonisolated struct JobTaskServiceTests {
             try await service.save(JobTaskDraft(), for: job.id, editing: nil)
         }
         #expect(try await coordinator.read(JobTaskQueries.fetchAll).isEmpty)
-        #expect(try await coordinator.read(ActivityQueries.fetchAll).isEmpty)
         let saved = try await service.save(JobTaskFixture.draft(.toDo), for: job.id, editing: nil)
         for sql in [
             "UPDATE jobTask SET title = ''", "UPDATE jobTask SET status = 'Unknown'",
@@ -118,7 +104,7 @@ nonisolated struct JobTaskServiceTests {
     }
 
     @Test
-    func failedEventRollsBackCompletionReopeningAndNewDoneTask() async throws {
+    func failedWritesLeaveTheSavedTasks() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -127,8 +113,7 @@ nonisolated struct JobTaskServiceTests {
         let service = JobTaskService(coordinator: coordinator)
         let todo = try await service.save(JobTaskFixture.draft(.toDo), for: job.id, editing: nil)
         let done = try await service.save(JobTaskFixture.draft(.done), for: job.id, editing: nil)
-        let before = try await coordinator.read(ActivityQueries.fetchAll)
-        try await JobTaskFixture.failEvents(coordinator)
+        try await JobTaskFixture.failWrites(coordinator, on: "jobTask")
         for (id, status) in [(todo.id, JobTaskStatus.done), (done.id, .doing)] {
             await #expect(throws: DatabaseError.self) {
                 try await service.save(JobTaskFixture.draft(status), for: job.id, editing: id)
@@ -139,17 +124,14 @@ nonisolated struct JobTaskServiceTests {
         }
         let tasks = try await coordinator.read(JobTaskQueries.fetchAll)
         #expect(tasks.count == 2 && tasks.contains(todo) && tasks.contains(done))
-        #expect(try await coordinator.read(ActivityQueries.fetchAll) == before)
-        try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failTaskEvent")
-        }
+        try await JobTaskFixture.allowWrites(coordinator, on: "jobTask")
         _ = try await service.save(JobTaskFixture.draft(.done), for: job.id, editing: todo.id)
         #expect(try await coordinator.read(JobTaskQueries.fetchAll).count == 2)
-        #expect(try await coordinator.read(ActivityQueries.fetchAll).count == before.count + 1)
         try await coordinator.close()
     }
 
-    @Test(arguments: [JobStage.completed, .cancelled])
-    func closureRequiresExplanationKeepsTasksAndRejectsStaleWrites(stage: JobStage) async throws {
+    @Test(arguments: [JobStage.waiting, .done])
+    func aJobInAnyStateKeepsItsTasksAndTakesChanges(stage: JobStage) async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -160,65 +142,23 @@ nonisolated struct JobTaskServiceTests {
             _ = try await tasks.save(JobTaskFixture.draft(status), for: job.id, editing: nil)
         }
         let before = try await coordinator.read(JobTaskQueries.fetchAll)
-        let events = try await coordinator.read(ActivityQueries.fetchAll)
         let jobs = JobService(coordinator: coordinator)
-        var closure = JobTransitionDraft(stage: stage)
-        closure.outcome = "Movement serviced"
-        closure.cancellationReason = "Owner declined further work"
-        closure.unfinishedTasksReason = " \n "
-        await #expect(throws: JobValidationError.self) {
-            try await jobs.transition(job.id, using: closure)
-        }
-        #expect(try await coordinator.read(JobQueries.fetchAll) == [job])
-        #expect(try await coordinator.read(ActivityQueries.fetchAll) == events)
-        closure.unfinishedTasksReason = "Owner will arrange the remaining work"
-        try await JobTaskFixture.failEvents(coordinator)
-        await #expect(throws: DatabaseError.self) {
-            try await jobs.transition(job.id, using: closure)
-        }
-        #expect(try await coordinator.read(JobQueries.fetchAll) == [job])
-        try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failTaskEvent")
-        }
-        let closed = try await jobs.transition(job.id, using: closure)
-        #expect(closed.unfinishedTasksReason == closure.unfinishedTasksReason)
-        let event = try #require(try await coordinator.read(ActivityQueries.fetchAll).last)
-        #expect(event.nextValue == .job(JobStageValue(job: closed)))
+        let changed = try await jobs.setStage(job.id, to: stage).job
+        #expect(changed.stage == stage)
         #expect(try await coordinator.read(JobTaskQueries.fetchAll) == before)
-        let saved = try #require(before.first)
-        await #expect(throws: JobError.closedJob) {
-            try await tasks.save(JobTaskFixture.draft(.done), for: job.id, editing: saved.id)
-        }
-        await #expect(throws: JobError.closedJob) {
-            try await tasks.save(JobTaskFixture.draft(.toDo), for: job.id, editing: nil)
-        }
-        let reopened = try await jobs.reopen(job.id, using: JobTransitionDraft(stage: .inProgress))
-        #expect(reopened.unfinishedTasksReason == nil)
-        #expect(try await coordinator.read(JobTaskQueries.fetchAll) == before)
-        _ = try await tasks.save(JobTaskFixture.draft(.done), for: job.id, editing: saved.id)
+        let saved = try #require(before.first { $0.status == .toDo })
+        let ticked = try await tasks.save(
+            JobTaskFixture.draft(.done), for: job.id, editing: saved.id)
+        #expect(ticked.status == .done)
+        let added = try await tasks.save(JobTaskFixture.draft(.toDo), for: job.id, editing: nil)
+        #expect(try await coordinator.read(JobTaskQueries.fetchAll).count == before.count + 1)
+        _ = try await jobs.setStage(job.id, to: .inProgress)
+        #expect(try await coordinator.read { try JobTaskQueries.fetch(added.id, in: $0) } == added)
         try await coordinator.close()
     }
 
     @Test
-    func doneAndSkippedTasksDoNotRequireAnUnfinishedExplanation() async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        let job = try await JobTaskFixture.job(coordinator)
-        let service = JobTaskService(coordinator: coordinator)
-        for status in [JobTaskStatus.done, .skipped] {
-            _ = try await service.save(JobTaskFixture.draft(status), for: job.id, editing: nil)
-        }
-        var closure = JobTransitionDraft(stage: .completed)
-        closure.outcome = "Finished"
-        let closed = try await JobService(coordinator: coordinator).transition(
-            job.id, using: closure)
-        #expect(closed.unfinishedTasksReason == nil)
-        try await coordinator.close()
-    }
-
-    @Test
-    func forwardMigrationPreservesCoversFilesNotesAndOldHistory() async throws {
+    func forwardMigrationPreservesCoversFilesAndNotes() async throws {
         let fixture = ImportFixture()
         defer { fixture.remove() }
         let coordinator = LibraryCoordinator(root: fixture.root)
@@ -231,20 +171,11 @@ nonisolated struct JobTaskServiceTests {
             "Keep this finding", for: .job(job.id))
         let link = try await MaterialFixture.link(
             titled: "Technical sheet", for: .job(job.id), in: coordinator)
-        _ = try await JobService(coordinator: coordinator).transition(
-            job.id, using: JobTransitionDraft(stage: .inProgress))
         let watches = try await coordinator.read(WatchQueries.fetchAll)
         let jobs = try await coordinator.read(JobQueries.fetchAll)
-        let events = try await coordinator.read(ActivityQueries.fetchAll)
         let asset = try #require(photo.asset)
         let bytes = try Data(contentsOf: try await coordinator.originalURL(for: asset.id))
-        try await coordinator.mutate { db, _, _ in
-            try JobTaskMigrationFixture.removeTasks(in: db)
-            try db.execute(
-                sql:
-                    "UPDATE activityEvent SET priorValue = json_remove(priorValue, '$.job._0.unfinishedTasksReason'), nextValue = json_remove(nextValue, '$.job._0.unfinishedTasksReason')"
-            )
-        }
+        try await coordinator.mutate { db, _, _ in try JobTaskMigrationFixture.removeTasks(in: db) }
         try await coordinator.close()
         let reopened = LibraryCoordinator(root: fixture.root)
         let after = try await reopened.open()
@@ -252,7 +183,6 @@ nonisolated struct JobTaskServiceTests {
         #expect(after.manifest == before.manifest)
         #expect(try await reopened.read(WatchQueries.fetchAll) == watches)
         #expect(try await reopened.read(JobQueries.fetchAll) == jobs)
-        #expect(try await reopened.read(ActivityQueries.fetchAll) == events)
         #expect(
             try await RecordNotesService(coordinator: reopened).text(for: .job(job.id))
                 .hasSuffix(" · Observation · Notes\nKeep this finding"))
@@ -263,9 +193,7 @@ nonisolated struct JobTaskServiceTests {
         var created = JobTaskFixture.draft(.done)
         created.title = "Completed after migration"
         _ = try await JobTaskService(coordinator: reopened).save(created, for: job.id, editing: nil)
-        let updatedEvents = try await reopened.read(ActivityQueries.fetchAll)
-        #expect(updatedEvents.map(\.ordering) == [1, 2])
-        #expect(updatedEvents.last?.kind == .taskStatusChanged)
+        #expect(try await reopened.read(JobTaskQueries.fetchAll).map(\.title) == [created.title])
         try await reopened.close()
     }
 }
@@ -298,9 +226,8 @@ nonisolated enum JobTaskMigrationFixture {
 nonisolated enum JobTaskFixture {
     static func job(_ coordinator: LibraryCoordinator) async throws -> JobRecord {
         let saved = try await WatchService(coordinator: coordinator).make("Omega 0012–Å")
-        var job = JobDraft()
-        job.title = "Service movement"
-        return try await JobService(coordinator: coordinator).save(job, for: saved.id, editing: nil)
+        return try await JobService(coordinator: coordinator).start(
+            for: saved.id, title: "Service movement")
     }
 
     static func draft(_ status: JobTaskStatus) -> JobTaskDraft {
@@ -312,12 +239,25 @@ nonisolated enum JobTaskFixture {
         return draft
     }
 
-    static func failEvents(_ coordinator: LibraryCoordinator) async throws {
+    // Makes every insert and update of a table fail, like a full disk, until writes are
+    // allowed again.
+    static func failWrites(_ coordinator: LibraryCoordinator, on table: String) async throws {
         try await coordinator.mutate { db, _, _ in
-            try db.execute(
-                sql:
-                    "CREATE TRIGGER failTaskEvent BEFORE INSERT ON activityEvent BEGIN SELECT RAISE(ABORT, 'fixture disk failure'); END"
-            )
+            for operation in ["INSERT", "UPDATE"] {
+                try db.execute(
+                    sql: """
+                        CREATE TRIGGER fail_\(table)_\(operation) BEFORE \(operation) ON \(table)
+                        BEGIN SELECT RAISE(ABORT, 'fixture disk failure'); END
+                        """)
+            }
+        }
+    }
+
+    static func allowWrites(_ coordinator: LibraryCoordinator, on table: String) async throws {
+        try await coordinator.mutate { db, _, _ in
+            for operation in ["INSERT", "UPDATE"] {
+                try db.execute(sql: "DROP TRIGGER fail_\(table)_\(operation)")
+            }
         }
     }
 }

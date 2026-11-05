@@ -44,15 +44,14 @@ struct SearchStateTests {
         var edit = PartDraft(part: part)
         edit.manufacturerReference = "replacement"
         edit.status = .arrived
-        try await JobTaskFixture.failEvents(coordinator)
+        try await JobTaskFixture.failWrites(coordinator, on: "partRequirement")
         await #expect(throws: DatabaseError.self) {
             try await service.save(edit, for: job.id, editing: part.id)
         }
         #expect(search.results.first?.recordID == part.id)
         #expect(
             try await coordinator.read { try SearchQueries.fetch("replacement", in: $0) }.isEmpty)
-        try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failTaskEvent")
-        }
+        try await JobTaskFixture.allowWrites(coordinator, on: "partRequirement")
         let saved = try await service.save(edit, for: job.id, editing: part.id)
         try await SearchEditingFixture.waitUntil {
             search.results.isEmpty && overview.filteredRows.isEmpty
@@ -164,21 +163,19 @@ struct SearchStateTests {
             #expect(search.navigationRevision == before + 1 && editing.parts.selectedID == nil)
             observation.cancel(); await observation.value
         }
-        var closure = JobTransitionDraft(stage: .completed)
-        closure.outcome = "Retained"
-        closure.unfinishedPartsReason = "Retained for history"
-        _ = try await JobService(coordinator: coordinator).transition(jobID, using: closure)
+        _ = try await JobService(coordinator: coordinator).setStage(jobID, to: .done)
         try await SearchEditingFixture.waitUntil {
-            editing.jobs.jobs.first { $0.id == jobID }?.stage == .completed
+            editing.jobs.jobs.first { $0.id == jobID }?.stage == .done
         }
         search.text = partDraft.description
         let observation = Task { await search.observe() }
         defer { observation.cancel() }
         try await SearchEditingFixture.waitUntil { search.results.first?.recordID == part.id }
         search.open("Part-\(part.id.uuidString)", editing: editing, navigation: navigation)
+        // A part of a Done job opens from search and can still change.
         #expect(
             editing.parts.selectedID == part.id
-                && !editing.parts.canWrite(jobID, jobs: editing.jobs))
+                && editing.parts.canWrite(jobID, jobs: editing.jobs))
         observation.cancel(); await observation.value
         observations.forEach { $0.cancel() }
         for observation in observations { await observation.value }
@@ -197,6 +194,8 @@ struct SearchStateTests {
         draft.description = "Needle part"
         let part = try await PartService(coordinator: coordinator).save(
             draft, for: second.id, editing: nil)
+        let task = try await JobTaskService(coordinator: coordinator).save(
+            JobTaskFixture.draft(.toDo), for: first.id, editing: nil)
         let editing = SearchEditingFixture.make(coordinator)
         let navigation = WorkshopNavigation(configuration: AppConfiguration.current)
         let search = SearchState(coordinator: coordinator)
@@ -208,20 +207,21 @@ struct SearchStateTests {
         }
         editing.watches.select(first.watchID)
         editing.jobs.open(first)
-        editing.jobs.edit()
-        editing.jobs.draft?.title = "Keep correction"
+        editing.tasks.open(task, for: first.id)
+        editing.tasks.edit(jobs: editing.jobs)
+        editing.tasks.draft?.title = "Keep correction"
         search.present()
         search.open("Part-\(part.id.uuidString)", editing: editing, navigation: navigation)
         #expect(editing.showsUnsavedChanges && editing.watches.selectedID == first.watchID)
         editing.stay()
-        #expect(editing.jobs.draft?.title == "Keep correction" && search.isPresented)
-        editing.jobs.draft?.title = ""
+        #expect(editing.tasks.draft?.title == "Keep correction" && search.isPresented)
+        editing.tasks.draft?.title = ""
         search.open("Part-\(part.id.uuidString)", editing: editing, navigation: navigation)
         await editing.saveAndContinue()
         #expect(
-            editing.jobs.saveError != nil && editing.watches.selectedID == first.watchID
+            editing.tasks.saveError != nil && editing.watches.selectedID == first.watchID
                 && search.isPresented)
-        editing.jobs.draft?.title = "Keep correction"
+        editing.tasks.draft?.title = "Keep correction"
         search.open("Part-\(part.id.uuidString)", editing: editing, navigation: navigation)
         await editing.saveAndContinue()
         #expect(

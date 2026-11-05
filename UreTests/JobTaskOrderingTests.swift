@@ -20,7 +20,6 @@ nonisolated struct JobTaskOrderingTests {
         let d = try await service.save(JobTaskFixture.draft(.doing), for: other.id, editing: nil)
         let positions = [a.position, b.position, c.position, d.position]
         #expect(positions == [0, 1, 2, 0])
-        let events = try await coordinator.read(ActivityQueries.fetchAll)
         #expect(try await service.move(c.id, for: job.id, to: .up).map(\.id) == [a.id, c.id, b.id])
         #expect(
             try await service.move(a.id, for: job.id, to: .end).map(\.id) == [c.id, b.id, a.id])
@@ -40,7 +39,6 @@ nonisolated struct JobTaskOrderingTests {
         }
         #expect(
             try await coordinator.read { try JobTaskQueries.ordered(for: other.id, in: $0) } == [d])
-        #expect(try await coordinator.read(ActivityQueries.fetchAll) == events)
         #expect(
             try await coordinator.read { try JobTaskQueries.unfinished(for: job.id, in: $0) }.map(
                 \.id) == [a.id])
@@ -71,7 +69,6 @@ nonisolated struct JobTaskOrderingTests {
         let a = try await service.save(JobTaskFixture.draft(.doing), for: job.id, editing: nil)
         let b = try await service.save(JobTaskFixture.draft(.waiting), for: job.id, editing: nil)
         let c = try await service.save(JobTaskFixture.draft(.done), for: job.id, editing: nil)
-        let events = try await coordinator.read(ActivityQueries.fetchAll)
         try await coordinator.mutate { db, _, _ in
             try db.execute(
                 sql: """
@@ -87,7 +84,6 @@ nonisolated struct JobTaskOrderingTests {
             try await coordinator.read { try JobTaskQueries.ordered(for: job.id, in: $0) } == [
                 a, b, c,
             ])
-        #expect(try await coordinator.read(ActivityQueries.fetchAll) == events)
         try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failTaskOrder")
         }
         #expect(
@@ -97,8 +93,8 @@ nonisolated struct JobTaskOrderingTests {
         try await coordinator.close()
     }
 
-    @Test(arguments: [JobStage.completed, .cancelled])
-    func closedJobsRejectMovesAndKeepHonestProgress(stage: JobStage) async throws {
+    @Test
+    func aDoneJobTakesMovesAndKeepsHonestProgress() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -108,23 +104,13 @@ nonisolated struct JobTaskOrderingTests {
         let a = try await service.save(JobTaskFixture.draft(.done), for: job.id, editing: nil)
         _ = try await service.save(JobTaskFixture.draft(.toDo), for: job.id, editing: nil)
         _ = try await service.save(JobTaskFixture.draft(.skipped), for: job.id, editing: nil)
-        var closure = JobTransitionDraft(stage: stage)
-        closure.outcome = "Repair retained"
-        closure.cancellationReason = "Owner declined"
-        closure.unfinishedTasksReason = "Owner will arrange final testing"
-        _ = try await JobService(coordinator: coordinator).transition(job.id, using: closure)
+        _ = try await JobService(coordinator: coordinator).setStage(job.id, to: .done)
         let before = try await coordinator.read(JobTaskQueries.fetchAll)
-        let events = try await coordinator.read(ActivityQueries.fetchAll)
-        await #expect(throws: JobError.closedJob) {
-            try await service.move(a.id, for: job.id, to: .down)
-        }
-        await #expect(throws: JobError.closedJob) {
-            try await service.move(a.id, for: job.id, to: .up)
-        }
-        #expect(try await coordinator.read(JobTaskQueries.fetchAll) == before)
-        #expect(try await coordinator.read(ActivityQueries.fetchAll) == events)
         #expect(JobTaskProgress(tasks: before).percentage == 50)
         #expect(JobTaskProgress(tasks: before).skippedCount == 1)
+        let moved = try await service.move(a.id, for: job.id, to: .down)
+        #expect(moved.map(\.id)[1] == a.id)
+        #expect(JobTaskProgress(tasks: moved).percentage == 50)
         try await coordinator.close()
     }
 
@@ -183,7 +169,6 @@ nonisolated struct JobTaskOrderingTests {
             try Data("Original bytes".utf8).write(to: originals.appending(path: "evidence.bin"))
         }
         let records = try await coordinator.read(JobTaskQueries.fetchAll)
-        let events = try await coordinator.read(ActivityQueries.fetchAll)
         try await coordinator.mutate { db, _, _ in
             try PartMigrationFixture.removeParts(in: db)
             try db.drop(index: "jobTask_jobID_position")
@@ -205,7 +190,6 @@ nonisolated struct JobTaskOrderingTests {
             #expect(saved.map(\.createdAt) == old.map(\.createdAt))
             #expect(saved.map(\.updatedAt) == old.map(\.updatedAt))
         }
-        #expect(try await upgraded.read(ActivityQueries.fetchAll) == events)
         #expect(try await upgraded.read(JobQueries.fetchAll).contains(job))
         #expect(try await upgraded.read(JobQueries.fetchAll).contains(other))
         #expect(

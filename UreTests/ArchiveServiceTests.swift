@@ -8,7 +8,7 @@ nonisolated struct ArchiveServiceTests {
     private let clock = Date(timeIntervalSince1970: 1_700_000_000.25)
 
     @Test
-    func aWatchWithAnOpenJobArchivesAndUnarchiveKeepsItsJobsAndHistory() async throws {
+    func aWatchWithAnOpenJobArchivesAndUnarchiveKeepsItsJobs() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let clock = clock
@@ -17,7 +17,6 @@ nonisolated struct ArchiveServiceTests {
         let job = try await JobTaskFixture.job(coordinator)
         let task = try await JobTaskService(coordinator: coordinator).save(
             JobTaskFixture.draft(.toDo), for: job.id, editing: nil)
-        let events = try await coordinator.read(ActivityQueries.fetchAll)
         let prior = try #require(
             try await coordinator.read { try WatchQueries.fetch(job.watchID, in: $0) })
         let service = ArchiveService(coordinator: coordinator)
@@ -29,31 +28,21 @@ nonisolated struct ArchiveServiceTests {
                 $0.recordID == prior.id
             }?.isArchived == true)
 
-        // The open job stays in the workshop and can still change.
+        // The open job stays in the workshop and can still change, also its state.
         #expect(try await coordinator.read(WorkshopQueries.fetch).map(\.id) == [job.id])
-        var intake = JobDraft(job: job)
-        intake.title = "Service while archived"
-        let renamed = try await JobService(coordinator: coordinator).save(
-            intake, for: job.watchID, editing: job.id)
+        let jobs = JobService(coordinator: coordinator)
+        let renamed = try await jobs.update(job.id, .title("Service while archived"))
         try await RecordNotesService(coordinator: coordinator).save(
             "Still on the bench", for: .job(job.id))
         await #expect(throws: ArchiveError.archived) {
             try await WatchService(coordinator: coordinator).update(archived.id, .brand("Omega"))
         }
-        var closure = JobTransitionDraft(stage: .cancelled)
-        closure.cancellationReason = "Keep for reference"
-        closure.unfinishedTasksReason = "The owner collected the watch"
-        let closed = try await JobService(coordinator: coordinator).transition(
-            job.id, using: closure)
+        let done = try await jobs.setStage(job.id, to: .done).job
+        #expect(try await jobs.setStage(job.id, to: .inProgress).job.stage == .inProgress)
+        let closed = try await jobs.restoreStage(job.id, to: JobStageValue(job: done))
         await #expect(throws: ArchiveError.archived) {
-            try await JobService(coordinator: coordinator).reopen(
-                job.id, using: JobTransitionDraft(stage: .planned))
+            try await jobs.start(for: archived.id)
         }
-        await #expect(throws: ArchiveError.archived) {
-            try await JobService(coordinator: coordinator).save(
-                JobDraft(), for: archived.id, editing: nil)
-        }
-        let history = try await coordinator.read(ActivityQueries.fetchAll)
         try await coordinator.close()
 
         let reopened = fixture.coordinator()
@@ -62,13 +51,10 @@ nonisolated struct ArchiveServiceTests {
         let restored = try await ArchiveService(coordinator: reopened).setWatch(
             prior.id, archived: false)
         #expect(restored == prior)
-        #expect(try await reopened.read(ActivityQueries.fetchAll) == history)
-        #expect(history.count == events.count + 1)
         #expect(try await reopened.read { try JobQueries.fetch(closed.id, in: $0) } == closed)
-        #expect(closed.title == renamed.title)
+        #expect(closed.title == renamed.title && closed.stage == .done)
         #expect(try await reopened.read { try JobTaskQueries.fetch(task.id, in: $0) } == task)
-        _ = try await JobService(coordinator: reopened).reopen(
-            job.id, using: JobTransitionDraft(stage: .planned))
+        _ = try await JobService(coordinator: reopened).setStage(job.id, to: .inProgress)
         try await reopened.close()
     }
 
@@ -106,9 +92,7 @@ nonisolated struct ArchiveServiceTests {
                 try #require(URL(string: "https://example.org/manual.pdf")),
                 for: .caliber(caliber.id))
         }
-        #expect(
-            try await coordinator.read { try JobQueries.fetch(job.id, in: $0)?.intakeSnapshot }
-                == job.intakeSnapshot)
+        #expect(try await coordinator.read { try JobQueries.fetch(job.id, in: $0) } == job)
         let restored = try await service.setCaliber(caliber.id, archived: false)
         #expect(restored == caliber)
         try await coordinator.close()

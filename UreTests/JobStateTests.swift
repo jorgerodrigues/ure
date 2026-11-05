@@ -1,12 +1,13 @@
 import Foundation
 import GRDB
+import Synchronization
 import Testing
 
 @testable import Ure
 
 struct JobStateTests {
     @Test(.timeLimit(.minutes(1)))
-    func cancelAndValidationKeepNewJobsOutOfHistoryUntilSaved() async throws {
+    func startingAJobSelectsItWithTheCursorInItsTitle() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -14,197 +15,209 @@ struct JobStateTests {
         let watch = try await makeWatch(coordinator)
         let (state, observation) = try await makeState(coordinator)
         defer { observation.cancel() }
-        state.start(for: watch.id)
-        state.draft?.title = "Cancelled intake"
-        state.cancel()
-        #expect(state.draft == nil)
-        #expect(state.history(for: watch.id).isEmpty)
-        #expect(try await coordinator.read(JobQueries.fetchAll).isEmpty)
-        state.start(for: watch.id)
-        #expect(!(await state.save()))
-        #expect(state.fieldErrors[.title] != nil)
-        #expect(state.draft != nil)
-        state.draft?.title = "Planned repair"
-        #expect(await state.save())
-        #expect(state.selectedJob?.stage == .planned)
-        #expect(state.fieldErrors.isEmpty)
+        #expect(await state.start(for: watch.id))
+        let job = try #require(state.selectedJob)
+        #expect(job.title == "New Job" && job.stage == .inProgress)
+        #expect(state.watchID == watch.id && state.titleToFocus == job.id)
+        #expect(state.facts(for: job.id)?.title.text == "New Job")
+        state.titleFocused()
+        #expect(state.titleToFocus == nil)
         state.close()
-        state.start(for: watch.id)
-        #expect(state.draft == nil)
-        #expect(state.selectedJob?.title == "Planned repair")
-        #expect(try await coordinator.read(JobQueries.fetchAll).count == 1)
+        #expect(state.selectedJob == nil && state.watchID == nil)
+        #expect(await state.start(for: watch.id))
+        #expect(state.selectedJob == job && state.titleToFocus == nil)
+        try await waitUntil { state.jobs == [job] }
+        #expect(try await coordinator.read(JobQueries.fetchAll) == [job])
+
+        let archived = try await makeWatch(coordinator)
+        _ = try await ArchiveService(coordinator: coordinator).setWatch(archived.id, archived: true)
+        state.close()
+        #expect(await !state.start(for: archived.id))
+        #expect(state.saveError != nil && state.selectedJob == nil)
         observation.cancel()
         await observation.value
         try await coordinator.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func observedEditsRefreshDetailAndHistoryWithoutReplacingAnOpenDraft() async throws {
+    func theTitleProblemAndWaitingTextSaveWithoutAButton() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let watch = try await makeWatch(coordinator)
-        let (state, observation) = try await makeState(coordinator)
+        let job = try await JobService(coordinator: coordinator).start(for: watch.id)
+        let (state, observation) = try await makeState(coordinator, pause: PauseGate().pause)
         defer { observation.cancel() }
-        state.start(for: watch.id)
-        state.draft?.title = "Saved job"
-        #expect(await state.save())
-        let saved = try #require(state.selectedJob)
-        state.edit()
-        state.draft?.title = "Keep my draft"
-        var draft = JobDraft(job: saved)
-        draft.title = "Committed edit"
-        let updated = try await JobService(coordinator: coordinator).save(
-            draft, for: watch.id, editing: saved.id)
-        try await waitUntil { state.selectedJob == updated }
-        #expect(state.draft?.title == "Keep my draft")
-        #expect(state.history(for: watch.id) == [updated])
-        #expect(state.history(for: UUID()).isEmpty)
-        state.cancel()
-        #expect(state.selectedJob == updated)
+        try await waitUntil { state.jobs == [job] }
+        state.open(job)
+        let facts = try #require(state.facts(for: job.id))
+        facts.title.beginEditing()
+        facts.title.change(to: "Full service", undoManager: nil)
+        #expect(state.hasUnsavedFacts)
+        facts.title.endEditing()
+        try await waitUntil { !facts.title.hasUnsavedChanges }
+        let problem = "Loses about two minutes a day.\nThe crown feels gritty."
+        facts.problem.beginEditing()
+        facts.problem.change(to: problem, undoManager: nil)
+        facts.problem.endEditing()
+        try await waitUntil { !facts.problem.hasUnsavedChanges }
+        var saved = try #require(try await coordinator.read(JobQueries.fetchAll).first)
+        #expect(saved.title == "Full service" && saved.problem == problem)
+
+        #expect(await state.setStage(.waiting))
+        #expect(state.waitingToFocus == job.id && state.selectedJob?.stage == .waiting)
+        state.waitingFocused()
+        facts.waitingFor.beginEditing()
+        facts.waitingFor.change(to: "a mainspring from Cousins", undoManager: nil)
+        facts.waitingFor.endEditing()
+        try await waitUntil { !facts.waitingFor.hasUnsavedChanges }
+        saved = try #require(try await coordinator.read(JobQueries.fetchAll).first)
+        #expect(saved.waitingFor == "a mainspring from Cousins")
+
+        facts.title.beginEditing()
+        facts.title.change(to: " ", undoManager: nil)
+        facts.title.endEditing()
+        #expect(facts.title.problem == "Enter a title.")
+        #expect(try await coordinator.read(JobQueries.fetchAll).first?.title == "Full service")
         observation.cancel()
         await observation.value
         try await coordinator.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func sharedGuardProtectsJobNavigationAndSaveFailureCancelsClosure() async throws {
+    func changingTheStateSavesRecordsTheDateAndUndoPutsItBack() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let opened = Date(timeIntervalSince1970: 1_700_000_000)
+        let clock = Mutex(opened)
+        let coordinator = fixture.coordinator(
+            dependencies: LibraryDependencies(now: { clock.withLock { $0 } }))
+        _ = try await coordinator.open()
+        let watch = try await makeWatch(coordinator)
+        let job = try await JobService(coordinator: coordinator).start(for: watch.id)
+        let (state, observation) = try await makeState(coordinator)
+        defer { observation.cancel() }
+        try await waitUntil { state.jobs == [job] }
+        state.open(job)
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+
+        let doneDay = opened.addingTimeInterval(86_400)
+        clock.withLock { $0 = doneDay }
+        try await change(state, to: .done, undo: undo)
+        #expect(try await stored(job.id, coordinator)?.doneAt == doneDay)
+        #expect(state.selectedJob?.stage == .done)
+        #expect(undo.undoMenuItemTitle == "Undo Change State")
+
+        clock.withLock { $0 = doneDay.addingTimeInterval(86_400) }
+        undo.undo()
+        await state.waitForStageChanges()
+        var saved = try #require(try await stored(job.id, coordinator))
+        #expect(saved.stage == .inProgress && saved.doneAt == nil && saved.createdAt == opened)
+        #expect(undo.redoMenuItemTitle == "Redo Change State")
+        undo.redo()
+        await state.waitForStageChanges()
+        saved = try #require(try await stored(job.id, coordinator))
+        #expect(saved.stage == .done && saved.doneAt == doneDay)
+
+        try await change(state, to: .waiting, undo: undo)
+        let facts = try #require(state.facts(for: job.id))
+        facts.waitingFor.beginEditing()
+        facts.waitingFor.change(to: "the owner's answer", undoManager: nil)
+        try await change(state, to: .inProgress, undo: undo)
+        saved = try #require(try await stored(job.id, coordinator))
+        #expect(saved.stage == .inProgress && saved.waitingFor == nil && saved.doneAt == nil)
+        undo.undo()
+        await state.waitForStageChanges()
+        saved = try #require(try await stored(job.id, coordinator))
+        #expect(saved.stage == .waiting && saved.waitingFor == "the owner's answer")
+        try await waitUntil { facts.waitingFor.text == "the owner's answer" }
+        undo.undo()
+        await state.waitForStageChanges()
+        saved = try #require(try await stored(job.id, coordinator))
+        #expect(saved.stage == .done && saved.doneAt == doneDay && saved.waitingFor == nil)
+        state.discardUndo()
+        #expect(!undo.canUndo)
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aStateChangeWaitsForTypingAndStopsAtATitleThatIsNotValid() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let watch = try await makeWatch(coordinator)
-        let (state, observation) = try await makeState(coordinator)
+        let job = try await JobService(coordinator: coordinator).start(for: watch.id)
+        let (state, observation) = try await makeState(coordinator, pause: PauseGate().pause)
         defer { observation.cancel() }
-        let editing = WorkshopEditing(
-            watches: WatchState(service: WatchService(coordinator: coordinator)),
-            calibers: CaliberState(service: CaliberService(coordinator: coordinator)), jobs: state,
-            notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
-            material: MaterialState(service: MaterialService(coordinator: coordinator)),
-            tasks: JobTaskState(service: JobTaskService(coordinator: coordinator)),
-            parts: PartState(service: PartService(coordinator: coordinator)))
-        state.start(for: watch.id)
-        state.draft?.title = "Keep this intake"
-        var navigated = false
-        editing.requestNavigation { navigated = true }
-        #expect(editing.unsavedChangesTitle == "Save changes to this job?")
-        #expect(editing.showsUnsavedChanges)
-        editing.stay()
-        #expect(!navigated)
-        #expect(state.draft?.title == "Keep this intake")
-        try await coordinator.mutate { db, _, _ in
-            try db.execute(
-                sql:
-                    "CREATE TRIGGER failJobInsert BEFORE INSERT ON job BEGIN SELECT RAISE(ABORT, 'fixture disk failure'); END"
-            )
-        }
-        var cancelled = false
-        editing.requestNavigation({ navigated = true }, onCancel: { cancelled = true })
-        await editing.saveAndContinue()
-        #expect(!navigated)
-        #expect(cancelled)
-        #expect(state.draft?.title == "Keep this intake")
-        #expect(state.saveError != nil)
-        #expect(!editing.isNavigationPending)
-        #expect(try await coordinator.read(JobQueries.fetchAll).isEmpty)
-        try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failJobInsert")
-        }
-        editing.requestNavigation { navigated = true }
-        await editing.saveAndContinue()
-        #expect(navigated)
-        #expect(state.selectedJob?.title == "Keep this intake")
-        state.edit()
-        state.draft?.title = "Discarded edit"
-        editing.requestNavigation(state.close)
-        editing.discardAndContinue()
-        #expect(state.selectedID == nil)
-        #expect(state.draft == nil)
-        #expect(state.jobs.first?.title == "Keep this intake")
+        try await waitUntil { state.jobs == [job] }
+        state.open(job)
+        let facts = try #require(state.facts(for: job.id))
+        facts.problem.beginEditing()
+        facts.problem.change(to: "Stops overnight.", undoManager: nil)
+        #expect(await state.setStage(.done))
+        var saved = try #require(try await stored(job.id, coordinator))
+        #expect(saved.stage == .done && saved.problem == "Stops overnight.")
+        facts.problem.endEditing()
+
+        facts.title.beginEditing()
+        facts.title.change(to: "", undoManager: nil)
+        facts.title.endEditing()
+        #expect(await !state.setStage(.inProgress))
+        #expect(state.saveError != nil && !state.isSaving)
+        saved = try #require(try await stored(job.id, coordinator))
+        #expect(saved.stage == .done && saved.title == "New Job")
+        facts.title.beginEditing()
+        facts.title.change(to: "Crystal", undoManager: nil)
+        #expect(await state.setStage(.inProgress))
+        saved = try #require(try await stored(job.id, coordinator))
+        #expect(saved.stage == .inProgress && saved.title == "Crystal" && state.saveError == nil)
         observation.cancel()
         await observation.value
         try await coordinator.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func staleCreationKeepsTheDraftAndOffersTheExistingJob() async throws {
+    func leavingDoneWhileTheWatchHasAnotherOpenJobSaysSoAndKeepsTheJob() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let watch = try await makeWatch(coordinator)
+        let service = JobService(coordinator: coordinator)
+        let first = try await service.start(for: watch.id, title: "First repair")
+        let done = try await service.setStage(first.id, to: .done).job
+        let second = try await service.start(for: watch.id, title: "Second repair")
         let (state, observation) = try await makeState(coordinator)
         defer { observation.cancel() }
-        state.start(for: watch.id)
-        state.draft?.title = "Pending intake"
-        var external = JobDraft()
-        external.title = "Existing job"
-        let saved = try await JobService(coordinator: coordinator).save(
-            external, for: watch.id, editing: nil)
-        #expect(!(await state.save()))
-        #expect(state.conflictingJobID == saved.id)
-        #expect(state.draft?.title == "Pending intake")
-        try await waitUntil { state.jobs.contains(saved) }
-        state.openConflictingJob()
-        #expect(state.showsUnsavedChanges)
-        state.discardAndContinue()
-        #expect(state.selectedJob == saved)
-        #expect(state.draft == nil)
-        #expect(try await coordinator.read(JobQueries.fetchAll) == [saved])
+        try await waitUntil { state.jobs.count == 2 }
+        state.open(done)
+        let undo = UndoManager()
+        #expect(await !state.setStage(.inProgress, undoManager: undo))
+        #expect(
+            state.saveError
+                == "This watch already has an open job. Open that job to continue its repair.")
+        #expect(!undo.canUndo && state.selectedJob == done)
+        #expect(state.openJob(for: watch.id) == second)
+        #expect(try await stored(first.id, coordinator) == done)
         observation.cancel()
         await observation.value
         try await coordinator.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func pendingSaveBlocksRepeatedSaveAndNavigation() async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        let watch = try await makeWatch(coordinator)
-        let (state, observation) = try await makeState(coordinator)
-        defer { observation.cancel() }
-        state.start(for: watch.id)
-        state.draft?.title = "One job"
-        let started = AsyncStream<Void>.makeStream()
-        let gate = DispatchSemaphore(value: 0)
-        defer { gate.signal() }
-        let blocker = Task {
-            try await coordinator.mutate { _, _, _ in
-                started.continuation.yield(())
-                gate.wait()
-            }
-        }
-        var iterator = started.stream.makeAsyncIterator()
-        _ = await iterator.next()
-        let saving = Task { await state.save() }
-        try await waitUntil { state.isSaving }
-        #expect(!(await state.save()))
-        var navigated = false
-        state.requestNavigation { navigated = true }
-        state.cancel()
-        #expect(!navigated)
-        #expect(state.draft?.title == "One job")
-        gate.signal()
-        try await blocker.value
-        #expect(await saving.value)
-        #expect(try await coordinator.read(JobQueries.fetchAll).count == 1)
-        observation.cancel()
-        await observation.value
-        try await coordinator.close()
-    }
-
-    @Test(.timeLimit(.minutes(1)))
-    func loadingFailureCanBeRetriedAndPreventsStartingFromMissingHistory() async throws {
+    func loadingFailureCanBeRetriedAndStartsNoJob() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         let state = JobState(service: JobService(coordinator: coordinator))
         await state.observe()
-        #expect(state.loadError != nil)
-        state.start(for: UUID())
-        #expect(state.draft == nil)
+        #expect(!state.isLoading && state.loadError != nil)
+        #expect(await !state.start(for: UUID()))
         _ = try await coordinator.open()
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
@@ -215,138 +228,25 @@ struct JobStateTests {
         try await coordinator.close()
     }
 
-    @Test(.timeLimit(.minutes(1)))
-    func actionDraftsKeepValidationAndUseTheSharedNavigationGuard() async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        let watch = try await makeWatch(coordinator)
-        let (state, observation) = try await makeState(coordinator)
-        defer { observation.cancel() }
-        state.start(for: watch.id)
-        state.draft?.title = "Repair"
-        #expect(await state.save())
-        let job = try #require(state.selectedJob)
-        state.beginAction(.transition)
-        state.actionDraft?.transition.stage = .waiting
-        #expect(!(await state.save()))
-        #expect(state.fieldErrors[.waitingReason] != nil)
-        #expect(state.actionDraft?.transition.stage == .waiting)
-        #expect(state.selectedJob == job)
-        state.actionDraft?.transition.waitingReason = "Await inspection"
-        var navigated = false
-        state.requestNavigation { navigated = true }
-        #expect(state.showsUnsavedChanges)
-        state.stay()
-        #expect(!navigated)
-        state.requestNavigation { navigated = true }
-        await state.saveAndContinue()
-        #expect(navigated)
-        #expect(state.selectedJob?.stage == .waiting)
-        #expect(state.actionDraft == nil)
-        state.beginAction(.transition)
-        state.actionDraft?.transition.stage = .ready
-        state.requestNavigation(state.close)
-        state.discardAndContinue()
-        #expect(state.selectedID == nil)
-        #expect(try await coordinator.read(WatchQueries.fetchAll) == [watch])
-        observation.cancel()
-        await observation.value
-        try await coordinator.close()
+    // The test host groups Undo by hand, and a state change registers its Undo after it saves,
+    // so the group stays open across the change.
+    private func change(_ state: JobState, to stage: JobStage, undo: UndoManager) async throws {
+        undo.beginUndoGrouping()
+        let changed = await state.setStage(stage, undoManager: undo)
+        undo.endUndoGrouping()
+        #expect(changed)
+        try await waitUntil { state.selectedJob?.stage == stage }
     }
 
-    @Test(.timeLimit(.minutes(1)), arguments: [JobAction.transition, .reopen])
-    func pendingActionsRejectRepeatedSavesAndNavigation(action: JobAction) async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        let watch = try await makeWatch(coordinator)
-        let (state, observation) = try await makeState(coordinator)
-        defer { observation.cancel() }
-        state.start(for: watch.id)
-        state.draft?.title = "Repair"
-        #expect(await state.save())
-        let job = try #require(state.selectedJob)
-        if action == .reopen {
-            var completion = JobTransitionDraft(stage: .completed)
-            completion.outcome = "Serviced"
-            let closed = try await JobService(coordinator: coordinator).transition(
-                job.id, using: completion)
-            try await waitUntil { state.selectedJob == closed }
-            state.edit()
-            state.beginAction(.transition)
-            #expect(!state.isEditing)
-        }
-        state.beginAction(action)
-        if action == .transition { state.actionDraft?.transition.stage = .ready }
-        let before = try await coordinator.read(ActivityQueries.fetchAll)
-        let started = AsyncStream<Void>.makeStream()
-        let gate = DispatchSemaphore(value: 0)
-        defer { gate.signal() }
-        let blocker = Task {
-            try await coordinator.mutate { _, _, _ in
-                started.continuation.yield(())
-                gate.wait()
-            }
-        }
-        var iterator = started.stream.makeAsyncIterator()
-        _ = await iterator.next()
-        let saving = Task { await state.save() }
-        try await waitUntil { state.isSaving }
-        #expect(!(await state.save()))
-        var navigated = false
-        state.requestNavigation { navigated = true }
-        state.cancel()
-        #expect(!navigated)
-        #expect(state.actionDraft != nil)
-        gate.signal()
-        try await blocker.value
-        #expect(await saving.value)
-        #expect(state.actionDraft == nil)
-        #expect(try await coordinator.read(ActivityQueries.fetchAll).count == before.count + 1)
-        observation.cancel()
-        await observation.value
-        try await coordinator.close()
+    private func stored(_ id: UUID, _ coordinator: LibraryCoordinator) async throws -> JobRecord? {
+        try await coordinator.read { try JobQueries.fetch(id, in: $0) }
     }
 
-    @Test(.timeLimit(.minutes(1)))
-    func actionWriteFailureKeepsTheDraftAndSavedState() async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        let watch = try await makeWatch(coordinator)
-        let (state, observation) = try await makeState(coordinator)
-        defer { observation.cancel() }
-        state.start(for: watch.id)
-        state.draft?.title = "Repair"
-        #expect(await state.save())
-        let job = try #require(state.selectedJob)
-        state.beginAction(.transition)
-        state.actionDraft?.transition.stage = .ready
-        try await coordinator.mutate { db, _, _ in
-            try db.execute(
-                sql:
-                    "CREATE TRIGGER failEvent BEFORE INSERT ON activityEvent BEGIN SELECT RAISE(ABORT, 'fixture failure'); END"
-            )
-        }
-        #expect(!(await state.save()))
-        #expect(state.actionDraft?.transition.stage == .ready)
-        #expect(state.saveError != nil)
-        #expect(state.selectedJob == job)
-        #expect(try await coordinator.read(WatchQueries.fetchAll) == [watch])
-        #expect(try await coordinator.read(ActivityQueries.fetchAll).isEmpty)
-        observation.cancel()
-        await observation.value
-        try await coordinator.close()
-    }
-
-    private func makeState(_ coordinator: LibraryCoordinator) async throws -> (
-        JobState, Task<Void, Never>
-    ) {
-        let state = JobState(service: JobService(coordinator: coordinator))
+    private func makeState(
+        _ coordinator: LibraryCoordinator,
+        pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    ) async throws -> (JobState, Task<Void, Never>) {
+        let state = JobState(service: JobService(coordinator: coordinator), pause: pause)
         let observation = Task { await state.observe() }
         do {
             try await waitUntil { !state.isLoading }

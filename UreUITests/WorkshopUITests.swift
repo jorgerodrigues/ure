@@ -18,8 +18,9 @@ nonisolated final class WorkshopUITests: XCTestCase {
         XCTAssertTrue(app.buttons["startWatchJob"].waitForExistence(timeout: 5))
         app.buttons["startWatchJob"].click()
         enter("Workshop service", identifier: "jobTitle", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editJob"].waitForExistence(timeout: 5))
+        app.windows.firstMatch.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(
+            app.descendants(matching: .any)["jobState"].firstMatch.waitForExistence(timeout: 5))
         app.windows.firstMatch.typeKey("1", modifierFlags: [.command, .option])
         let row = app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier BEGINSWITH %@", "workshopJob-")
@@ -30,7 +31,7 @@ nonisolated final class WorkshopUITests: XCTestCase {
         app.popUpButtons["workshopStageFilter"].click()
         app.menuItems["Waiting"].firstMatch.click()
         XCTAssertTrue(app.staticTexts["No matching jobs"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["editJob"].exists)
+        XCTAssertTrue(app.textFields["jobTitle"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["workshopSelectionMessage"].exists)
         app.buttons["Clear Filters"].firstMatch.click()
         XCTAssertTrue(row.waitForExistence(timeout: 3))
@@ -39,17 +40,16 @@ nonisolated final class WorkshopUITests: XCTestCase {
         search.typeText("Missing job")
         XCTAssertTrue(app.staticTexts["No matching jobs"].waitForExistence(timeout: 3))
         app.buttons["Clear Filters"].firstMatch.click()
-        app.windows.firstMatch.typeKey("e", modifierFlags: [.command, .option])
         enter("Corrected workshop service", identifier: "jobTitle", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editJob"].waitForExistence(timeout: 5))
-        app.buttons["changeJobStage"].click()
-        app.popUpButtons["jobStage"].click()
-        app.menuItems["Completed"].firstMatch.click()
-        enter("Reviewed", identifier: "jobOutcome", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
+        app.windows.firstMatch.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(
+            app.descendants(matching: .any)["jobState"].firstMatch.waitForExistence(timeout: 5))
+        let state = app.descendants(matching: .any)["jobState"].firstMatch
+        XCTAssertTrue(state.waitForExistence(timeout: 5))
+        state.click()
+        app.menuItems["Done"].firstMatch.click()
         XCTAssertTrue(app.staticTexts["No open jobs"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["reopenJob"].exists)
+        XCTAssertEqual(state.value as? String, "Done")
         app.buttons["backToWatch"].click()
         let history = app.buttons.matching(
             NSPredicate(format: "identifier BEGINSWITH %@", "watchJob-")
@@ -57,7 +57,8 @@ nonisolated final class WorkshopUITests: XCTestCase {
         .firstMatch
         XCTAssertTrue(history.waitForExistence(timeout: 5))
         history.click()
-        XCTAssertTrue(app.buttons["reopenJob"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["jobTitle"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.textFields["jobTitle"].value as? String, "Corrected workshop service")
     }
 
     @MainActor

@@ -25,7 +25,6 @@ nonisolated struct PartLinkMigrationTests {
         order.status = .ordered
         order.orderReference = "PO-1"
         let ordered = try await service.save(order, for: job.id, editing: needed.id)
-        let events = try await coordinator.read(ActivityQueries.fetchAll)
         let snapshot =
             #"{"currency":"DKK","price":"12.3400","supplierName":"Supplier Å時計","supplierStockCode":"STOCK-77","url":"https://example.org/parts/0012?variant=A"}"#
         try await coordinator.mutate { db, _, _ in
@@ -42,14 +41,21 @@ nonisolated struct PartLinkMigrationTests {
                     UPDATE partRequirement
                     SET supplierSnapshot = ?, searchKey = searchKey || char(10) || 'stock-77'
                     """, arguments: [snapshot])
-            for column in ["priorValue", "nextValue"] {
-                try db.execute(
-                    sql: """
-                        UPDATE activityEvent
-                        SET \(column) = json_set(\(column), '$.part._0.supplierSnapshot', json(?))
-                        WHERE json_type(\(column), '$.part._0.partID') = 'text'
-                        """, arguments: [snapshot])
-            }
+            // The order's history keeps a copy of the supplier, which v18 removes.
+            try db.execute(
+                sql: """
+                    INSERT INTO activityEvent (id, jobID, kind, occurredAt, ordering, priorValue,
+                        nextValue)
+                    VALUES (?, ?, 'Part status changed', 1, 1,
+                        json_object('part', json_object('_0', json_object(
+                            'partID', ?, 'description', 'Spring', 'supplierSnapshot', json(?)))),
+                        json_object('part', json_object('_0', json_object(
+                            'partID', ?, 'description', 'Spring', 'orderReference', 'PO-1'))))
+                    """,
+                arguments: [
+                    UUID().uuidString, job.id.uuidString, ordered.id.uuidString, snapshot,
+                    ordered.id.uuidString,
+                ])
         }
         #expect(try await coordinator.read(eventsWithSupplierCopies) == 1)
         try await coordinator.close()
@@ -57,8 +63,11 @@ nonisolated struct PartLinkMigrationTests {
         let after = try await reopened.open()
         #expect(after.generationID != before.generationID)
         #expect(try await reopened.read(PartQueries.fetchAll) == [ordered])
-        #expect(try await reopened.read(ActivityQueries.fetchAll) == events)
-        #expect(try await reopened.read(eventsWithSupplierCopies) == 0)
+        // v23 then removes the history. The order reference stays on the part, so only the
+        // supplier copy that v18 removed is gone.
+        #expect(try await reopened.read { try $0.tableExists("activityEvent") } == false)
+        #expect(
+            try await RecordNotesService(coordinator: reopened).text(for: .job(job.id)).isEmpty)
         let schema = try await reopened.read { db in
             (
                 links: try db.columns(in: "partLink").map(\.name),

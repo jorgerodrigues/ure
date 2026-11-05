@@ -30,7 +30,6 @@ nonisolated struct PartServiceTests {
         #expect(saved.links.first == first.links.first)
         #expect(saved.links.map(\.url) == edit.links.map(\.url))
         #expect(try await coordinator.read(JobQueries.fetchAll) == [job])
-        #expect(try await coordinator.read(ActivityQueries.fetchAll).isEmpty)
         try await coordinator.close()
         let reopened = fixture.coordinator()
         _ = try await reopened.open()
@@ -158,8 +157,8 @@ nonisolated struct PartServiceTests {
         try await coordinator.close()
     }
 
-    @Test(arguments: [JobStage.completed, .cancelled])
-    func closureRequiresPartsExplanationAndRejectsStaleWrites(stage: JobStage) async throws {
+    @Test(arguments: [JobStage.waiting, .done])
+    func aJobInAnyStateKeepsItsPartsAndTakesChanges(stage: JobStage) async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -167,38 +166,16 @@ nonisolated struct PartServiceTests {
         let job = try await JobTaskFixture.job(coordinator)
         let service = PartService(coordinator: coordinator)
         let saved = try await service.save(PartFixture.draft(), for: job.id, editing: nil)
-        var closure = JobTransitionDraft(stage: stage)
-        closure.outcome = "Inspection complete"
-        closure.cancellationReason = "Owner declined repair"
         let jobs = JobService(coordinator: coordinator)
-        await #expect(throws: JobValidationError.self) {
-            try await jobs.transition(job.id, using: closure)
-        }
-        closure.unfinishedPartsReason = "Owner will source this part separately"
-        try await JobTaskFixture.failEvents(coordinator)
-        await #expect(throws: DatabaseError.self) {
-            try await jobs.transition(job.id, using: closure)
-        }
-        #expect(try await coordinator.read(JobQueries.fetchAll) == [job])
-        try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failTaskEvent")
-        }
-        let closed = try await jobs.transition(job.id, using: closure)
-        #expect(closed.unfinishedPartsReason == closure.unfinishedPartsReason)
-        #expect(
-            try await coordinator.read(ActivityQueries.fetchAll).last?.nextValue
-                == .job(JobStageValue(job: closed)))
-        await #expect(throws: JobError.closedJob) {
-            try await service.save(PartFixture.draft(), for: job.id, editing: nil)
-        }
-        await #expect(throws: JobError.closedJob) {
-            try await service.save(PartFixture.draft(), for: job.id, editing: saved.id)
-        }
+        #expect(try await jobs.setStage(job.id, to: stage).job.stage == stage)
         #expect(try await coordinator.read(PartQueries.fetchAll) == [saved])
-        let reopened = try await jobs.reopen(job.id, using: JobTransitionDraft(stage: .inProgress))
-        #expect(reopened.unfinishedPartsReason == nil)
         var edit = PartDraft(part: saved)
         edit.quantity = "3"
         #expect(try await service.save(edit, for: job.id, editing: saved.id).record.quantity == 3)
+        let added = try await service.save(PartFixture.draft(), for: job.id, editing: nil)
+        #expect(try await coordinator.read(PartQueries.fetchAll).count == 2)
+        _ = try await jobs.setStage(job.id, to: .inProgress)
+        #expect(try await coordinator.read { try PartQueries.fetch(added.id, in: $0) } == added)
         try await coordinator.close()
     }
 
@@ -211,7 +188,6 @@ nonisolated struct PartServiceTests {
         let job = try await JobTaskFixture.job(coordinator)
         let task = try await JobTaskService(coordinator: coordinator).save(
             JobTaskFixture.draft(.done), for: job.id, editing: nil)
-        let events = try await coordinator.read(ActivityQueries.fetchAll)
         try await coordinator.mutate { db, originals, _ in
             try Data("Original bytes".utf8).write(to: originals.appending(path: "evidence.bin"))
             try PartMigrationFixture.removeParts(in: db)
@@ -222,7 +198,6 @@ nonisolated struct PartServiceTests {
         #expect(after.generationID != before.generationID)
         #expect(try await reopened.read(JobQueries.fetchAll) == [job])
         #expect(try await reopened.read(JobTaskQueries.fetchAll) == [task])
-        #expect(try await reopened.read(ActivityQueries.fetchAll) == events)
         #expect(try await reopened.read(PartQueries.fetchAll).isEmpty)
         #expect(
             try Data(

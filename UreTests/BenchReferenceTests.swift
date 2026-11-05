@@ -21,9 +21,7 @@ struct BenchReferenceTests {
         let preferences = try BenchTestPreferences(root: fixture.root)
         defer { preferences.remove() }
         let state = preferences.state(coordinator)
-        var closure = JobTransitionDraft(stage: .completed)
-        closure.outcome = "Inspection finished"
-        _ = try await JobService(coordinator: coordinator).transition(firstJob.id, using: closure)
+        _ = try await JobService(coordinator: coordinator).setStage(firstJob.id, to: .done)
         let sameWatchJob = try await makeJob(coordinator, watchID: firstJob.watchID)
         let secondWatch = try await WatchService(coordinator: coordinator).make(
             "Second watch", caliberID: caliber.id)
@@ -181,27 +179,31 @@ struct BenchReferenceTests {
         let editing = MaterialEditingFixture.editing(coordinator)
         let observation = Task { await editing.jobs.observe() }
         defer { observation.cancel() }
-        try await waitUntil { !editing.jobs.isLoading }
+        let taskObservation = Task { await editing.tasks.observe() }
+        defer { taskObservation.cancel() }
+        try await waitUntil { !editing.jobs.isLoading && !editing.tasks.isLoading }
         editing.jobs.open(try #require(editing.jobs.jobs.first { $0.id == job.id }))
-        editing.jobs.edit()
-        editing.jobs.draft?.title = "Unfinished bench job"
+        editing.tasks.create(for: job.id, jobs: editing.jobs)
+        editing.tasks.draft?.title = "Unfinished bench task"
         bench.pin(items[0].id)
         bench.togglePane()
-        #expect(editing.jobs.draft?.title == "Unfinished bench job")
+        #expect(editing.tasks.draft?.title == "Unfinished bench task")
         var navigated = false
         editing.requestNavigation { navigated = true }
         #expect(editing.showsUnsavedChanges && !navigated)
         editing.stay()
-        #expect(editing.jobs.draft?.title == "Unfinished bench job")
+        #expect(editing.tasks.draft?.title == "Unfinished bench task")
         #expect(bench.reference?.item == items[0])
         #expect(try await coordinator.read(LibraryItemQueries.fetchAll).count == items.count)
         observation.cancel()
+        taskObservation.cancel()
         await observation.value
+        await taskObservation.value
         try await coordinator.close()
     }
 
     @Test
-    func readerCanReadClosedJobFilesAndExportUnchangedBytesWithoutLibraryWrites() async throws {
+    func readerCanReadDoneJobFilesAndExportUnchangedBytesWithoutLibraryWrites() async throws {
         let fixture = ImportFixture()
         defer { fixture.remove() }
         let coordinator = LibraryCoordinator(root: fixture.root)
@@ -215,9 +217,7 @@ struct BenchReferenceTests {
         let photoSource = try fixture.source(type: .png)
         let photo = try #require(
             try await MaterialFixture.file(photoSource, for: owners[0], in: coordinator).asset)
-        var closure = JobTransitionDraft(stage: .completed)
-        closure.outcome = "Closed for reference"
-        _ = try await JobService(coordinator: coordinator).transition(job.id, using: closure)
+        _ = try await JobService(coordinator: coordinator).setStage(job.id, to: .done)
         let before = try await coordinator.read(LibraryItemQueries.fetchAll)
         let reader = ReferenceReader(coordinator: coordinator)
         #expect(try await reader.document(for: document.id).pageCount == 3)
@@ -226,7 +226,7 @@ struct BenchReferenceTests {
         try await reader.export(document.id, to: destination)
         #expect(try Data(contentsOf: destination) == Data(contentsOf: source))
         #expect(try await coordinator.read(LibraryItemQueries.fetchAll) == before)
-        #expect(try await coordinator.read(JobQueries.fetchAll).first?.stage == .completed)
+        #expect(try await coordinator.read(JobQueries.fetchAll).first?.stage == .done)
         try await coordinator.close()
     }
 
@@ -252,10 +252,8 @@ struct BenchReferenceTests {
 
     private func makeJob(_ coordinator: LibraryCoordinator, watchID: UUID) async throws -> JobRecord
     {
-        var draft = JobDraft()
-        draft.title = "Next repair"
-        return try await JobService(coordinator: coordinator).save(
-            draft, for: watchID, editing: nil)
+        return try await JobService(coordinator: coordinator).start(
+            for: watchID, title: "Next repair")
     }
 
     private func waitUntil(_ condition: () -> Bool) async throws {

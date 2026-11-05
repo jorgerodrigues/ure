@@ -1,271 +1,147 @@
 import Foundation
 import GRDB
+import Synchronization
 import Testing
 
 @testable import Ure
 
 nonisolated struct JobTransitionTests {
-    @Test
-    func stageChangesAndReopenPreserveUnknownIntakeSnapshotKeys() async throws {
+    @Test(arguments: JobStage.allCases, JobStage.allCases)
+    func everyStateChangeSetsItsDatesAndKeepsTheOpenedDate(from: JobStage, to: JobStage)
+        async throws
+    {
         let fixture = WatchFixture()
         defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
+        let opened = Date(timeIntervalSince1970: 1_700_000_000)
+        let clock = Mutex(opened)
+        let coordinator = fixture.coordinator(
+            dependencies: LibraryDependencies(now: { clock.withLock { $0 } }))
         _ = try await coordinator.open()
-        let (_, job) = try await makeJob(coordinator)
-        try await coordinator.mutate { db, _, _ in
-            try db.execute(
-                sql:
-                    "UPDATE job SET intakeSnapshot = json_set(intakeSnapshot, '$.version', 2, '$.futureEvidence', 'keep these bytes') WHERE id = ?",
-                arguments: [job.id.uuidString])
-        }
-        let before = try await coordinator.read { db in
-            try String.fetchOne(
-                db, sql: "SELECT intakeSnapshot FROM job WHERE id = ?",
-                arguments: [job.id.uuidString])
-        }
+        let (watch, job) = try await makeJob(coordinator)
         let service = JobService(coordinator: coordinator)
-        _ = try await service.transition(job.id, using: draft(.waiting))
-        _ = try await service.transition(job.id, using: draft(.completed))
-        _ = try await service.reopen(job.id, using: draft(.inProgress))
-        let after = try await coordinator.read { db in
-            try String.fetchOne(
-                db, sql: "SELECT intakeSnapshot FROM job WHERE id = ?",
-                arguments: [job.id.uuidString])
+        let first = opened.addingTimeInterval(60)
+        clock.withLock { $0 = first }
+        var prior = try await service.setStage(job.id, to: from).job
+        if from == .waiting {
+            prior = try await service.update(job.id, .waitingFor("A mainspring"))
         }
-        #expect(after == before)
-        #expect(try await coordinator.read(ActivityQueries.fetchAll).count == 3)
-        try await coordinator.close()
-    }
-
-    @Test(arguments: [
-        Date(timeIntervalSinceReferenceDate: 800_000_000.0000001),
-        Date(timeIntervalSince1970: 1_778_307_200 + 21.0 / 4_194_304),
-    ])
-    func subsecondClockValuesRoundTripWithReturnedRecordsAndEvents(clock: Date) async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let storedDate = Date(timeIntervalSince1970: clock.timeIntervalSince1970)
-        let coordinator = fixture.coordinator(dependencies: LibraryDependencies(now: { clock }))
-        _ = try await coordinator.open()
-        let (bench, job) = try await makeJob(coordinator)
-        let service = JobService(coordinator: coordinator)
-        let started = try await service.transition(job.id, using: draft(.inProgress))
-        #expect(started.startedAt == storedDate)
-        #expect(try await coordinator.read(JobQueries.fetchAll) == [started])
-        let watch = try await WatchService(coordinator: coordinator).update(
-            bench.id, .brand("Bench test"))
-        #expect(watch.updatedAt == storedDate)
-        #expect(try await coordinator.read(WatchQueries.fetchAll) == [watch])
-        let closed = try await service.transition(job.id, using: draft(.completed))
-        #expect(closed.completedAt == storedDate)
-        #expect(try await coordinator.read(JobQueries.fetchAll) == [closed])
-        let events = try await coordinator.read(ActivityQueries.fetchAll)
-        #expect(events.map(\.ordering) == [1, 2])
-        #expect(events.allSatisfy { $0.occurredAt == storedDate })
-        #expect(events.last?.nextValue == .job(JobStageValue(job: closed)))
-        try await coordinator.close()
-    }
-
-    @Test(arguments: [JobStage.planned, .inProgress, .waiting, .ready], JobStage.allCases)
-    func everyOpenStageCanMoveToEveryStage(from: JobStage, to: JobStage) async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let date = Date(timeIntervalSince1970: 1_700_000_000)
-        let coordinator = fixture.coordinator(dependencies: LibraryDependencies(now: { date }))
-        _ = try await coordinator.open()
-        let (watch, initial) = try await makeJob(coordinator)
-        let service = JobService(coordinator: coordinator)
-        let prior = try await service.transition(initial.id, using: draft(from))
-        let before = try await coordinator.read(ActivityQueries.fetchAll)
-        let next = try await service.transition(initial.id, using: draft(to))
-        #expect(next.stage == to)
-        #expect(next.intakeSnapshot == initial.intakeSnapshot)
-        #expect(next.waitingReason == (to == .waiting ? "Waiting for evidence" : nil))
-        #expect(next.completedAt == (to == .completed ? date : nil))
-        #expect(next.cancelledAt == (to == .cancelled ? date : nil))
-        if to == .inProgress { #expect(next.startedAt == date) }
-        if to == .completed {
-            #expect(next.outcome == "Movement serviced")
-            #expect(next.recommendations == "Check timekeeping")
-        }
-        if to == .cancelled { #expect(next.cancellationReason == "Owner declined repair") }
-        let events = try await coordinator.read(ActivityQueries.fetchAll)
+        let second = first.addingTimeInterval(60)
+        clock.withLock { $0 = second }
+        let change = try await service.setStage(job.id, to: to)
+        let next = change.job
+        #expect(change.prior == JobStageValue(job: prior))
+        #expect(next.stage == to && next.createdAt == opened)
         if from == to {
-            #expect(events == before)
+            #expect(next == prior)
         } else {
-            #expect(events.count == before.count + 1)
-            let event = try #require(events.last)
-            #expect(event.jobID == initial.id)
-            #expect(event.kind == .jobStageChanged)
-            #expect(event.occurredAt == date)
-            #expect(event.priorValue == .job(JobStageValue(job: prior)))
-            #expect(event.nextValue == .job(JobStageValue(job: next)))
+            #expect(next.updatedAt == second)
+            #expect(next.doneAt == (to == .done ? second : nil))
+            #expect(next.waitingFor == nil)
         }
+        #expect(try await coordinator.read { try JobQueries.fetch(job.id, in: $0) } == next)
         #expect(
             try await coordinator.read { db in try WatchQueries.fetch(watch.id, in: db) } == watch)
         try await coordinator.close()
     }
 
-    @Test(arguments: [JobStage.waiting, .completed, .cancelled])
-    func requiredFieldsRejectWhitespaceWithoutStateOrEvents(stage: JobStage) async throws {
+    @Test
+    func restorePutsBackAStateWithItsDoneDateAndWaitingText() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
+        let opened = Date(timeIntervalSince1970: 1_700_000_000)
+        let clock = Mutex(opened)
+        let coordinator = fixture.coordinator(
+            dependencies: LibraryDependencies(now: { clock.withLock { $0 } }))
         _ = try await coordinator.open()
         let (_, job) = try await makeJob(coordinator)
-        var change = JobTransitionDraft(stage: stage)
-        change.waitingReason = " \n "
-        change.outcome = " \t "
-        change.cancellationReason = " \n "
-        await #expect(throws: JobValidationError.self) {
-            try await JobService(coordinator: coordinator).transition(job.id, using: change)
-        }
-        #expect(try await coordinator.read(JobQueries.fetchAll) == [job])
-        #expect(try await coordinator.read(ActivityQueries.fetchAll).isEmpty)
-        try await coordinator.close()
-    }
-
-    @Test(
-        arguments: [JobStage.completed, .cancelled],
-        [JobStage.planned, .inProgress, .waiting, .ready])
-    func closureLocksEditsAndReopenPreservesHistory(closed: JobStage, reopened: JobStage)
-        async throws
-    {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        _ = try await coordinator.open()
-        let (watch, job) = try await makeJob(coordinator)
         let service = JobService(coordinator: coordinator)
-        let started = try await service.transition(job.id, using: draft(.inProgress))
-        let closure = try await service.transition(job.id, using: draft(closed))
-        let before = try await coordinator.read(ActivityQueries.fetchAll)
-        await #expect(throws: JobError.closedJob) {
-            try await service.save(JobDraft(job: closure), for: watch.id, editing: job.id)
-        }
-        await #expect(throws: JobError.closedJob) {
-            try await service.transition(job.id, using: draft(.ready))
-        }
-        await #expect(throws: JobError.invalidReopenStage) {
-            try await service.reopen(job.id, using: draft(.completed))
-        }
-        #expect(try await coordinator.read(ActivityQueries.fetchAll) == before)
-        #expect(try await coordinator.read(JobQueries.fetchAll) == [closure])
-        let open = try await service.reopen(job.id, using: draft(reopened))
-        #expect(open.stage == reopened)
-        #expect(open.completedAt == nil)
-        #expect(open.cancelledAt == nil)
-        #expect(open.startedAt == started.startedAt)
-        #expect(open.outcome == closure.outcome)
-        let events = try await coordinator.read(ActivityQueries.fetchAll)
-        #expect(Array(events.prefix(before.count)) == before)
-        #expect(events.last?.priorValue == .job(JobStageValue(job: closure)))
-        #expect(events.last?.nextValue == .job(JobStageValue(job: open)))
-        await #expect(throws: JobError.notClosed) {
-            try await service.reopen(job.id, using: draft(.planned))
-        }
+        let doneDay = opened.addingTimeInterval(86_400)
+        clock.withLock { $0 = doneDay }
+        let done = try await service.setStage(job.id, to: .done)
+        #expect(done.prior == JobStageValue(stage: .inProgress))
+        #expect(done.job.doneAt == doneDay)
+
+        let later = doneDay.addingTimeInterval(86_400)
+        clock.withLock { $0 = later }
+        let reopened = try await service.setStage(job.id, to: .inProgress)
+        #expect(reopened.prior == JobStageValue(stage: .done, doneAt: doneDay))
+        #expect(reopened.job.doneAt == nil)
+        let undone = try await service.restoreStage(job.id, to: reopened.prior)
+        #expect(undone.stage == .done && undone.doneAt == doneDay && undone.updatedAt == later)
+
+        _ = try await service.restoreStage(job.id, to: JobStageValue(stage: .waiting))
+        let waiting = try await service.update(job.id, .waitingFor(" A crystal from Cousins "))
+        #expect(waiting.waitingFor == "A crystal from Cousins")
+        let moved = try await service.setStage(job.id, to: .inProgress)
+        #expect(moved.job.waitingFor == nil)
+        #expect(moved.prior == JobStageValue(stage: .waiting, waitingFor: "A crystal from Cousins"))
+        let back = try await service.restoreStage(job.id, to: moved.prior)
+        #expect(back.stage == .waiting && back.waitingFor == "A crystal from Cousins")
+        #expect(try await service.restoreStage(job.id, to: moved.prior) == back)
         try await coordinator.close()
     }
 
     @Test
-    func reopeningCannotDisplaceAnotherOpenJob() async throws {
+    func aJobLeavingDoneCannotDisplaceAnotherOpenJob() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let (watch, job) = try await makeJob(coordinator)
         let service = JobService(coordinator: coordinator)
-        let closed = try await service.transition(job.id, using: draft(.completed))
-        var intake = JobDraft()
-        intake.title = "Next repair"
-        let other = try await service.save(intake, for: watch.id, editing: nil)
-        let before = try await coordinator.read(ActivityQueries.fetchAll)
-        await #expect(throws: JobError.openJobExists(other)) {
-            try await service.reopen(job.id, using: draft(.inProgress))
+        let done = try await service.setStage(job.id, to: .done)
+        let other = try await service.start(for: watch.id, title: "Next repair")
+        for stage in [JobStage.inProgress, .waiting] {
+            await #expect(throws: JobError.openJobExists(other)) {
+                try await service.setStage(job.id, to: stage)
+            }
         }
-        #expect(try await coordinator.read { db in try JobQueries.fetch(job.id, in: db) } == closed)
-        #expect(try await coordinator.read(ActivityQueries.fetchAll) == before)
+        await #expect(throws: JobError.openJobExists(other)) {
+            try await service.restoreStage(job.id, to: done.prior)
+        }
+        #expect(try await coordinator.read { try JobQueries.fetch(job.id, in: $0) } == done.job)
         await #expect(throws: DatabaseError.self) {
             try await coordinator.mutate { db, _, _ in
                 try db.execute(
-                    sql: "UPDATE job SET stage = 'Planned' WHERE id = ?",
+                    sql: "UPDATE job SET stage = 'In progress', doneAt = NULL WHERE id = ?",
                     arguments: [job.id.uuidString])
             }
         }
+        _ = try await service.setStage(other.id, to: .done)
+        #expect(try await service.setStage(job.id, to: .waiting).job.stage == .waiting)
         try await coordinator.close()
     }
 
     @Test
-    func failedEventInsertRollsBackItsStateChange() async throws {
+    func theStateChangesWhileTheWatchIsArchivedButAnArchivedJobDoesNot() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let (watch, job) = try await makeJob(coordinator)
-        try await coordinator.mutate { db, _, _ in
-            try db.execute(
-                sql:
-                    "CREATE TRIGGER failEvent BEFORE INSERT ON activityEvent BEGIN SELECT RAISE(ABORT, 'fixture event failure'); END"
-            )
-        }
         let service = JobService(coordinator: coordinator)
-        await #expect(throws: DatabaseError.self) {
-            _ = try await service.transition(job.id, using: draft(.completed))
+        _ = try await ArchiveService(coordinator: coordinator).setWatch(watch.id, archived: true)
+        let done = try await service.setStage(job.id, to: .done)
+        let undone = try await service.restoreStage(job.id, to: done.prior)
+        #expect(undone.stage == .inProgress && undone.doneAt == nil)
+        try await coordinator.mutate { db, _, _ in
+            try db.execute(sql: "UPDATE job SET archivedAt = 1")
         }
-        #expect(try await coordinator.read(JobQueries.fetchAll) == [job])
-        #expect(try await coordinator.read(WatchQueries.fetchAll) == [watch])
-        #expect(try await coordinator.read(ActivityQueries.fetchAll).isEmpty)
-        try await coordinator.close()
-    }
-
-    @Test
-    func migrationPreservesIntakeAndOriginalsWithoutInventingHistory() async throws {
-        let fixture = WatchFixture()
-        defer { fixture.remove() }
-        let coordinator = fixture.coordinator()
-        let before = try await coordinator.open()
-        let (watch, job) = try await makeJob(coordinator)
-        let bytes = Data("original evidence".utf8)
-        try await coordinator.mutate { db, originals, _ in
-            try JobMigrationFixture.removeStages(in: db)
-            try bytes.write(to: originals.appending(path: "evidence.bin"))
+        await #expect(throws: ArchiveError.archived) {
+            try await service.setStage(job.id, to: .done)
+        }
+        await #expect(throws: ArchiveError.archived) {
+            try await service.update(job.id, .title("Archived"))
         }
         try await coordinator.close()
-        let upgraded = fixture.coordinator()
-        let after = try await upgraded.open()
-        #expect(after.generationID != before.generationID)
-        #expect(after.manifest == before.manifest)
-        #expect(try await upgraded.read(WatchQueries.fetchAll) == [watch])
-        #expect(try await upgraded.read(JobQueries.fetchAll) == [job])
-        #expect(try await upgraded.read(ActivityQueries.fetchAll).isEmpty)
-        #expect(
-            try Data(
-                contentsOf: LibraryFiles.generation(after.generationID, in: fixture.root).appending(
-                    path: "originals/evidence.bin")) == bytes)
-        #expect(
-            try FileManager.default.contentsOfDirectory(
-                atPath: fixture.root.appending(path: "recovery").path
-            ).count == 1)
-        try await upgraded.close()
     }
 
     private func makeJob(_ coordinator: LibraryCoordinator) async throws -> (WatchRecord, JobRecord)
     {
         let watch = try await WatchService(coordinator: coordinator).make("Bench watch")
-        var intake = JobDraft()
-        intake.title = "Inspect movement"
-        let job = try await JobService(coordinator: coordinator).save(
-            intake, for: watch.id, editing: nil)
+        let job = try await JobService(coordinator: coordinator).start(
+            for: watch.id, title: "Inspect movement")
         return (watch, job)
-    }
-
-    private func draft(_ stage: JobStage) -> JobTransitionDraft {
-        var draft = JobTransitionDraft(stage: stage)
-        draft.waitingReason = "  Waiting for evidence  "
-        draft.outcome = "  Movement serviced  "
-        draft.recommendations = "  Check timekeeping  "
-        draft.cancellationReason = "  Owner declined repair  "
-        return draft
     }
 }
 

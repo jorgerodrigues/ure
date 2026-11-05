@@ -519,7 +519,7 @@ nonisolated private struct RestoreFixture: Sendable {
                 arguments: [watchID])
             try db.execute(
                 sql:
-                    "INSERT INTO job (id, watchID, title, stage, intakeSnapshot, createdAt, updatedAt) VALUES (?, ?, 'Other job', 'Planned', '{}', 0, 0)",
+                    "INSERT INTO job (id, watchID, title, stage, createdAt, updatedAt) VALUES (?, ?, 'Other job', 'In progress', 0, 0)",
                 arguments: [jobID, watchID])
             try db.execute(
                 sql:
