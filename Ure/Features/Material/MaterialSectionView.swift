@@ -255,7 +255,7 @@ private struct CaliberMaterialChips: View {
         let records = material.records(for: .caliber(caliber.id))
         if !records.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                Text("From \(caliber.materialName):")
+                Text("From \(caliber.title):")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 ChipFlowLayout(spacing: 6) {
@@ -265,7 +265,7 @@ private struct CaliberMaterialChips: View {
                 }
             }
             .accessibilityElement(children: .contain)
-            .accessibilityLabel("Material from \(caliber.materialName)")
+            .accessibilityLabel("Material from \(caliber.title)")
         }
     }
 }
@@ -384,13 +384,5 @@ extension LibraryItem {
             style = style.year()
         }
         return "\(kind.title) · \(createdAt.formatted(style))"
-    }
-}
-
-extension CaliberRecord {
-    // The caliber's maker and designation, such as "Omega 552".
-    var materialName: String {
-        guard let manufacturer, !manufacturer.isEmpty else { return label }
-        return "\(manufacturer) \(label)"
     }
 }

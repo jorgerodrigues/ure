@@ -162,7 +162,8 @@ struct MaterialStateTests {
         field.change(to: "  ", undoManager: undo)
         undo.endUndoGrouping()
         try await gate.elapse()
-        try await waitUntil { field.savedText == "  " }
+        #expect(await !field.flush())
+        #expect(field.savedText == pdf.item.title)
         #expect(state.records.first?.item.title == pdf.item.title)
         undo.beginUndoGrouping()
         state.endEditingTitle(field, undoManager: undo)
@@ -202,7 +203,8 @@ struct MaterialStateTests {
         field.change(to: "", undoManager: undo)
         undo.endUndoGrouping()
         try await gate.elapse()
-        try await waitUntil { field.savedText.isEmpty }
+        #expect(await !field.flush())
+        #expect(field.savedText == "example.org")
         // A burst that starts from a blank title registers no Undo, so it needs no group.
         field.change(to: "Supplier page", undoManager: undo)
         try await gate.elapse()
@@ -220,7 +222,7 @@ struct MaterialStateTests {
         field.change(to: " ", undoManager: undo)
         undo.endUndoGrouping()
         try await gate.elapse()
-        try await waitUntil { field.savedText == " " }
+        #expect(await !field.flush())
         state.endEditingTitle(field, undoManager: undo)
         try await waitUntil { !field.hasUnsavedChanges && field.text == "example.org" }
         while undo.canUndo {

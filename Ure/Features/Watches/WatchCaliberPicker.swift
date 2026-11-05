@@ -18,7 +18,7 @@ struct WatchCaliberPicker: View {
                         $0.archivedAt == nil || $0.id == watches.draft?.caliberID
                     }
                 ) { caliber in
-                    Text(caliber.label).tag(Optional(caliber.id))
+                    Text(caliber.title).tag(Optional(caliber.id))
                 }
                 if let id = watches.draft?.caliberID,
                     !calibers.calibers.contains(where: { $0.id == id })

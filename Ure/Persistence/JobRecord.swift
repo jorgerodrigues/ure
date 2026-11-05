@@ -30,7 +30,8 @@ nonisolated struct JobIntakeSnapshot: Codable, Equatable, Sendable {
         caseReference = watch.caseReference
         serial = watch.serial
         caliberDesignation = caliber?.designation
-        caliberVariant = caliber?.variant
+        // Calibers have had no variant since W035. Older snapshots keep the one they saved.
+        caliberVariant = nil
     }
 
     init(

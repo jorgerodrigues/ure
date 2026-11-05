@@ -4,8 +4,6 @@ import GRDB
 // Material keeps only its kind, title, file or link, and date. Before v20 drops the other item
 // fields, this writes their values into the owning record's notes, so nothing typed is lost.
 nonisolated enum MaterialMigration {
-    static let heading = "From the old record"
-
     static func preserveRemovedFields(in db: Database) throws {
         let rows = try Row.fetchAll(
             db,
@@ -34,7 +32,7 @@ nonisolated enum MaterialMigration {
                 ?? ""
             try db.execute(
                 sql: "UPDATE \(owner.table) SET notes = ? WHERE id = ?",
-                arguments: [appending(entries[owner] ?? [], to: notes), owner.id])
+                arguments: [OldRecordNotes.appending(entries[owner] ?? [], to: notes), owner.id])
         }
     }
 
@@ -45,34 +43,17 @@ nonisolated enum MaterialMigration {
     ) -> String? {
         var lines: [String] = []
         if let photoStage, photoStage != "Unclassified" { lines.append("Stage: \(photoStage)") }
-        if let caption = kept(caption) { lines.append("Caption: \(caption)") }
-        if kind != "Link", let sourceURL = kept(sourceURL) {
+        if let caption = OldRecordNotes.kept(caption) { lines.append("Caption: \(caption)") }
+        if kind != "Link", let sourceURL = OldRecordNotes.kept(sourceURL) {
             lines.append("Source URL: \(sourceURL)")
         }
-        if let sourceDescription = kept(sourceDescription) {
+        if let sourceDescription = OldRecordNotes.kept(sourceDescription) {
             lines.append("Source description: \(sourceDescription)")
         }
-        if let notes = kept(notes) { lines.append("Notes: \(notes)") }
+        if let notes = OldRecordNotes.kept(notes) { lines.append("Notes: \(notes)") }
         guard !lines.isEmpty else { return nil }
         let label = LibraryItemKind(rawValue: kind)?.title ?? kind
         return (["\(label) · \(title)"] + lines).joined(separator: "\n")
-    }
-
-    // Adds the heading and entries after the existing notes, with one blank line between them.
-    // The existing text keeps every character.
-    static func appending(_ entries: [String], to notes: String) -> String {
-        guard !entries.isEmpty else { return notes }
-        let block = ([heading] + entries).joined(separator: "\n\n")
-        if notes.isEmpty || notes.hasSuffix("\n\n") { return notes + block }
-        if notes.hasSuffix("\n") { return notes + "\n" + block }
-        return notes + "\n\n" + block
-    }
-
-    private static func kept(_ value: String?) -> String? {
-        guard var value else { return nil }
-        while let last = value.last, last.isWhitespace { value.removeLast() }
-        guard value.contains(where: { !$0.isWhitespace }) else { return nil }
-        return value
     }
 }
 

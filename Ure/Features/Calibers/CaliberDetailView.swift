@@ -2,89 +2,117 @@ import SwiftUI
 
 struct CaliberDetailView: View {
     @Environment(CaliberState.self) private var calibers
-    @Environment(WatchState.self) private var watches
     @Environment(MaterialState.self) private var material
 
-    @Environment(WorkshopNavigation.self) private var navigation
-    @Environment(WorkshopEditing.self) private var editing
-
     var body: some View {
-        if calibers.draft != nil {
-            CaliberEditorView()
-        } else if let caliber = calibers.selectedCaliber,
-            material.isPresenting(on: .caliber(caliber.id))
-        {
+        if let caliber = calibers.selectedCaliber, material.isPresenting(on: .caliber(caliber.id)) {
             MaterialViewerView(page: .caliber(caliber.id))
         } else if let caliber = calibers.selectedCaliber {
-            Form {
-                RecordHeading(title: caliber.label, subtitle: caliber.manufacturer)
-                Section {
-                    if caliber.archivedAt != nil {
-                        Label("Archived. Unarchive to make changes.", systemImage: "archivebox")
-                    }
-                    Button(
-                        caliber.archivedAt == nil ? "Archive Caliber" : "Unarchive Caliber",
-                        action: toggleArchive
-                    )
-                    .disabled(editing.isSaving)
-                    .accessibilityIdentifier("archiveCaliber")
-                    if let error = calibers.saveError {
-                        Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
-                    }
-                }
-
-                Section("Shared specifications") {
-                    CaliberSpecificationsView(caliber: caliber)
-                }
-                NotesSectionView(owner: .caliber(caliber.id))
-                MaterialSectionView(owner: .caliber(caliber.id))
-                Section("Linked watches") {
-                    if watches.isLoading {
-                        ProgressView("Loading watches…")
-                    } else if let error = watches.loadError {
-                        Label(error, systemImage: "exclamationmark.triangle")
-                        Button("Retry", action: retryWatches)
-                    } else if linkedWatches.isEmpty {
-                        Text("No watches refer to this caliber.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(linkedWatches) { watch in
-                            CaliberWatchLink(watch: watch)
-                        }
-                    }
-                }
-            }
-            .formStyle(.grouped)
-            .textSelection(.enabled)
-            .navigationTitle(navigation.selectedSection.title)
-            .focusedSceneValue(\.recordMenuActions, menuActions(for: caliber))
-            .toolbar {
-                Button("Edit", systemImage: "pencil", action: calibers.edit)
-                    .labelStyle(.iconOnly)
-                    .help("Edit Caliber (⌥⌘E)")
-                    .disabled(editing.isSaving || caliber.archivedAt != nil)
-                    .accessibilityIdentifier("editCaliber")
-            }
+            CaliberPage(caliber: caliber)
         } else {
-            ContentUnavailableView(
-                "Select a caliber", systemImage: "gearshape.2",
-                description: Text("Choose a caliber or add a new one.")
-            )
+            ContentUnavailableView {
+                Label("Select a caliber", systemImage: "gearshape.2")
+            } description: {
+                Text(calibers.saveError ?? "Choose a caliber or add a new one.")
+            }
+        }
+    }
+}
+
+// A caliber page you write on: its facts, the watches that use it, its material and its notes.
+// Each fact saves as you type, with no Save or Cancel.
+private struct CaliberPage: View {
+    @Environment(CaliberState.self) private var calibers
+    @Environment(WorkshopNavigation.self) private var navigation
+    @Environment(WorkshopEditing.self) private var editing
+    let caliber: CaliberRecord
+
+    var body: some View {
+        Form {
+            RecordHeading(title: caliber.title, subtitle: edited)
+            Section {
+                if caliber.archivedAt != nil {
+                    Label("Archived. Unarchive to make changes.", systemImage: "archivebox")
+                }
+                Button(
+                    caliber.archivedAt == nil ? "Archive Caliber" : "Unarchive Caliber",
+                    action: toggleArchive
+                )
+                .disabled(editing.isSaving)
+                .accessibilityIdentifier("archiveCaliber")
+                if let error = calibers.saveError {
+                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                }
+            }
+            Section("Facts") {
+                if let facts = calibers.facts(for: caliber.id) {
+                    CaliberFactRows(caliberID: caliber.id, facts: facts).id(caliber.id)
+                }
+            }
+            Section("Watches") {
+                CaliberWatches(caliberID: caliber.id)
+            }
+            MaterialSectionView(owner: .caliber(caliber.id))
+            NotesSectionView(owner: .caliber(caliber.id))
+        }
+        .formStyle(.grouped)
+        .navigationTitle(navigation.selectedSection.title)
+    }
+
+    private var edited: String {
+        "Edited \(caliber.updatedAt.formatted(date: .abbreviated, time: .omitted))"
+    }
+
+    private func toggleArchive() { editing.requestNavigation(calibers.toggleArchiveCommand) }
+}
+
+private struct CaliberFactRows: View {
+    @Environment(CaliberState.self) private var calibers
+    @Environment(WorkshopEditing.self) private var editing
+    let caliberID: UUID
+    let facts: CaliberFacts
+
+    var body: some View {
+        let isEditable = editing.canWrite(.caliber(caliberID))
+        FactRow(
+            field: facts.name, isEditable: isEditable, identifier: "caliberName",
+            requestsFocus: calibers.nameToFocus == caliberID, didFocus: calibers.nameFocused)
+        FactRow(field: facts.maker, isEditable: isEditable, identifier: "caliberMaker")
+        FactRow(field: facts.winding, isEditable: isEditable, identifier: "caliberWinding")
+        FactRow(field: facts.beatRate, isEditable: isEditable, identifier: "caliberBeatRate")
+        FactRow(field: facts.jewels, isEditable: isEditable, identifier: "caliberJewels")
+        FactRow(
+            field: facts.powerReserve, isEditable: isEditable, identifier: "caliberPowerReserve")
+        FactRow(field: facts.liftAngle, isEditable: isEditable, identifier: "caliberLiftAngle")
+    }
+}
+
+private struct CaliberWatches: View {
+    @Environment(WatchState.self) private var watches
+    let caliberID: UUID
+
+    var body: some View {
+        if watches.isLoading {
+            ProgressView("Loading watches…")
+        } else if let error = watches.loadError {
+            Label(error, systemImage: "exclamationmark.triangle")
+            Button("Retry", action: retry)
+        } else if linkedWatches.isEmpty {
+            Text("No watches use this caliber.")
+                .foregroundStyle(.secondary)
+        } else {
+            ForEach(linkedWatches) { watch in
+                CaliberWatchLink(watch: watch)
+            }
         }
     }
 
     private var linkedWatches: [WatchRecord] {
-        watches.watches.filter { $0.caliberID == calibers.selectedID }
+        watches.watches.filter { $0.caliberID == caliberID }
     }
 
-    private func retryWatches() {
+    private func retry() {
         Task { await watches.observe() }
-    }
-    private func toggleArchive() { editing.requestNavigation(calibers.toggleArchiveCommand) }
-
-    private func menuActions(for caliber: CaliberRecord) -> RecordMenuActions {
-        guard !editing.isSaving, caliber.archivedAt == nil else { return RecordMenuActions() }
-        return RecordMenuActions(edit: calibers.edit)
     }
 }
 

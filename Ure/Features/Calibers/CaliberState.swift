@@ -2,25 +2,31 @@ import Foundation
 import GRDB
 import Observation
 
+// The calibers in the library and the page you write each one on. A caliber page has no
+// draft: each fact saves on its own as you type, like notes.
 @Observable
 final class CaliberState {
     private let service: CaliberService
-    private var originalDraft: CaliberDraft?
-    private var pendingNavigation: (() -> Void)?
-    private var cancelNavigation: (() -> Void)?
+    @ObservationIgnored private let locale: Locale
+    @ObservationIgnored private let pause: (Duration) async throws -> Void
     private(set) var calibers: [CaliberRecord] = []
     private(set) var selectedID: UUID?
     private(set) var isLoading = true
     private(set) var isSaving = false
     private(set) var loadError: String?
     private(set) var saveError: String?
-    private(set) var fieldErrors: [CaliberField: String] = [:]
-    var draft: CaliberDraft?
+    private(set) var facts: [UUID: CaliberFacts] = [:]
+    // A caliber just made with ⌘N. Its page puts the cursor in its name.
+    private(set) var nameToFocus: UUID?
     var searchText = ""
-    var showsUnsavedChanges = false
 
-    init(service: CaliberService) {
+    init(
+        service: CaliberService, locale: Locale = .autoupdatingCurrent,
+        pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    ) {
         self.service = service
+        self.locale = locale
+        self.pause = pause
     }
 
     var selectedCaliber: CaliberRecord? { calibers.first { $0.id == selectedID } }
@@ -29,19 +35,26 @@ final class CaliberState {
         guard let id else { return nil }
         return calibers.first { $0.id == id }
     }
-    var hasUnsavedChanges: Bool { draft != originalDraft }
-    var canSave: Bool { draft != nil && !isSaving }
-    var isNavigationPending: Bool { pendingNavigation != nil }
+
+    func facts(for id: UUID) -> CaliberFacts? { facts[id] }
 
     var filteredCalibers: [CaliberRecord] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let active = calibers.filter { $0.archivedAt == nil }
         if query.isEmpty { return active }
         return active.filter { caliber in
-            SearchKey.matches(
-                [caliber.designation, caliber.manufacturer, caliber.variant], query: query)
+            SearchKey.matches([caliber.designation, caliber.manufacturer], query: query)
         }
     }
+
+    // Makers already in the library, offered as you type a maker.
+    var makers: [String] {
+        Set(calibers.compactMap(\.manufacturer)).sorted {
+            $0.localizedStandardCompare($1) == .orderedAscending
+        }
+    }
+
+    var hasUnsavedFacts: Bool { facts.values.contains { $0.hasUnsavedChanges } }
 
     func observe() async {
         isLoading = true
@@ -49,7 +62,7 @@ final class CaliberState {
         do {
             let values = try await service.coordinator.caliberValues()
             for try await records in values {
-                calibers = records
+                apply(records)
                 isLoading = false
             }
         } catch {
@@ -59,34 +72,46 @@ final class CaliberState {
         }
     }
 
-    func select(_ id: UUID?) {
-        guard id != selectedID else { return }
-        requestNavigation { self.selectedID = id }
-    }
+    func select(_ id: UUID?) { selectedID = id }
 
-    func create() {
-        requestNavigation {
-            self.selectedID = nil
-            self.draft = CaliberDraft()
-            self.originalDraft = self.draft
-        }
-    }
-
-    func edit() {
-        guard !isSaving, let selectedCaliber, selectedCaliber.archivedAt == nil else { return }
-        draft = CaliberDraft(caliber: selectedCaliber)
-        originalDraft = draft
-        clearErrors()
-    }
-
-    func toggleArchiveCommand() { Task { await toggleArchive() } }
+    // ⌘N makes a caliber and puts the cursor in its name.
+    func createCommand() { Task { await create() } }
 
     @discardableResult
-    func toggleArchive() async -> Bool {
-        guard !isSaving, draft == nil, let record = selectedCaliber else { return false }
+    func create() async -> Bool {
+        guard !isSaving else { return false }
         isSaving = true
         saveError = nil
         defer { isSaving = false }
+        do {
+            let record = try await service.create()
+            if !calibers.contains(where: { $0.id == record.id }) {
+                apply(calibers + [record])
+            }
+            searchText = ""
+            selectedID = record.id
+            nameToFocus = record.id
+            return true
+        } catch {
+            saveError = error.localizedDescription
+            return false
+        }
+    }
+
+    func nameFocused() { nameToFocus = nil }
+
+    func toggleArchiveCommand() { Task { await toggleArchive() } }
+
+    // Facts still saving finish first, so archiving never turns them into failed saves.
+    @discardableResult
+    func toggleArchive() async -> Bool {
+        guard !isSaving, let record = selectedCaliber else { return false }
+        isSaving = true
+        saveError = nil
+        defer { isSaving = false }
+        if record.archivedAt == nil, let facts = facts[record.id] {
+            for field in facts.all where field.hasUnsavedChanges { _ = await field.flush() }
+        }
         do {
             let saved = try await ArchiveService(coordinator: service.coordinator).setCaliber(
                 record.id, archived: record.archivedAt == nil)
@@ -100,90 +125,38 @@ final class CaliberState {
         }
     }
 
-    func cancel() {
-        guard !isSaving else { return }
-        draft = nil
-        originalDraft = nil
-        clearErrors()
+    func saveFactsNow() {
+        for field in unsavedFields { field.saveNow() }
     }
 
-    @discardableResult
-    func save() async -> Bool {
-        guard !isSaving, let draft else { return false }
-        isSaving = true
-        clearErrors()
-        defer { isSaving = false }
-        do {
-            let saved = try await service.save(draft, editing: selectedID)
-            if let index = calibers.firstIndex(where: { $0.id == saved.id }) {
-                calibers[index] = saved
+    func saveAllFacts() async -> Bool {
+        var succeeded = true
+        for field in unsavedFields {
+            if await !field.flush() { succeeded = false }
+        }
+        return succeeded
+    }
+
+    func discardUndo() {
+        for facts in facts.values {
+            for field in facts.all { field.discardUndo() }
+        }
+    }
+
+    private var unsavedFields: [FactField] {
+        facts.values.flatMap(\.all).filter(\.hasUnsavedChanges)
+    }
+
+    private func apply(_ records: [CaliberRecord]) {
+        calibers = records
+        for record in records {
+            if let existing = facts[record.id] {
+                existing.refresh(record, locale: locale)
             } else {
-                calibers.append(saved)
+                facts[record.id] = CaliberFacts(
+                    caliber: record, service: service, locale: locale,
+                    makers: { [weak self] in self?.makers ?? [] }, pause: pause)
             }
-            selectedID = saved.id
-            self.draft = nil
-            originalDraft = nil
-            return true
-        } catch {
-            saveError = error.localizedDescription
-            if let validation = error as? CaliberValidationError {
-                fieldErrors = validation.fields
-            }
-            return false
         }
-    }
-
-    func saveCommand() {
-        Task { await save() }
-    }
-
-    func requestNavigation(_ action: @escaping () -> Void, onCancel: (() -> Void)? = nil) {
-        guard !isSaving, pendingNavigation == nil else {
-            onCancel?()
-            return
-        }
-        if !hasUnsavedChanges {
-            cancel()
-            action()
-            return
-        }
-        pendingNavigation = action
-        cancelNavigation = onCancel
-        showsUnsavedChanges = true
-    }
-
-    func stay() {
-        let cancel = cancelNavigation
-        clearNavigation()
-        cancel?()
-    }
-
-    func discardAndContinue() {
-        let action = pendingNavigation
-        clearNavigation()
-        cancel()
-        action?()
-    }
-
-    func saveAndContinue() async {
-        guard !isSaving else { return }
-        if await save() {
-            let action = pendingNavigation
-            clearNavigation()
-            action?()
-        } else {
-            stay()
-        }
-    }
-
-    private func clearErrors() {
-        saveError = nil
-        fieldErrors = [:]
-    }
-
-    private func clearNavigation() {
-        showsUnsavedChanges = false
-        pendingNavigation = nil
-        cancelNavigation = nil
     }
 }

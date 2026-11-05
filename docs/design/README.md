@@ -76,6 +76,28 @@ The current Icon Composer layers already match the Pomme v2 vectors in Paper. Ke
 - Mark a custom glass control as interactive. Custom glass controls should be rare.
 - People can set glass transparency with a slider. Test both ends of the slider, Reduce Transparency, light and dark, and inactive windows. Inactive windows dim their text and icons.
 
+### Fields you write on
+
+A Rework record page is a page you write on. A fact such as a caliber's beat rate is an in-place field: `FactField` holds its state on top of the W033 `AutosaveField`, and `FactRow` shows it with its label. The watch, job and part pages reuse them. The design is the "7 Typing" artboard on the Paper page "Rework · Simple".
+
+The field has six states:
+
+1. At rest, it reads as plain 15 pt text, with no border or background.
+2. Empty, it shows its prompt, such as "Add beat rate", in tertiary grey like the notes prompt.
+3. On hover, a light fill (`quaternarySystemFill`) shows that you can write on it.
+4. Focused, it has the text background and a keyboard-focus ring. The 11 pt secondary hint under it says "Saved as you type · Esc undoes this field".
+5. Suggesting, the rest of a suggestion shows in tertiary grey right after the typed text, and the hint says which suggestion Tab or Return takes.
+6. Not valid yet, it has a thin red outline. A 12 pt red line with a filled exclamation mark says what to write and which value the record keeps.
+
+Typing rules:
+
+- Typed values are 15 pt with a 24 pt line, the same as notes. Labels are secondary body text in a 120 pt column.
+- A change saves half a second after typing stops, when focus leaves, and before quitting. Esc puts back the field as it was when focus entered it. Undo and Redo go through the window and work after a save.
+- Validation runs when focus leaves. An invalid value stays visible, and the record keeps its last good value. While you correct a flagged field, the message stays until the text is valid.
+- Tab and Shift-Tab move to the next and previous field in reading order, top to bottom and then left to right. Return in a one-line field moves to the next field. Tab, Return, or the Right Arrow at the end takes a suggestion.
+- Numbers accept what you would write on paper, such as "35", "35mm" and "35,0 mm", and show in the Mac's region format with their unit. `NumberEntry` holds the rules.
+- VoiceOver reads the field's label and value. The visible label is hidden from VoiceOver so it is not read twice.
+
 ### Type, colour and menus
 
 - Use only the system text styles. Body is 13 pt, Title 1 is 22 pt and Large Title is 26 pt. Nothing goes below 10 pt. macOS has no Dynamic Type.

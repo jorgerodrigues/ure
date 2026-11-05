@@ -187,11 +187,9 @@ nonisolated final class WorkshopUITests: XCTestCase {
         window.typeKey("3", modifierFlags: [.command, .option])
         XCTAssertTrue(app.buttons["addCaliber"].waitForExistence(timeout: 5))
         window.typeKey("n", modifierFlags: .command)
-        XCTAssertTrue(app.textFields["caliberDesignation"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["saveCaliber"].isHittable)
-        XCTAssertTrue(app.buttons["cancelCaliber"].isHittable)
-        app.buttons["cancelCaliber"].click()
-        XCTAssertTrue(app.buttons["addCaliber"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["caliberName"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.textFields["caliberLiftAngle"].isHittable)
+        XCTAssertTrue(app.buttons["addCaliber"].isHittable)
         app.terminate()
     }
 }

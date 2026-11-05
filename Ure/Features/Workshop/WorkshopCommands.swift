@@ -114,7 +114,7 @@ struct WorkshopCommands: Commands {
             || (navigation.selectedSection == .archive
                 && editing.archive.isShowingCaliber(editing: editing))
         {
-            return editing.calibers.draft == nil && editing.calibers.selectedCaliber != nil
+            return editing.calibers.selectedCaliber != nil
         }
         guard navigation.selectedSection == .watches || navigation.selectedSection == .archive,
             let watch = editing.watches.selectedWatch, editing.watches.draft == nil,
@@ -165,7 +165,6 @@ struct WorkshopCommands: Commands {
         case .workshop, .watches, .parts:
             if editing.jobs.isEditing { return editing.canSaveJob }
             return editing.watches.canSave
-        case .calibers: return editing.calibers.canSave
         default: return false
         }
     }
@@ -187,7 +186,6 @@ struct WorkshopCommands: Commands {
             } else {
                 editing.watches.saveCommand()
             }
-        case .calibers: editing.calibers.saveCommand()
         default: break
         }
     }
@@ -197,7 +195,7 @@ struct WorkshopCommands: Commands {
         let createsCaliber = navigation.selectedSection == .calibers
         editing.requestNavigation {
             if createsCaliber {
-                editing.calibers.create()
+                editing.calibers.createCommand()
             } else {
                 editing.jobs.close()
                 navigation.selection = .watches

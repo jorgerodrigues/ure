@@ -47,7 +47,7 @@ final class ArchiveState {
             ArchiveEntry(id: .watch($0.id), title: $0.name, context: "Archived watch")
         }
         entries += editing.calibers.calibers.filter { $0.archivedAt != nil }.map {
-            ArchiveEntry(id: .caliber($0.id), title: $0.label, context: "Archived caliber")
+            ArchiveEntry(id: .caliber($0.id), title: $0.title, context: "Archived caliber")
         }
         entries += editing.jobs.jobs.filter { !$0.stage.isOpen }.map { job in
             let watch = editing.watches.watches.first { $0.id == job.watchID }

@@ -64,7 +64,7 @@ struct CaliberListView: View {
         editing.requestNavigation { calibers.select(id) }
     }
 
-    private func create() { editing.requestNavigation(calibers.create) }
+    private func create() { editing.requestNavigation(calibers.createCommand) }
 
     private func retry() {
         Task { await calibers.observe() }
@@ -76,7 +76,7 @@ private struct CaliberRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UreLayout.textSpacing) {
-            Text(caliber.label).font(.body).fontWeight(.semibold)
+            Text(caliber.designation).font(.body).fontWeight(.semibold)
             if let manufacturer = caliber.manufacturer {
                 Text(manufacturer)
                     .font(.subheadline)

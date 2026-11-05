@@ -66,7 +66,10 @@ nonisolated struct RecordNotesMigrationTests {
         let package = fixture.directory.appending(path: "before-notes.watchbackup")
         try LegacyLibraryFixture.package(at: package)
         let staged = try await coordinator.stageRestore(from: package)
-        #expect(staged.summary.appliedMigrations == ["v19-record-notes", "v20-material"])
+        #expect(
+            staged.summary.appliedMigrations == [
+                "v19-record-notes", "v20-material", "v21-caliber-facts",
+            ])
         #expect(staged.summary.counts["note"] == nil && staged.summary.counts["watch"] == 2)
         let result = try await coordinator.activateRestore(staged)
         #expect(result.outcome == .restored)
@@ -354,7 +357,7 @@ private func waitUntil(_ condition: () -> Bool) async throws {
 nonisolated private struct AutosaveTimeout: Error {}
 
 // Holds each pause until the test lets the time pass. A cancelled pause throws, like Task.sleep.
-private final class PauseGate {
+final class PauseGate {
     private var waiters: [UUID: CheckedContinuation<Void, any Error>] = [:]
     private(set) var requests: [Duration] = []
     var waiting: Int { waiters.count }
@@ -383,7 +386,7 @@ private final class PauseGate {
     }
 }
 
-private final class SavedTexts {
+final class SavedTexts {
     private(set) var texts: [String] = []
     var failure: (any Error)?
 
@@ -395,10 +398,7 @@ private final class SavedTexts {
 
 nonisolated enum NoteFixture {
     static func owners(_ coordinator: LibraryCoordinator) async throws -> [LibraryItemOwner] {
-        var caliberDraft = CaliberDraft()
-        caliberDraft.designation = "0012–Å"
-        let caliber = try await CaliberService(coordinator: coordinator).save(
-            caliberDraft, editing: nil)
+        let caliber = try await CaliberService(coordinator: coordinator).create(named: "0012–Å")
         var watchDraft = WatchDraft()
         watchDraft.name = "Bench watch"
         watchDraft.caliberID = caliber.id
