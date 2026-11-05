@@ -71,6 +71,8 @@ The review ran with `codex exec review --ignore-user-config`, which used Codex's
 3. Round three found that the file picker hid supported files with the wrong extension. It accepts any file again, and content detection decides.
 4. Round four found that a finished import could reset a title renamed while the batch was running.
 
+The review skill stops after four rounds. The coordinating session approved a fifth round, because each round had found a real issue. Round five read the whole branch and reported no findings.
+
 ## Remaining gates
 
 - The Paper artboards' exact values were not read, because the Paper app was not connected. A later Rework story can match them.
