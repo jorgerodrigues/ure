@@ -953,7 +953,11 @@ struct EditQueueRegressionTests {
         undo.beginUndoGrouping()
         let done = jobs.setStage(.done, undoManager: undo)
         undo.endUndoGrouping()
+        // A Done job shows no waiting text, so the field loses the cursor and then shows what
+        // the library holds.
+        field.endEditing()
         #expect(await done.didSave)
+        #expect(field.text.isEmpty)
 
         let (hold, holding) = try await LibraryHold.start(on: coordinator)
         undo.undo()

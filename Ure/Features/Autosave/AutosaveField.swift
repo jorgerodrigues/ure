@@ -45,6 +45,9 @@ final class AutosaveField {
     @ObservationIgnored private var submissions = 0
     // The text each of this field's Undo and Redo steps puts back.
     @ObservationIgnored private var undoTexts: [EditChange: String] = [:]
+    // The text each step submitted, which Redo brings back once Undo has taken it back. Another
+    // change, such as a job going Done, can change the text on screen in between.
+    @ObservationIgnored private var submittedTexts: [EditChange: String] = [:]
     @ObservationIgnored private var isTracked = false
 
     init(
@@ -109,7 +112,7 @@ final class AutosaveField {
                         undo: { [weak self] undone, back in
                             self?.undo(undone, back: back) ?? .notMine
                         },
-                        forget: { [weak self] change in self?.undoTexts[change] = nil }))
+                        forget: { [weak self] change in self?.forget(change) }))
                 if let unsavedChange, accepts(before) { undoTexts[unsavedChange] = before }
             }
         }
@@ -138,12 +141,16 @@ final class AutosaveField {
     }
 
     // Submits the text now, if it changed and the field takes it. Try Again calls it too.
-    func saveNow() {
+    func saveNow() { submit() }
+
+    // Submits the text if the field takes it. Undo submits it also when it is the text the
+    // library holds now, because a change before it in the queue can still change that.
+    private func submit(always: Bool = false) {
         scheduledSubmit?.cancel()
         scheduledSubmit = nil
         isTyping = false
         defer { track() }
-        guard text != savedText else {
+        guard always || text != savedText else {
             // The text that did not save is gone, so its failure is too.
             if !isSaving { saveError = nil }
             settle()
@@ -161,6 +168,7 @@ final class AutosaveField {
         let change = unsavedChange ?? failedChange
         unsavedChange = nil
         failedChange = nil
+        if let change { submittedTexts[change] = value }
         savedText = value
         isSaving = true
         submissions += 1
@@ -218,22 +226,28 @@ final class AutosaveField {
     }
 
     // Undo or Redo of one of this field's changes puts back its text at once, and the text saves
-    // after everything before it, under the way back's number. The text it replaces is what Redo
-    // puts back, unless the field does not take it. Typing that never saved goes without a save.
+    // after everything before it, under the way back's number, also when it is the text the field
+    // shows as saved. The text the step submitted, or the typing it replaces, is what Redo puts
+    // back, unless the field does not take it.
     private func undo(_ change: EditChange, back: EditChange) -> UndoHandling {
         guard let restored = undoTexts.removeValue(forKey: change) else { return .notMine }
-        let current = text
+        let redone = submittedTexts.removeValue(forKey: change) ?? text
         scheduledSubmit?.cancel()
         scheduledSubmit = nil
         isTyping = false
         saveError = nil
-        let canRedo = accepts(current)
-        if canRedo { undoTexts[back] = current }
+        let canRedo = accepts(redone)
+        if canRedo { undoTexts[back] = redone }
         text = restored
         unsavedChange = canRedo ? back : nil
         failedChange = nil
-        saveNow()
+        submit(always: true)
         return .done(canRedo: canRedo)
+    }
+
+    private func forget(_ change: EditChange) {
+        undoTexts[change] = nil
+        submittedTexts[change] = nil
     }
 
     private func putBackSavedText() {
