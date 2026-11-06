@@ -19,14 +19,13 @@ WORKER = Path(sys.argv[1]).resolve()
 RUN = REPO / ".build/recovery-runs" / str(uuid.uuid4())
 GENERATION = "00000000-0000-4000-8000-000000000001"
 VERSIONS = ("v10-documents", "v15-part-procurement")
-CURRENT_MIGRATION = "v25-jobs-without-watch"
+CURRENT_MIGRATION = "v26-parts"
 # Columns that a later migration removes on purpose.
 REMOVED_COLUMNS = {
     "partLink": {
         "title", "supplierName", "supplierStockCode", "currency", "price", "notes", "isSelected",
         "searchKey",
     },
-    "partRequirement": {"supplierSnapshot"},
     "libraryItem": {"sourceURL", "sourceDescription", "notes", "photoStage", "caption"},
     "caliber": {"variant", "specificationNotes", "sourceNote", "movementType"},
     "watch": {"condition", "conditionNote", "waterResistance", "specificationNotes"},
@@ -72,6 +71,13 @@ REMOVED_TABLES = {"activityEvent", "taskPart"}
 # Task fields that v24 writes into the job's notes, after a line with the step's text.
 TASK_INTO_NOTES = (("detail", "Detail: "), ("waitingReason", "Waiting reason: "), ("skippedReason", "Skipped reason: "))
 NOTE_OWNERS = (("watchID", "watch"), ("jobID", "job"), ("caliberID", "caliber"))
+# The state v26 gives each old part status. A cancelled part goes into its job's notes instead.
+PART_STATES = {"Needed": "Needed", "Ordered": "Ordered", "Arrived": "In hand", "Installed": "Fitted"}
+# Part fields that v26 writes into the part's notes, with the label before each value.
+PART_INTO_NOTES = (
+    ("compatibilityNote", "Compatibility note: "), ("orderReference", "Order reference: "),
+    ("statusReason", "Status reason: "),
+)
 RESULTS = []
 
 
@@ -275,6 +281,31 @@ def tasks_preserved(rows, after):
         require(kept == ordered, "jobTask: steps keep the task order")
 
 
+def kept_text(value):
+    return value.rstrip() if (value or "").strip() else None
+
+
+def parts_preserved(rows, after):
+    parts = {row["id"]: row for row in after["tables"]["part"]}
+    jobs = {row["id"]: row for row in after["tables"]["job"]}
+    for row in rows:
+        if row["status"] == "Cancelled":
+            require(row["id"] not in parts, "partRequirement: a cancelled part is not kept")
+            require("Part · " + row["description"] in jobs[row["jobID"]]["notes"], "partRequirement: cancelled part in job notes")
+            continue
+        kept = parts[row["id"]]
+        require(kept["jobID"] == row["jobID"] and kept["name"] == row["description"], "partRequirement: becomes a part of its job")
+        require(kept["description"] == kept_text(row["manufacturerReference"]), "partRequirement: reference becomes the description")
+        require(kept["quantity"] == row["quantity"] and kept["stage"] == PART_STATES[row["status"]], "partRequirement: quantity and state")
+        require((kept["createdAt"], kept["updatedAt"]) == (row["createdAt"], row["updatedAt"]), "partRequirement: times kept")
+        if row["compatibility"] != "Unchecked":
+            require("Compatibility: " + row["compatibility"] in kept["notes"], "partRequirement: compatibility in notes")
+        for column, label in PART_INTO_NOTES:
+            value = kept_text(row.get(column))
+            if value:
+                require(label + value in kept["notes"], f"partRequirement: {column} in notes")
+
+
 def preserved(before, after):
     require(before["originals"] == after["originals"], "Original and technical PDF bytes preserved")
     for table, rows in before["tables"].items():
@@ -290,6 +321,14 @@ def preserved(before, after):
             require(table not in after["tables"], "jobTask: removed after each task became a step")
             tasks_preserved(rows, after)
             continue
+        if table == "partRequirement":
+            require(table not in after["tables"], "partRequirement: removed after each became a part")
+            parts_preserved(rows, after)
+            continue
+        if table == "partLink":
+            # A cancelled part's links are in its job's notes.
+            cancelled = {row["id"] for row in before["tables"].get("partRequirement", []) if row["status"] == "Cancelled"}
+            rows = [row for row in rows if row["partID"] not in cancelled]
         if table in REMOVED_TABLES:
             require(table not in after["tables"], f"{table}: removed after its reasons moved into notes")
             continue

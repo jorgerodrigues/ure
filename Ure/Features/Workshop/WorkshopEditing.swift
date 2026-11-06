@@ -43,17 +43,25 @@ final class WorkshopEditing {
         }
     }
 
+    // A part on a job can change while its job can. A spare in the drawer always can.
+    func canWrite(_ part: PartRecord) -> Bool {
+        guard !parts.isLoading, parts.loadError == nil else { return false }
+        guard let jobID = part.jobID else { return true }
+        return canWrite(.job(jobID))
+    }
+
     func closeChildren() {
         parts.close()
         material.close()
     }
 
     // Fields that save as you type, such as notes, material titles, the facts on watch,
-    // caliber and job pages, and checklists. They never ask to be saved, so they are not
-    // drafts.
+    // caliber, job and part pages, and checklists. They never ask to be saved, so nothing is a
+    // draft.
     var hasUnsavedFields: Bool {
         notes.hasUnsavedChanges || material.hasUnsavedTitles || calibers.hasUnsavedFacts
             || watches.hasUnsavedFacts || jobs.hasUnsavedFacts || checklist.hasUnsavedChanges
+            || parts.hasUnsavedFacts
     }
 
     func saveFieldsNow() {
@@ -63,6 +71,7 @@ final class WorkshopEditing {
         watches.saveFactsNow()
         jobs.saveFactsNow()
         checklist.saveNow()
+        parts.saveFactsNow()
     }
 
     func saveAllFields() async -> Bool {
@@ -72,51 +81,24 @@ final class WorkshopEditing {
         let watchFactsSaved = await watches.saveAllFacts()
         let jobFactsSaved = await jobs.saveAllFacts()
         let checklistsSaved = await checklist.saveAll()
+        let partFactsSaved = await parts.saveAllFacts()
         return notesSaved && titlesSaved && caliberFactsSaved && watchFactsSaved
-            && jobFactsSaved && checklistsSaved
+            && jobFactsSaved && checklistsSaved && partFactsSaved
     }
 
     var isSaving: Bool {
         watches.isSaving || calibers.isSaving || jobs.isSaving || material.isBusy
             || parts.isSaving
     }
-    var canCancelDraft: Bool {
-        guard !isSaving, !isNavigationPending else { return false }
-        return parts.draft != nil
-    }
 
-    func cancelDraft() {
-        guard canCancelDraft else { return }
-        parts.cancel()
-    }
-
-    // The part editor keeps Save and Cancel until W040 replaces it.
-    var hasUnsavedChanges: Bool { parts.hasUnsavedChanges }
-    var isNavigationPending: Bool { parts.isNavigationPending }
-
-    var showsUnsavedChanges: Bool {
-        get { parts.showsUnsavedChanges }
-        set { parts.showsUnsavedChanges = newValue }
-    }
-
-    var unsavedChangesTitle: String { "Save changes to this part?" }
-
+    // Leaving a page saves what you typed on it and asks nothing. Nothing moves while a change
+    // is still saving.
     func requestNavigation(_ action: @escaping () -> Void, onCancel: (() -> Void)? = nil) {
-        guard !isSaving, !isNavigationPending else {
+        guard !isSaving else {
             onCancel?()
             return
         }
         saveFieldsNow()
-        parts.requestNavigation(action, onCancel: onCancel)
+        action()
     }
-
-    func stay() { parts.stay() }
-
-    func discardAndContinue() { parts.discardAndContinue() }
-
-    func saveAndContinueCommand() {
-        Task { await saveAndContinue() }
-    }
-
-    func saveAndContinue() async { await parts.saveAndContinue() }
 }

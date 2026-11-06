@@ -21,18 +21,12 @@ struct WorkshopCommands: Commands {
             Button("Close", action: closeWindow)
                 .keyboardShortcut("w", modifiers: .command)
         }
-        CommandGroup(replacing: .saveItem) {
-            Button("Save", action: save)
-                .keyboardShortcut("s", modifiers: .command)
-                .disabled(!canSave)
-            Button("Cancel", action: editing.cancelDraft)
-                .keyboardShortcut(".", modifiers: .command)
-                .disabled(allowsEditing != true || !editing.canCancelDraft)
-        }
         CommandGroup(after: .pasteboard) {
             Button("Insert Today’s Date", action: insertToday)
                 .keyboardShortcut("d", modifiers: .command)
-                .disabled(allowsEditing != true || !editing.notes.isEditing)
+                .disabled(
+                    allowsEditing != true
+                        || !(editing.notes.isEditing || editing.parts.isEditingNotes))
         }
         CommandGroup(before: .textEditing) {
             Button("Search", action: focusSearch)
@@ -103,9 +97,7 @@ struct WorkshopCommands: Commands {
     }
     // Archiving has no rules: any watch can be archived, even one with an open job.
     private var canArchive: Bool {
-        guard allowsEditing == true, !editing.isSaving, !editing.hasUnsavedChanges else {
-            return false
-        }
+        guard allowsEditing == true, !editing.isSaving else { return false }
         switch navigation.selectedSection {
         case .calibers: return editing.calibers.selectedCaliber != nil
         case .watches: return editing.watches.selectedWatch != nil
@@ -144,24 +136,9 @@ struct WorkshopCommands: Commands {
         navigation.focusSearch()
     }
 
-    // Only the part editor still saves with ⌘S.
-    private var canSave: Bool {
-        guard allowsEditing == true, !editing.isSaving, editing.parts.draft != nil else {
-            return false
-        }
-        return editing.parts.canSave(jobs: editing.jobs)
-    }
-
-    private func save() {
-        guard allowsEditing == true, canSave else { return }
-        editing.parts.saveCommand()
-    }
-
     private func createRecord() {
         guard allowsEditing == true else { return }
-        NewRecord.make(
-            in: navigation.selectedSection, editing: editing, navigation: navigation,
-            search: search)
+        NewRecord.make(in: navigation.selectedSection, editing: editing, search: search)
     }
 
     private func insertToday() {
@@ -177,14 +154,14 @@ struct WorkshopCommands: Commands {
     private func exportOriginal() { if canUseRecordActions { recordActions?.exportOriginal?() } }
     private func backToOwner() { if canUseRecordActions { recordBackAction?.action() } }
     private var canUseRecordActions: Bool {
-        allowsEditing == true && !editing.isSaving && !editing.isNavigationPending
+        allowsEditing == true && !editing.isSaving
     }
 
     private func openReference() { openWindow(id: "reference") }
 
     // The Checklist menu acts on the step that has the cursor.
     private var canUseStepCommands: Bool {
-        allowsEditing == true && !editing.isSaving && !editing.isNavigationPending
+        allowsEditing == true && !editing.isSaving
     }
 }
 

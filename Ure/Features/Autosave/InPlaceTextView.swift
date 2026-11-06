@@ -15,6 +15,8 @@ struct InPlaceTextView: NSViewRepresentable {
     let identifier: String
     let requestsFocus: Bool
     let didFocus: () -> Void
+    // A value that reads quieter, such as a fitted part's name.
+    var isQuiet = false
 
     func makeCoordinator() -> Coordinator { Coordinator(field: field) }
 
@@ -35,6 +37,8 @@ struct InPlaceTextView: NSViewRepresentable {
         view.setPrompt(field.prompt)
         view.setLabel(field.label)
         view.isEditable = isEditable
+        let color: NSColor = isQuiet ? .secondaryLabelColor : .labelColor
+        if view.textColor != color { view.textColor = color }
         // A field that stops taking changes while you type in it ends the edit, which saves it.
         if !isEditable, view.currentEditor() != nil { view.window?.makeFirstResponder(nil) }
         if let editor = view.currentEditor() as? NSTextView {
@@ -262,9 +266,15 @@ class InPlaceTextField: NSTextField {
 
     // Moves focus to the next or previous in-place field in reading order: top to bottom, then
     // left to right. False when there is none in that direction.
-    static func moveFocus(from control: NSControl, forward: Bool) -> Bool {
+    // A field can skip others on its way, such as a part's add line moving past its own
+    // description to the checklist.
+    static func moveFocus(
+        from control: NSControl, forward: Bool,
+        skipping skipped: (InPlaceTextField) -> Bool = { _ in false }
+    ) -> Bool {
         guard let window = control.window, let content = window.contentView else { return false }
         let fields = editableFields(in: content).sorted(by: isInReadingOrder)
+            .filter { $0 === control || !skipped($0) }
         guard let index = fields.firstIndex(where: { $0 === control }) else { return false }
         let target = forward ? index + 1 : index - 1
         guard fields.indices.contains(target) else { return false }

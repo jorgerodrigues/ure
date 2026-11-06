@@ -181,7 +181,7 @@ nonisolated struct JobServiceTests {
         let first = ChecklistStep(id: UUID(), text: "Fit the crystal")
         _ = try await checklist.save([first], for: job.id)
         let parts = PartService(coordinator: coordinator)
-        let part = try await parts.save(PartFixture.draft(), for: job.id, editing: nil)
+        let part = try await parts.add(named: "Crystal", to: job.id)
         let done = try await service.setStage(job.id, to: .done).job
         #expect(done.stage == .done)
 
@@ -194,11 +194,7 @@ nonisolated struct JobServiceTests {
         #expect(
             try await checklist.save([second, ticked], for: job.id).map(\.isTicked)
                 == [false, true])
-        var order = PartDraft(part: part)
-        order.status = .ordered
-        order.orderReference = "PO-12"
-        #expect(
-            try await parts.save(order, for: job.id, editing: part.id).record.status == .ordered)
+        #expect(try await parts.advance(part.id).part.stage == .ordered)
         try await RecordNotesService(coordinator: coordinator).save(
             "Fitted a new crystal after it was done.", for: .job(job.id))
         let link = try await MaterialService(coordinator: coordinator).addLink(

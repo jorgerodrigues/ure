@@ -44,35 +44,23 @@ nonisolated struct ReleaseJourneyTests {
         let job = try await jobs.start(for: watch.id, title: "Inspect movement")
         let notes = RecordNotesService(coordinator: coordinator)
         try await notes.save("Finding: unknown specifications. Keep 00042-A/7.", for: .job(job.id))
-        var partDraft = PartFixture.draft()
-        partDraft.manufacturerReference = "0012-A"
-        var link = PartLinkDraft()
-        link.url = "https://example.org/0012"
-        partDraft.links = [link]
         let parts = PartService(coordinator: coordinator)
-        let initialPart = try await parts.save(partDraft, for: job.id, editing: nil)
-        var edit = PartDraft(part: initialPart)
-        var secondLink = PartLinkDraft()
-        secondLink.url = "https://example.org/supplier"
-        edit.links.append(secondLink)
-        let linkedPart = try await parts.save(edit, for: job.id, editing: initialPart.id)
-        #expect(linkedPart.record.manufacturerReference == "0012-A")
-        #expect(linkedPart.links.map(\.url) == [link.url, secondLink.url])
+        let initialPart = try await parts.add(named: "Mainspring", to: job.id)
+        let describedPart = try await parts.update(initialPart.id, .description("0012-A"))
+        #expect(describedPart.description == "0012-A" && describedPart.stage == .needed)
         _ = try await jobs.setStage(job.id, to: .waiting)
         #expect(try await jobs.update(job.id, .waitingFor("A spring")).waitingFor == "A spring")
         let checklist = ChecklistService(coordinator: coordinator)
         #expect(try await progress(job.id, coordinator).summary == "No steps yet")
         // The checklist is typed by hand. Nothing ticks a step for you, not even a part that
-        // arrives.
+        // comes in hand.
         var fit = ChecklistStep(id: UUID(), text: "Fit the spring")
         let steps = [
             ChecklistStep(id: UUID(), text: "Assembly", isHeading: true), fit,
             ChecklistStep(id: UUID(), text: "Regulate"),
         ]
         let saved = try await checklist.save(steps, for: job.id)
-        var arrival = PartDraft(part: linkedPart)
-        arrival.status = .arrived
-        _ = try await parts.save(arrival, for: job.id, editing: linkedPart.id)
+        _ = try await parts.setStage(describedPart.id, to: .inHand)
         #expect(
             try await coordinator.read { try ChecklistQueries.ordered(for: job.id, in: $0) }
                 == saved)

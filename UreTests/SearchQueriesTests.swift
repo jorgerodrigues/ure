@@ -28,12 +28,9 @@ nonisolated struct SearchQueriesTests {
         try await RecordNotesService(coordinator: coordinator).save(
             "Finding\nCafé e\u{301} 100%_ [brackets] 'quotes' \"double\" \\path '; DROP TABLE watch;--",
             for: .job(job.id))
-        var partDraft = PartFixture.draft()
-        partDraft.description = "Ressort"
-        partDraft.manufacturerReference = "0007-A/02"
-        partDraft.links = [PartLinkDraft(url: "https://example.org/part")]
-        let part = try await PartService(coordinator: coordinator).save(
-            partDraft, for: job.id, editing: nil)
+        let parts = PartService(coordinator: coordinator)
+        let part = try await parts.add(named: "Ressort", to: job.id)
+        _ = try await parts.update(part.id, .description("0007-A/02"))
         let reference = try await MaterialFixture.link(
             titled: "Sheet link", for: .caliber(caliber.id), in: coordinator)
         let source = try fixture.source(type: .png)
@@ -230,11 +227,9 @@ nonisolated struct SearchQueriesTests {
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        var draft = PartFixture.draft()
-        draft.manufacturerReference = "0012-Å"
-        draft.links = [PartLinkDraft(url: "https://example.org/part")]
-        let part = try await PartService(coordinator: coordinator).save(
-            draft, for: job.id, editing: nil)
+        let parts = PartService(coordinator: coordinator)
+        let added = try await parts.add(named: "Mainspring", to: job.id)
+        let part = try await parts.update(added.id, .description("0012-Å"))
         try await coordinator.mutate { db, _, _ in try SearchMigrationFixture.removeSearch(in: db) }
         try await coordinator.close()
         let upgraded = fixture.coordinator()

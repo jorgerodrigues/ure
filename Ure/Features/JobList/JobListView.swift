@@ -6,7 +6,6 @@ struct JobListView: View {
     @Environment(JobListState.self) private var jobList
     @Environment(JobState.self) private var jobs
     @Environment(WorkshopEditing.self) private var editing
-    @Environment(WorkshopNavigation.self) private var navigation
     @Environment(SearchState.self) private var search
 
     var body: some View {
@@ -78,7 +77,7 @@ struct JobListView: View {
     }
 
     private func newJob() {
-        NewRecord.make(in: .jobs, editing: editing, navigation: navigation, search: search)
+        NewRecord.make(in: .jobs, editing: editing, search: search)
     }
 }
 

@@ -189,7 +189,7 @@ struct RestoreStateTests {
         #expect(state.session.material !== oldSession.material)
         #expect(state.session.search !== oldSession.search)
         #expect(state.session.jobList !== oldSession.jobList)
-        #expect(state.session.partsOverview !== oldSession.partsOverview)
+        #expect(state.session.partList !== oldSession.partList)
         #expect(state.session.bench !== oldSession.bench)
         #expect(!state.session.search.isPresented)
         #expect(state.session.navigation.selectedSection == .jobs)

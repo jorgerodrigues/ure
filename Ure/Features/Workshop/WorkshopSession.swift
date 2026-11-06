@@ -10,7 +10,7 @@ final class WorkshopSession {
     let jobs: JobState
     let search: SearchState
     let jobList: JobListState
-    let partsOverview: PartsOverviewState
+    let partList: PartListState
     let notes: RecordNotesState
     let checklist: ChecklistState
     let parts: PartState
@@ -32,7 +32,7 @@ final class WorkshopSession {
             checklist: checklist, parts: parts)
         search = SearchState(coordinator: coordinator)
         jobList = JobListState(coordinator: coordinator)
-        partsOverview = PartsOverviewState(coordinator: coordinator)
+        partList = PartListState(coordinator: coordinator)
         bench = BenchReferenceState(
             service: BenchReferenceService(coordinator: coordinator),
             preferences: BenchPreferences(libraryRoot: configuration.libraryRoot))
@@ -47,5 +47,6 @@ final class WorkshopSession {
         watches.discardUndo()
         jobs.discardUndo()
         checklist.discardUndo()
+        parts.discardUndo()
     }
 }

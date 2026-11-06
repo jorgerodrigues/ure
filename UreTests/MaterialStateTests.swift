@@ -332,10 +332,10 @@ struct MaterialStateTests {
         let field = try #require(material.titleField(for: link.id))
         field.beginEditing()
         field.change(to: "Supplier page", undoManager: nil)
-        #expect(editing.hasUnsavedFields && !editing.hasUnsavedChanges)
+        #expect(editing.hasUnsavedFields)
         var navigated = false
         editing.requestNavigation { navigated = true }
-        #expect(navigated && !editing.showsUnsavedChanges)
+        #expect(navigated)
         try await waitUntil { !editing.hasUnsavedFields }
         #expect(
             try await coordinator.read(LibraryItemQueries.fetchAll).first?.title == "Supplier page")
@@ -345,7 +345,8 @@ struct MaterialStateTests {
 
 enum MaterialEditingFixture {
     static func editing(
-        _ coordinator: LibraryCoordinator, material: MaterialState? = nil, jobs: JobState? = nil
+        _ coordinator: LibraryCoordinator, material: MaterialState? = nil, jobs: JobState? = nil,
+        parts: PartState? = nil
     ) -> WorkshopEditing {
         WorkshopEditing(
             watches: WatchState(service: WatchService(coordinator: coordinator)),
@@ -354,7 +355,7 @@ enum MaterialEditingFixture {
             notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
             material: material ?? MaterialState(service: MaterialService(coordinator: coordinator)),
             checklist: ChecklistState(service: ChecklistService(coordinator: coordinator)),
-            parts: PartState(service: PartService(coordinator: coordinator)))
+            parts: parts ?? PartState(service: PartService(coordinator: coordinator)))
     }
 }
 

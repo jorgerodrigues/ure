@@ -115,9 +115,9 @@ nonisolated enum PerformanceFixture {
         let partID = try id(8, index).uuidString
         try db.execute(
             sql: """
-                INSERT INTO partRequirement (id, jobID, description, quantity, manufacturerReference,
-                    compatibility, status, createdAt, updatedAt)
-                VALUES (?, ?, ?, 7, '00.A_%', 'Unchecked', 'Needed', ?, ?)
+                INSERT INTO part (id, jobID, name, description, quantity, stage, createdAt,
+                    updatedAt)
+                VALUES (?, ?, ?, '00.A_%', 7, 'Needed', ?, ?)
                 """,
             arguments: [partID, jobID, "Synthetic part \(index)", date, date + Double(index)])
         for position in 0..<2 {

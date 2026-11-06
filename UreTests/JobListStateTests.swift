@@ -27,17 +27,13 @@ struct JobListStateTests {
             [ChecklistStep(id: UUID(), text: "Clean all parts", isTicked: true)], for: job.id)
         try await JobListFixture.waitUntil { list.rows.first?.progress.doneCount == 1 }
         let parts = PartService(coordinator: coordinator)
-        let part = try await parts.save(PartFixture.draft(), for: job.id, editing: nil)
+        let part = try await parts.add(named: "Mainspring", to: job.id)
         try await JobListFixture.waitUntil { list.rows.first?.partsToBuy == 1 }
-        var ordered = PartDraft(part: part)
-        ordered.status = .ordered
-        try await JobTaskFixture.failWrites(coordinator, on: "partRequirement")
-        await #expect(throws: DatabaseError.self) {
-            try await parts.save(ordered, for: job.id, editing: part.id)
-        }
+        try await JobTaskFixture.failWrites(coordinator, on: "part")
+        await #expect(throws: DatabaseError.self) { try await parts.advance(part.id) }
         #expect(list.rows.first?.partsToBuy == 1)
-        try await JobTaskFixture.allowWrites(coordinator, on: "partRequirement")
-        _ = try await parts.save(ordered, for: job.id, editing: part.id)
+        try await JobTaskFixture.allowWrites(coordinator, on: "part")
+        _ = try await parts.advance(part.id)
         try await JobListFixture.waitUntil { list.rows.first?.partsToBuy == 0 }
         let jobs = JobService(coordinator: coordinator)
         _ = try await jobs.setStage(job.id, to: .waiting)
@@ -81,8 +77,8 @@ struct JobListStateTests {
         _ = try await jobs.setStage(second.id, to: .waiting)
         _ = try await jobs.update(second.id, .waitingFor("A mainspring"))
         let unwatched = try await jobs.start(for: nil, title: "New crystal")
-        let part = try await PartService(coordinator: coordinator).save(
-            PartFixture.draft(), for: first.id, editing: nil)
+        let part = try await PartService(coordinator: coordinator).add(
+            named: "Mainspring", to: first.id)
         let editing = JobListFixture.editing(coordinator)
         let list = JobListState(
             coordinator: coordinator, now: { now }, calendar: JobListTests.calendar)
@@ -110,22 +106,16 @@ struct JobListStateTests {
         list.clearSearch()
         #expect(list.selectionMessage(for: editing.jobs.selectedJob) == nil)
 
-        // A part draft asks before another job opens.
-        let opened = try #require(editing.parts.records(for: first.id).first { $0.id == part.id })
-        editing.parts.open(opened, for: first.id)
-        editing.parts.edit(jobs: editing.jobs)
-        editing.parts.draft?.description = "Keep my draft"
+        // A part's typing saves as another job opens, without a question.
+        let facts = try #require(editing.parts.facts(for: part.id))
+        facts.name.beginEditing()
+        facts.name.change(to: "Keep my typing", undoManager: nil)
         list.open(second.id, editing: editing)
-        #expect(editing.showsUnsavedChanges && editing.jobs.selectedID == first.id)
-        editing.stay()
-        #expect(editing.parts.draft?.description == "Keep my draft")
-        list.open(second.id, editing: editing)
-        await editing.saveAndContinue()
         #expect(
             editing.jobs.selectedID == second.id && editing.watches.selectedID == second.watchID)
-        #expect(editing.parts.jobID == nil)
+        try await JobListFixture.waitUntil { !facts.name.hasUnsavedChanges }
         let saved = try await coordinator.read { try PartQueries.fetch(part.id, in: $0) }
-        #expect(saved?.record.description == "Keep my draft")
+        #expect(saved?.name == "Keep my typing")
 
         // A job without a watch opens with no watch selected, and can still be written on.
         list.open(unwatched.id, editing: editing)

@@ -6,47 +6,37 @@ import Testing
 
 struct WorkshopEditingTests {
     @Test(.timeLimit(.minutes(1)))
-    func menuCancelPreservesSavedRecordsAndCannotDismissPendingNavigation() async throws {
+    func partFactsSaveWhenLeavingOrQuittingWithoutAQuestion() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let session = WorkshopSession(
-            coordinator: coordinator, configuration: AppConfiguration(libraryRoot: fixture.root))
-        let editing = session.editing
-        let observations = [
-            Task { await session.watches.observe() }, Task { await session.jobs.observe() },
-            Task { await session.parts.observe() },
-        ]
-        defer { observations.forEach { $0.cancel() } }
-        try await waitUntil {
-            !session.watches.isLoading && !session.jobs.isLoading && !session.parts.isLoading
-        }
-        #expect(!editing.canCancelDraft)
-        // Starting a job saves it at once, so there is no draft to cancel.
-        session.jobs.open(job)
-        #expect(!editing.hasUnsavedChanges && !editing.canCancelDraft)
-        session.parts.create(for: job.id, jobs: session.jobs)
-        #expect(!editing.hasUnsavedChanges && editing.canCancelDraft)
-        editing.cancelDraft()
-        #expect(session.parts.draft == nil)
-        session.parts.create(for: job.id, jobs: session.jobs)
-        session.parts.draft?.description = "Keep this draft"
+        let parts = PartState(
+            service: PartService(coordinator: coordinator), pause: PauseGate().pause)
+        let jobs = JobState(service: JobService(coordinator: coordinator))
+        let editing = MaterialEditingFixture.editing(coordinator, jobs: jobs, parts: parts)
+        let observation = Task { await parts.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { !parts.isLoading }
+        let part = try #require(await parts.add(named: "Mainspring", to: job.id))
+        let facts = try #require(parts.facts(for: part.id))
+        facts.name.beginEditing()
+        facts.name.change(to: "Mainspring 1.10", undoManager: nil)
+        #expect(editing.hasUnsavedFields)
         var navigated = false
         editing.requestNavigation { navigated = true }
-        #expect(!editing.canCancelDraft)
-        editing.cancelDraft()
-        #expect(!navigated && editing.isNavigationPending)
-        #expect(editing.unsavedChangesTitle == "Save changes to this part?")
-        #expect(session.parts.draft?.description == "Keep this draft")
-        editing.stay()
-        #expect(editing.canCancelDraft)
-        editing.cancelDraft()
-        #expect(session.parts.draft == nil)
-        #expect(try await coordinator.read(PartQueries.fetchAll).isEmpty)
-        observations.forEach { $0.cancel() }
-        for observation in observations { await observation.value }
+        #expect(navigated)
+        try await waitUntil { !facts.name.hasUnsavedChanges }
+        facts.notes.beginEditing()
+        facts.notes.change(to: "From Cousins, 3 November", undoManager: nil)
+        #expect(await editing.saveAllFields())
+        #expect(!editing.hasUnsavedFields)
+        let saved = try #require(
+            try await coordinator.read { try PartQueries.fetch(part.id, in: $0) })
+        #expect(saved.name == "Mainspring 1.10" && saved.notes == "From Cousins, 3 November")
+        observation.cancel()
+        await observation.value
         try await coordinator.close()
     }
 
@@ -65,10 +55,10 @@ struct WorkshopEditingTests {
         let facts = try #require(jobs.facts(for: job.id))
         facts.title.beginEditing()
         facts.title.change(to: "Full service", undoManager: nil)
-        #expect(editing.hasUnsavedFields && !editing.hasUnsavedChanges)
+        #expect(editing.hasUnsavedFields)
         var navigated = false
         editing.requestNavigation { navigated = true }
-        #expect(navigated && !editing.showsUnsavedChanges)
+        #expect(navigated)
         try await waitUntil { !facts.title.hasUnsavedChanges }
         facts.problem.beginEditing()
         facts.problem.change(to: "Stops overnight.", undoManager: nil)
@@ -99,10 +89,10 @@ struct WorkshopEditingTests {
         let step = editor.addID
         editor.beginEditing(step)
         editor.change(step, to: "Clean all parts", undoManager: nil)
-        #expect(editing.hasUnsavedFields && !editing.hasUnsavedChanges)
+        #expect(editing.hasUnsavedFields)
         var navigated = false
         editing.requestNavigation { navigated = true }
-        #expect(navigated && !editing.showsUnsavedChanges)
+        #expect(navigated)
         try await waitUntil { !editor.hasUnsavedChanges }
         editor.change(step, to: "Clean all parts twice", undoManager: nil)
         #expect(await editing.saveAllFields())
@@ -141,10 +131,10 @@ struct WorkshopEditingTests {
         let facts = try #require(watches.facts(for: watchID))
         facts.owner.beginEditing()
         facts.owner.change(to: "Ana Ribeiro", undoManager: nil)
-        #expect(editing.hasUnsavedFields && !editing.hasUnsavedChanges)
+        #expect(editing.hasUnsavedFields)
         var navigated = false
         editing.requestNavigation { navigated = true }
-        #expect(navigated && !editing.showsUnsavedChanges)
+        #expect(navigated)
         try await waitUntil { !facts.owner.hasUnsavedChanges }
         #expect(try await owner(of: watchID, coordinator) == "Ana Ribeiro")
         facts.contact.beginEditing()

@@ -24,7 +24,7 @@ struct WorkshopSectionTests {
         #expect(NewRecord.title(in: .jobs) == "New Job")
         #expect(NewRecord.title(in: .watches) == "New Watch")
         #expect(NewRecord.title(in: .calibers) == "New Caliber")
-        #expect(NewRecord.title(in: .parts) == "New Watch")
+        #expect(NewRecord.title(in: .parts) == "New Part")
         #expect(RecordBack.watchTitle == "Back to Watch")
         #expect(RecordBack.jobTitle == "Back to Job")
         #expect(ToolbarSearchLayout.prompt == "Search")
@@ -44,17 +44,18 @@ struct WorkshopSectionTests {
         }
         let observations = [
             Task { await editing.watches.observe() }, Task { await editing.calibers.observe() },
-            Task { await editing.jobs.observe() },
+            Task { await editing.jobs.observe() }, Task { await editing.parts.observe() },
         ]
         defer { observations.forEach { $0.cancel() } }
         try await JobListFixture.waitUntil {
             !editing.watches.isLoading && !editing.calibers.isLoading && !editing.jobs.isLoading
+                && !editing.parts.isLoading
         }
         let watch = try await WatchService(coordinator: coordinator).make("Ventura")
         editing.watches.select(watch.id)
         search.present()
 
-        NewRecord.make(in: .jobs, editing: editing, navigation: navigation, search: search)
+        NewRecord.make(in: .jobs, editing: editing, search: search)
         try await JobListFixture.waitUntil { editing.jobs.selectedJob != nil }
         let job = try #require(editing.jobs.selectedJob)
         #expect(job.title == "New Job" && job.watchID == nil && job.stage == .inProgress)
@@ -62,15 +63,19 @@ struct WorkshopSectionTests {
         #expect(navigation.selectedSection == .jobs && !search.isPresented)
 
         navigation.selection = .calibers
-        NewRecord.make(in: .calibers, editing: editing, navigation: navigation, search: search)
+        NewRecord.make(in: .calibers, editing: editing, search: search)
         try await JobListFixture.waitUntil { editing.calibers.selectedCaliber != nil }
         #expect(editing.calibers.selectedCaliber?.designation == "New Caliber")
         #expect(navigation.selectedSection == .calibers)
 
+        // New Part in Parts makes a spare in the drawer with the cursor in its name.
         navigation.selection = .parts
-        NewRecord.make(in: .parts, editing: editing, navigation: navigation, search: search)
-        try await JobListFixture.waitUntil { editing.watches.selectedWatch?.name == "New Watch" }
-        #expect(navigation.selectedSection == .watches && editing.jobs.selectedID == nil)
+        #expect(NewRecord.title(in: .parts) == "New Part")
+        NewRecord.make(in: .parts, editing: editing, search: search)
+        try await JobListFixture.waitUntil { editing.parts.selectedPart != nil }
+        let spare = try #require(editing.parts.selectedPart)
+        #expect(spare.isSpare && spare.name == "New Part" && spare.stage == .inHand)
+        #expect(editing.parts.nameToFocus == spare.id && navigation.selectedSection == .parts)
         for observation in observations {
             observation.cancel()
             await observation.value

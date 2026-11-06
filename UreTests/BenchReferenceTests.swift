@@ -163,7 +163,7 @@ struct BenchReferenceTests {
     }
 
     @Test
-    func pinAndPaneActionsLeaveUnsavedDraftAndNavigationGuardIntact() async throws {
+    func pinAndPaneActionsLeaveTypingInPlaceAndLeavingSavesIt() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -183,16 +183,20 @@ struct BenchReferenceTests {
         defer { partObservation.cancel() }
         try await waitUntil { !editing.jobs.isLoading && !editing.parts.isLoading }
         editing.jobs.open(try #require(editing.jobs.jobs.first { $0.id == job.id }))
-        editing.parts.create(for: job.id, jobs: editing.jobs)
-        editing.parts.draft?.description = "Unfinished bench part"
+        let part = try #require(await editing.parts.add(named: "Bench part", to: job.id))
+        let facts = try #require(editing.parts.facts(for: part.id))
+        facts.name.beginEditing()
+        facts.name.change(to: "Unfinished bench part", undoManager: nil)
         bench.pin(items[0].id)
         bench.togglePane()
-        #expect(editing.parts.draft?.description == "Unfinished bench part")
+        #expect(facts.name.text == "Unfinished bench part" && facts.name.isEditing)
         var navigated = false
         editing.requestNavigation { navigated = true }
-        #expect(editing.showsUnsavedChanges && !navigated)
-        editing.stay()
-        #expect(editing.parts.draft?.description == "Unfinished bench part")
+        #expect(navigated)
+        try await waitUntil { !facts.name.hasUnsavedChanges }
+        #expect(
+            try await coordinator.read { try PartQueries.fetch(part.id, in: $0) }?.name
+                == "Unfinished bench part")
         #expect(bench.reference?.item == items[0])
         #expect(try await coordinator.read(LibraryItemQueries.fetchAll).count == items.count)
         observation.cancel()

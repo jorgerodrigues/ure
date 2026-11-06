@@ -20,7 +20,7 @@ nonisolated struct JobWatchMigrationTests {
                     StoredJob.init),
                 watchColumn: try db.columns(in: "job").first { $0.name == "watchID" },
                 steps: try Int.fetchOne(db, sql: "SELECT count(*) FROM checklistStep"),
-                parts: try Int.fetchOne(db, sql: "SELECT count(*) FROM partRequirement"),
+                parts: try Int.fetchOne(db, sql: "SELECT count(*) FROM part"),
                 items: try Int.fetchOne(db, sql: "SELECT count(*) FROM libraryItem"),
                 indexes: try String.fetchAll(
                     db,
@@ -36,7 +36,7 @@ nonisolated struct JobWatchMigrationTests {
                     db, sql: "SELECT identifier FROM grdb_migrations ORDER BY rowid")
             )
         }
-        #expect(stored.migrations.last == "v25-jobs-without-watch")
+        #expect(stored.migrations.suffix(2) == ["v25-jobs-without-watch", "v26-parts"])
         #expect(stored.watchColumn?.isNotNull == false)
         #expect(stored.jobs.count == LegacyJobWatchFixture.jobs.count)
         for (row, job) in zip(stored.jobs, LegacyJobWatchFixture.jobs.sorted { $0.id < $1.id }) {
@@ -76,7 +76,7 @@ nonisolated struct JobWatchMigrationTests {
         let package = fixture.directory.appending(path: "before-jobs-without-watch.watchbackup")
         try LegacyJobWatchFixture.package(at: package)
         let staged = try await coordinator.stageRestore(from: package)
-        #expect(staged.summary.appliedMigrations == ["v25-jobs-without-watch"])
+        #expect(staged.summary.appliedMigrations == ["v25-jobs-without-watch", "v26-parts"])
         #expect(staged.summary.counts["job"] == LegacyJobWatchFixture.jobs.count)
         let result = try await coordinator.activateRestore(staged)
         #expect(result.outcome == .restored)
@@ -178,6 +178,7 @@ nonisolated struct StoredJob: Sendable {
 // SQLite's deferred foreign key count balanced.
 nonisolated enum JobWatchMigrationFixture {
     static func requireWatch(in db: Database) throws {
+        try PartMigrationFixture.restoreRequirements(in: db)
         try db.execute(sql: "PRAGMA defer_foreign_keys = ON")
         try db.execute(sql: "CREATE TEMP TABLE job_copy AS SELECT * FROM job")
         try db.execute(sql: "DROP TRIGGER watch_cover_insert")

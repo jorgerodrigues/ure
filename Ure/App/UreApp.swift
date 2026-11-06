@@ -33,7 +33,7 @@ struct UreApp: App {
                 .environment(restore.session.jobs)
                 .environment(restore.session.search)
                 .environment(restore.session.jobList)
-                .environment(restore.session.partsOverview)
+                .environment(restore.session.partList)
                 .environment(restore.session.notes)
                 .environment(restore.session.checklist)
                 .environment(restore.session.parts)

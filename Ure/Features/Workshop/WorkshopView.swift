@@ -9,7 +9,7 @@ struct WorkshopView: View {
     @Environment(CaliberState.self) private var calibers
     @Environment(JobState.self) private var jobs
     @Environment(JobListState.self) private var jobList
-    @Environment(PartsOverviewState.self) private var partsOverview
+    @Environment(PartListState.self) private var partList
     @Environment(ChecklistState.self) private var checklist
     @Environment(PartState.self) private var parts
     @Environment(MaterialState.self) private var material
@@ -19,8 +19,6 @@ struct WorkshopView: View {
     @State private var didRestoreSelection = false
 
     var body: some View {
-        @Bindable var editing = editing
-
         NavigationSplitView {
             WorkshopSidebar()
                 .navigationSplitViewColumnWidth(min: 180, ideal: UreLayout.sidebarWidth, max: 260)
@@ -35,7 +33,7 @@ struct WorkshopView: View {
                 } else if navigation.selectedSection == .calibers {
                     CaliberListView()
                 } else {
-                    PartsOverviewView()
+                    PartListView()
                 }
             }
             .navigationSplitViewColumnWidth(min: 260, ideal: UreLayout.listWidth, max: 400)
@@ -70,7 +68,7 @@ struct WorkshopView: View {
         .task(calibers.observe)
         .task(jobs.observe)
         .task(id: jobList.observationRevision, jobList.observe)
-        .task(id: partsOverview.observationRevision, partsOverview.observe)
+        .task(id: partList.observationRevision, partList.observe)
         .task(checklist.observe)
         .task(parts.observe)
         .task(material.observe)
@@ -106,13 +104,6 @@ struct WorkshopView: View {
             }
         }
         .background(WorkshopWindowGuard(editing: editing))
-        .alert(editing.unsavedChangesTitle, isPresented: $editing.showsUnsavedChanges) {
-            Button("Save", action: editing.saveAndContinueCommand)
-            Button("Discard", role: .destructive, action: editing.discardAndContinue)
-            Button("Stay", role: .cancel, action: editing.stay)
-        } message: {
-            Text("Your changes have not been saved.")
-        }
     }
 
     @ViewBuilder private var detail: some View {
@@ -141,31 +132,13 @@ struct WorkshopView: View {
                 }
             }
         } else if navigation.selectedSection == .parts {
-            // A part opens on its job's page, and Back to Watch shows the watch's page here.
-            Group {
-                if jobs.selectedID != nil {
-                    JobDetailView()
-                } else if watches.selectedID != nil {
-                    WatchDetailView()
-                } else {
-                    ContentUnavailableView(
-                        "Select a part", systemImage: WorkshopSection.parts.symbol,
-                        description: Text("Choose a part to view it in its job."))
-                }
-            }
-            .safeAreaInset(edge: .top) {
-                if let message = partsOverview.selectionMessage(
-                    part: parts.selectedPart, job: jobs.selectedJob)
-                {
-                    HStack {
-                        Text(message).font(.callout)
-                        if jobs.selectedJob?.stage.isOpen == true {
-                            Button("Clear Filters", action: partsOverview.clearFilters)
-                        }
-                    }
-                    .padding()
-                    .accessibilityIdentifier("partsSelectionMessage")
-                }
+            if parts.selectedPart != nil {
+                PartDetailView()
+            } else {
+                ContentUnavailableView(
+                    "Select a part", systemImage: WorkshopSection.parts.symbol,
+                    description: Text(
+                        parts.saveError ?? "Choose a part, or make a spare with New Part."))
             }
         } else if navigation.selectedSection == .watches {
             WatchDetailView()
@@ -174,12 +147,12 @@ struct WorkshopView: View {
         }
     }
 
-    // A job page is open: in Jobs and Parts whenever a job is selected, and in Watches when the
-    // selected watch shows its job.
+    // A job page is open: in Jobs whenever a job is selected, and in Watches when the selected
+    // watch shows its job. Parts shows a part's own page.
     private var hasActiveJob: Bool {
         switch navigation.selectedSection {
-        case .calibers: return false
-        case .jobs, .parts: return jobs.selectedID != nil
+        case .calibers, .parts: return false
+        case .jobs: return jobs.selectedID != nil
         case .watches: return jobs.selectedID != nil && jobs.watchID == watches.selectedID
         }
     }
@@ -194,9 +167,9 @@ struct WorkshopView: View {
     private func restoreSelection() {
         guard !didRestoreSelection, !isLoadingSelection else { return }
         didRestoreSelection = true
-        guard !editing.hasUnsavedChanges, !editing.isSaving,
+        guard !editing.isSaving,
             navigation.selectedSection == .jobs, calibers.selectedID == nil,
-            parts.draft == nil,
+            parts.selectedID == nil,
             watches.selectedID == nil, jobs.selectedID == nil,
             let job = jobs.jobs.first(where: { $0.id == bench.jobID })
         else { return }

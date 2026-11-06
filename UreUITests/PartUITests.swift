@@ -2,235 +2,81 @@ import XCTest
 
 nonisolated final class PartUITests: XCTestCase {
     @MainActor
-    func testURLOnlyPartsValidationDraftGuardRestartAndClosedJob() {
-        let app = XCUIApplication()
-        app.launchEnvironment["URE_TESTING"] = "1"
-        app.launchEnvironment["URE_TEST_LIBRARY_ID"] = UUID().uuidString
-        app.launchArguments = ["-AppleLocale", "en_US", "-ApplePersistenceIgnoreState", "YES"]
+    func testPartsAreTypedOnOneLineAndTheStateMovesOnWithUndo() {
+        let app = isolatedApp()
         app.launch()
         defer { app.terminate() }
-        app.windows.firstMatch.typeKey("3", modifierFlags: .command)
+        let window = app.windows.firstMatch
+        // New Part in Parts makes a spare in the drawer, with the cursor in its name.
+        XCTAssertTrue(app.outlines["Workshop sections"].waitForExistence(timeout: 5))
+        window.typeKey("2", modifierFlags: .command)
         XCTAssertTrue(app.buttons["newRecord"].waitForExistence(timeout: 5))
         app.buttons["newRecord"].click()
-        enter("Parts watch", identifier: "watchName", app: app)
-        app.windows.firstMatch.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(app.buttons["startWatchJob"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["partTitle"].waitForExistence(timeout: 5))
+        window.typeText("Crystal 30.0 mm")
+        window.typeKey(.return, modifierFlags: [])
+        createWatch(app)
         app.buttons["startWatchJob"].click()
-        enter("Restore movement", identifier: "jobTitle", app: app)
-        app.windows.firstMatch.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(app.buttons["addPart"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["No parts required."].exists)
-        app.buttons["addPart"].click()
-        enter("Setting lever spring", identifier: "partDescription", app: app)
-        enter("0", identifier: "partQuantity", app: app)
-        app.buttons["savePart"].click()
-        XCTAssertTrue(app.staticTexts["partSaveError"].waitForExistence(timeout: 3))
-        enter("2", identifier: "partQuantity", app: app)
-        app.buttons["addPartLink"].click()
-        let links = app.textFields.matching(
-            NSPredicate(format: "identifier BEGINSWITH %@", "partLinkURL-"))
-        replace("ftp://example.org/part", field: links.element(boundBy: 0))
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.staticTexts["partSaveError"].waitForExistence(timeout: 3))
-        replace("https://example.org/part", field: links.element(boundBy: 0))
-        app.buttons["backFromPart"].click()
-        XCTAssertTrue(app.sheets.buttons["Stay"].waitForExistence(timeout: 3))
-        app.sheets.buttons["Stay"].click()
-        XCTAssertEqual(app.textFields["partDescription"].value as? String, "Setting lever spring")
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Unknown"].exists)
-        app.buttons["editPart"].click()
-        enter("0012.3-A/04", identifier: "partManufacturerReference", app: app)
-        app.popUpButtons["partCompatibility"].click()
-        app.menuItems["Confirmed"].firstMatch.click()
-        app.buttons["savePart"].click()
-        XCTAssertTrue(app.staticTexts["partSaveError"].waitForExistence(timeout: 3))
-        enter("Matches caliber drawing", identifier: "partCompatibilityNote", app: app)
-        app.buttons["addPartLink"].click()
-        replace("http://example.org/drawing", field: links.element(boundBy: 1))
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["0012.3-A/04"].exists)
-        let openActions = app.buttons.matching(
-            NSPredicate(format: "identifier BEGINSWITH %@", "openPartLink-"))
-        XCTAssertEqual(openActions.count, 2)
-        app.buttons["backFromPart"].click()
-        app.terminate()
-        app.launch()
-        XCTAssertTrue(app.buttons["addPart"].waitForExistence(timeout: 5))
-        let rows = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "part-"))
-        rows.firstMatch.click()
-        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["https://example.org/part"].exists)
-        XCTAssertTrue(app.staticTexts["http://example.org/drawing"].exists)
-        XCTAssertEqual(openActions.count, 2)
-        app.buttons["backFromPart"].click()
-        let state = app.descendants(matching: .any)["jobState"].firstMatch
-        XCTAssertTrue(state.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["jobTitle"].waitForExistence(timeout: 5))
+        window.typeText("Full service")
+        window.typeKey(.return, modifierFlags: [])
+
+        // Each part takes one line, and the spare in hand is one arrow away.
+        let add = app.textFields.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "addPart-")
+        )
+        .firstMatch
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.click()
+        window.typeText("Mainspring")
+        window.typeKey(.return, modifierFlags: [])
+        window.typeText("crystal")
+        let spare = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "useSpare-")
+        ).firstMatch
+        XCTAssertTrue(spare.waitForExistence(timeout: 3))
+        window.typeKey(.downArrow, modifierFlags: [])
+        window.typeKey(.return, modifierFlags: [])
+        XCTAssertEqual(names(app), ["Mainspring", "Crystal 30.0 mm"])
+
+        // A click on the state moves the part on, and ⌘Z puts it back.
+        let state = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "partState-")
+        ).element(boundBy: 0)
+        XCTAssertEqual(state.value as? String, "Needed")
         state.click()
-        app.menuItems["Done"].firstMatch.click()
-        // A Done job's parts still change.
-        XCTAssertTrue(app.buttons["addPart"].isEnabled)
-        rows.firstMatch.click()
-        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["editPart"].isEnabled)
-        XCTAssertTrue(app.staticTexts["Needed"].exists)
-        XCTAssertEqual(openActions.count, 2)
+        XCTAssertEqual(state.value as? String, "Ordered")
+        window.typeKey("z", modifierFlags: .command)
+        XCTAssertEqual(state.value as? String, "Needed")
+    }
+
+    // The names on the job's part lines, from top to bottom.
+    @MainActor
+    private func names(_ app: XCUIApplication) -> [String] {
+        app.textFields.matching(NSPredicate(format: "identifier BEGINSWITH %@", "partName-"))
+            .allElementsBoundByIndex
+            .sorted { $0.frame.minY < $1.frame.minY }
+            .compactMap { $0.value as? String }
     }
 
     @MainActor
-    func testLinkRowsHoldOnlyAURLAndRemovalCancelAndRestart() {
+    private func isolatedApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["URE_TESTING"] = "1"
         app.launchEnvironment["URE_TEST_LIBRARY_ID"] = UUID().uuidString
         app.launchArguments = ["-AppleLocale", "en_US", "-ApplePersistenceIgnoreState", "YES"]
-        app.launch()
-        defer { app.terminate() }
+        return app
+    }
+
+    @MainActor
+    private func createWatch(_ app: XCUIApplication) {
         app.windows.firstMatch.typeKey("3", modifierFlags: .command)
         XCTAssertTrue(app.buttons["newRecord"].waitForExistence(timeout: 5))
         app.buttons["newRecord"].click()
-        enter("Link watch", identifier: "watchName", app: app)
+        let name = app.textFields["watchName"]
+        XCTAssertTrue(name.waitForExistence(timeout: 3))
+        name.typeText("Parts watch")
         app.windows.firstMatch.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(app.buttons["startWatchJob"].waitForExistence(timeout: 5))
-        app.buttons["startWatchJob"].click()
-        enter("Find replacement spring", identifier: "jobTitle", app: app)
-        app.windows.firstMatch.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(app.buttons["addPart"].waitForExistence(timeout: 5))
-        app.buttons["addPart"].click()
-        enter("Setting lever spring", identifier: "partDescription", app: app)
-        app.buttons["addPartLink"].click()
-        let urls = app.textFields.matching(
-            NSPredicate(format: "identifier BEGINSWITH %@", "partLinkURL-"))
-        replace("https://example.org/part", field: urls.element(boundBy: 0))
-        let firstID = String(urls.element(boundBy: 0).identifier.dropFirst("partLinkURL-".count))
-        let rowControls = NSPredicate(format: "identifier CONTAINS %@", firstID)
-        XCTAssertEqual(app.textFields.matching(rowControls).count, 1)
-        XCTAssertEqual(app.checkBoxes.matching(rowControls).count, 0)
-        app.buttons["addPartLink"].click()
-        replace("https://example.net/alternate", field: urls.element(boundBy: 1))
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
-        let openActions = app.buttons.matching(
-            NSPredicate(format: "identifier BEGINSWITH %@", "openPartLink-"))
-        XCTAssertEqual(openActions.count, 2)
-        app.buttons["backFromPart"].click()
-        app.terminate()
-        app.launch()
-        XCTAssertTrue(app.buttons["addPart"].waitForExistence(timeout: 5))
-        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "part-")).firstMatch
-            .click()
-        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["https://example.org/part"].exists)
-        XCTAssertTrue(app.staticTexts["https://example.net/alternate"].exists)
-        app.buttons["editPart"].click()
-        app.buttons["removePartLink-\(firstID)"].click()
-        XCTAssertTrue(app.sheets.buttons["Remove"].waitForExistence(timeout: 3))
-        app.sheets.buttons["Remove"].click()
-        app.buttons["cancelPart"].click()
-        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
-        XCTAssertEqual(openActions.count, 2)
-        app.buttons["editPart"].click()
-        app.buttons["removePartLink-\(firstID)"].click()
-        XCTAssertTrue(app.sheets.buttons["Remove"].waitForExistence(timeout: 3))
-        app.sheets.buttons["Remove"].click()
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
-        XCTAssertEqual(openActions.count, 1)
-        XCTAssertFalse(app.staticTexts["https://example.org/part"].exists)
-        XCTAssertTrue(app.staticTexts["https://example.net/alternate"].exists)
-    }
-
-    @MainActor
-    func testProcurementConfirmationCorrectionsAndOnHandCreation() {
-        let app = XCUIApplication()
-        app.launchEnvironment["URE_TESTING"] = "1"
-        app.launchEnvironment["URE_TEST_LIBRARY_ID"] = UUID().uuidString
-        app.launchArguments = ["-AppleLocale", "en_US", "-ApplePersistenceIgnoreState", "YES"]
-        app.launch()
-        defer { app.terminate() }
-        app.windows.firstMatch.typeKey("3", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["newRecord"].waitForExistence(timeout: 5))
-        app.buttons["newRecord"].click()
-        enter("Procurement watch", identifier: "watchName", app: app)
-        app.windows.firstMatch.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(app.buttons["startWatchJob"].waitForExistence(timeout: 5))
-        app.buttons["startWatchJob"].click()
-        enter("Fit spring", identifier: "jobTitle", app: app)
-        app.windows.firstMatch.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(app.buttons["addPart"].waitForExistence(timeout: 5))
-        app.buttons["addPart"].click()
-        enter("Spring lot", identifier: "partDescription", app: app)
-        app.buttons["addPartLink"].click()
-        let url = app.textFields.matching(
-            NSPredicate(format: "identifier BEGINSWITH %@", "partLinkURL-")
-        ).firstMatch
-        replace("https://example.org/spring", field: url)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
-        app.buttons["editPart"].click()
-        selectStatus("Ordered", app: app)
-        enter("00042-A/03", identifier: "partOrderReference", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["00042-A/03"].exists)
-        app.buttons["editPart"].click()
-        selectStatus("Installed", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.staticTexts["partSaveError"].waitForExistence(timeout: 3))
-        app.checkBoxes["partOnHand"].click()
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["00042-A/03"].exists)
-        app.buttons["editPart"].click()
-        selectStatus("Arrived", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.staticTexts["partSaveError"].waitForExistence(timeout: 3))
-        enter("Corrected fitting record", identifier: "partStatusReason", app: app)
-        app.buttons["cancelPart"].click()
-        XCTAssertTrue(app.staticTexts["Installed"].exists)
-        app.buttons["editPart"].click()
-        selectStatus("Cancelled", app: app)
-        enter("Wrong spring", identifier: "partStatusReason", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
-        app.buttons["backFromPart"].click()
-        app.buttons["addPart"].click()
-        enter("Replacement on hand", identifier: "partDescription", app: app)
-        selectStatus("Arrived", app: app)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editPart"].waitForExistence(timeout: 5))
-        app.terminate()
-        app.launch()
-        let replacement = app.buttons.matching(
-            NSPredicate(
-                format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "part-",
-                "Replacement on hand")
-        ).firstMatch
-        XCTAssertTrue(replacement.waitForExistence(timeout: 5))
-        replacement.scrollFullyIntoView(in: app.windows.firstMatch)
-        replacement.click()
-        XCTAssertTrue(app.staticTexts["Replacement on hand"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Arrived"].exists)
-    }
-
-    @MainActor
-    private func selectStatus(_ status: String, app: XCUIApplication) {
-        app.popUpButtons["partStatus"].click()
-        app.menuItems[status].firstMatch.click()
-    }
-
-    @MainActor
-    private func enter(_ text: String, identifier: String, app: XCUIApplication) {
-        replace(text, field: app.textFields[identifier])
-    }
-
-    @MainActor
-    private func replace(_ text: String, field: XCUIElement) {
-        XCTAssertTrue(field.waitForExistence(timeout: 3))
-        field.scrollFullyIntoView(in: XCUIApplication().windows.firstMatch)
-        field.click()
-        field.typeKey("a", modifierFlags: .command)
-        field.typeText(text)
     }
 }

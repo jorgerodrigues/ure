@@ -14,17 +14,20 @@ nonisolated struct PartLinkMigrationTests {
         let before = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
         let service = PartService(coordinator: coordinator)
-        var draft = PartFixture.draft()
-        draft.manufacturerReference = "0012.3–Å/04"
-        draft.links = [
-            PartLinkDraft(url: "https://example.org/parts/0012?variant=A"),
-            PartLinkDraft(url: "https://example.net/alternate"),
-        ]
-        let needed = try await service.save(draft, for: job.id, editing: nil)
-        var order = PartDraft(part: needed)
-        order.status = .ordered
-        order.orderReference = "PO-1"
-        let ordered = try await service.save(order, for: job.id, editing: needed.id)
+        let needed = try await service.add(named: "Mainspring", to: job.id)
+        _ = try await service.update(needed.id, .description("0012.3–Å/04"))
+        let ordered = try await service.setStage(needed.id, to: .ordered).part
+        try await coordinator.mutate { db, _, _ in
+            for (position, url) in [
+                "https://example.org/parts/0012?variant=A", "https://example.net/alternate",
+            ].enumerated() {
+                try PartLink(
+                    id: UUID(), partID: ordered.id, position: position, url: url,
+                    createdAt: clock, updatedAt: clock
+                ).insert(db)
+            }
+        }
+        let links = try await coordinator.read { try PartQueries.links(of: ordered.id, in: $0) }
         let snapshot =
             #"{"currency":"DKK","price":"12.3400","supplierName":"Supplier Å時計","supplierStockCode":"STOCK-77","url":"https://example.org/parts/0012?variant=A"}"#
         try await coordinator.mutate { db, _, _ in
@@ -39,7 +42,8 @@ nonisolated struct PartLinkMigrationTests {
             try db.execute(
                 sql: """
                     UPDATE partRequirement
-                    SET supplierSnapshot = ?, searchKey = searchKey || char(10) || 'stock-77'
+                    SET supplierSnapshot = ?, orderReference = 'PO-1',
+                        searchKey = searchKey || char(10) || 'stock-77'
                     """, arguments: [snapshot])
             // The order's history keeps a copy of the supplier, which v18 removes.
             try db.execute(
@@ -62,8 +66,12 @@ nonisolated struct PartLinkMigrationTests {
         let reopened = fixture.coordinator(dependencies: LibraryDependencies(now: { clock }))
         let after = try await reopened.open()
         #expect(after.generationID != before.generationID)
-        #expect(try await reopened.read(PartQueries.fetchAll) == [ordered])
-        // v23 then removes the history. The order reference stays on the part, so only the
+        // v26 then makes the requirement a part, with its order reference in its notes.
+        var kept = ordered
+        kept.notes = "From the old record\n\nOrder reference: PO-1"
+        #expect(try await reopened.read(PartQueries.fetchAll) == [kept])
+        #expect(try await reopened.read { try PartQueries.links(of: ordered.id, in: $0) } == links)
+        // v23 then removes the history. The order reference stays with the part, so only the
         // supplier copy that v18 removed is gone.
         #expect(try await reopened.read { try $0.tableExists("activityEvent") } == false)
         #expect(
@@ -74,7 +82,7 @@ nonisolated struct PartLinkMigrationTests {
                 linkIndexes: try db.indexes(on: "partLink").map(\.name).filter {
                     !$0.hasPrefix("sqlite_")
                 },
-                parts: try db.columns(in: "partRequirement").map(\.name)
+                parts: try db.columns(in: "part").map(\.name)
             )
         }
         #expect(
@@ -85,12 +93,6 @@ nonisolated struct PartLinkMigrationTests {
         #expect(
             try await reopened.read { try SearchQueries.fetch("0012.3–å/04", in: $0) }.map(
                 \.recordID) == [ordered.id])
-        var edit = PartDraft(part: ordered)
-        edit.links.removeFirst()
-        let saved = try await PartService(coordinator: reopened).save(
-            edit, for: job.id, editing: ordered.id)
-        #expect(saved.links.map(\.id) == [ordered.links[1].id])
-        #expect(saved.links.map(\.url) == [ordered.links[1].url])
         try await reopened.close()
     }
 

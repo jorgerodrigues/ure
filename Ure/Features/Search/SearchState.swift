@@ -96,6 +96,10 @@ final class SearchState {
                 editing.watches.select(nil)
                 navigation.selection = .jobs
                 editing.jobs.open(job)
+            } else if result.kind == .part {
+                // A spare in the drawer has no job, so it opens in Parts.
+                editing.watches.select(nil)
+                navigation.selection = .parts
             }
             openTarget()
             self.navigationRevision += 1
@@ -109,12 +113,9 @@ final class SearchState {
             return {}
         case .part:
             guard !editing.parts.isLoading, editing.parts.loadError == nil,
-                let jobID = result.jobID,
-                let part = editing.parts.records(for: jobID).first(where: {
-                    $0.id == result.recordID
-                })
+                let part = editing.parts.part(result.recordID), part.jobID == result.jobID
             else { return nil }
-            return { editing.parts.open(part, for: jobID) }
+            return { editing.parts.select(part.id) }
         case .link, .photo, .document:
             guard !editing.material.isLoading, editing.material.loadError == nil,
                 let owner = result.itemOwner,

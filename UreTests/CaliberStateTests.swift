@@ -230,10 +230,10 @@ struct CaliberStateTests {
         let facts = try #require(calibers.facts(for: caliber.id))
         facts.name.beginEditing()
         facts.name.change(to: "552 typed before leaving", undoManager: nil)
-        #expect(editing.hasUnsavedFields && !editing.hasUnsavedChanges)
+        #expect(editing.hasUnsavedFields)
         var navigated = false
         editing.requestNavigation { navigated = true }
-        #expect(navigated && !editing.showsUnsavedChanges)
+        #expect(navigated)
         try await waitUntil { !facts.name.hasUnsavedChanges }
         #expect(
             try await coordinator.read(CaliberQueries.fetchAll).first?.designation

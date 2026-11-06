@@ -775,6 +775,13 @@ nonisolated enum LibrarySchema {
             // checks keep each job's checklist steps, parts, material and watch cover meanwhile.
             try JobWatchMigration.allowJobsWithoutWatch(in: db)
         }
+        migrator.registerMigration("v26-parts", foreignKeyChecks: .deferred) { db in
+            // A part is a record of its own: a job's part, or a spare with no job. The part
+            // table replaces the part requirements, and the links move with their parts.
+            // Deferred checks keep each part's links while both tables are rebuilt.
+            try PartMigration.turnRequirementsIntoParts(
+                in: db, locale: .current, timeZone: .current)
+        }
         return migrator
     }
 }

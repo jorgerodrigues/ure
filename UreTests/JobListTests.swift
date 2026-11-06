@@ -104,11 +104,9 @@ struct JobListTests {
                 ChecklistStep(id: UUID(), text: "Oil the movement"),
             ], for: service.id)
         let parts = PartService(coordinator: coordinator)
-        _ = try await parts.save(PartFixture.draft(), for: service.id, editing: nil)
-        let ordered = try await parts.save(PartFixture.draft(), for: service.id, editing: nil)
-        var order = PartDraft(part: ordered)
-        order.status = .ordered
-        _ = try await parts.save(order, for: service.id, editing: ordered.id)
+        _ = try await parts.add(named: "Mainspring", to: service.id)
+        let ordered = try await parts.add(named: "Crystal", to: service.id)
+        _ = try await parts.advance(ordered.id)
         let waiting = try await JobTaskFixture.job(coordinator)
         _ = try await jobs.setStage(waiting.id, to: .waiting)
         _ = try await jobs.update(waiting.id, .waitingFor("a mainspring"))

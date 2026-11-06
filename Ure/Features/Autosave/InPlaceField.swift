@@ -30,6 +30,10 @@ struct InPlaceField: View {
     var style = InPlaceStyle.body
     var requestsFocus = false
     var didFocus: () -> Void = {}
+    var isQuiet = false
+    // Whether the line under the field says how typing works. A field on a busy line, such as a
+    // part's name on its job, leaves it out and still says what to correct.
+    var showsHint = true
     @State private var isHovering = false
 
     var body: some View {
@@ -37,7 +41,7 @@ struct InPlaceField: View {
             InPlaceTextView(
                 field: field, text: field.text, suggestion: field.suggestion, style: style,
                 isEditable: isEditable, identifier: identifier, requestsFocus: requestsFocus,
-                didFocus: didFocus
+                didFocus: didFocus, isQuiet: isQuiet
             )
             .frame(maxWidth: .infinity, alignment: .leading)
             .overlay(alignment: .leading) { prompt }
@@ -49,7 +53,7 @@ struct InPlaceField: View {
             .onHover(perform: hover)
             // Behind the field, so the list's shadow never greys the field.
             .background(alignment: .topLeading) { matches }
-            FactMessage(field: field)
+            FactMessage(field: field, showsHint: showsHint)
         }
         .zIndex(field.isEditing ? 1 : 0)
     }
@@ -145,13 +149,14 @@ struct FactLabel: View {
 // The line under a fact: what to enter, that it did not save, or how typing works.
 struct FactMessage: View {
     let field: FactField
+    var showsHint = true
 
     var body: some View {
         if let error = field.saveError {
             FactSaveFailure(message: error, retry: field.saveNow)
         } else if let problem = field.problem {
             FactProblem(message: problem)
-        } else if field.isEditing, field.matches.isEmpty {
+        } else if showsHint, field.isEditing, field.matches.isEmpty {
             Text("Saved as you type · Esc undoes this field")
                 .font(.system(size: InPlaceLayout.hintSize))
                 .foregroundStyle(.secondary)

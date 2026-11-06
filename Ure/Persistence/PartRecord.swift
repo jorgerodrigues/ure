@@ -1,56 +1,58 @@
 import Foundation
 import GRDB
 
-nonisolated enum PartStatus: String, Codable, CaseIterable, Identifiable, Sendable {
+// Where a part is on its way to the watch. A click on a part's state moves it on: Needed,
+// Ordered, In hand, then Fitted, the last. Each state after Needed records the day it came.
+nonisolated enum PartStage: String, Codable, CaseIterable, Identifiable, Sendable {
     case needed = "Needed"
     case ordered = "Ordered"
-    case arrived = "Arrived"
-    case installed = "Installed"
-    case cancelled = "Cancelled"
+    case inHand = "In hand"
+    case fitted = "Fitted"
 
     var id: Self { self }
-    var isUnresolved: Bool { self == .needed || self == .ordered }
 
-    func requiresReason(from prior: PartStatus) -> Bool {
-        guard self != prior else { return false }
-        if self == .cancelled || prior == .cancelled { return true }
-        let milestones: [PartStatus] = [.needed, .ordered, .arrived, .installed]
-        guard let next = milestones.firstIndex(of: self),
-            let previous = milestones.firstIndex(of: prior)
-        else { return false }
-        return next < previous
+    // The state a click moves the part to, or nil once it is fitted.
+    var next: PartStage? {
+        switch self {
+        case .needed: .ordered
+        case .ordered: .inHand
+        case .inHand: .fitted
+        case .fitted: nil
+        }
+    }
+
+    // Whether the part has come this far, such as an In hand part that was ordered.
+    func hasReached(_ milestone: PartStage) -> Bool {
+        let order = Self.allCases
+        return (order.firstIndex(of: self) ?? 0) >= (order.firstIndex(of: milestone) ?? 0)
     }
 }
 
-nonisolated enum PartCompatibility: String, Codable, CaseIterable, Identifiable, Sendable {
-    case unchecked = "Unchecked"
-    case confirmed = "Confirmed"
-    case unsuitable = "Unsuitable"
-
-    var id: Self { self }
-}
-
+// A part is a record of its own. It belongs to a job, or it is a spare in the drawer when it has
+// no job. Each part has a name, a free-text description, a quantity, a state with the dates it
+// was ordered, came in hand and was fitted, and notes.
 nonisolated struct PartRecord: Codable, Equatable, Identifiable, Sendable, FetchableRecord,
     PersistableRecord
 {
-    static let databaseTableName = "partRequirement"
+    static let databaseTableName = "part"
 
     let id: UUID
-    let jobID: UUID
-    let description: String
-    let quantity: Int
-    let manufacturerReference: String?
-    let compatibility: PartCompatibility
-    let compatibilityNote: String?
-    var status: PartStatus
-    var orderedAt: Date?
-    var arrivedAt: Date?
-    var installedAt: Date?
-    var cancelledAt: Date?
-    var orderReference: String?
-    var statusReason: String?
+    // The job the part is for, or nil for a spare.
+    var jobID: UUID?
+    // The part's place among its job's parts.
+    var position: Int
+    var name: String
+    var description: String? = nil
+    var quantity: Int = 1
+    var stage: PartStage = .needed
+    var orderedAt: Date? = nil
+    var inHandAt: Date? = nil
+    var fittedAt: Date? = nil
+    var notes = ""
     let createdAt: Date
-    let updatedAt: Date
+    var updatedAt: Date
+
+    var isSpare: Bool { jobID == nil }
 
     static func databaseUUIDEncodingStrategy(for column: String) -> DatabaseUUIDEncodingStrategy {
         .uppercaseString
@@ -63,6 +65,8 @@ nonisolated struct PartRecord: Codable, Equatable, Identifiable, Sendable, Fetch
     }
 }
 
+// A saved link on a part, such as a listing or an identification reference. It holds only its
+// URL. W041 turns links into buying options.
 nonisolated struct PartLink: Codable, Equatable, Identifiable, Sendable, FetchableRecord,
     PersistableRecord
 {
@@ -86,38 +90,48 @@ nonisolated struct PartLink: Codable, Equatable, Identifiable, Sendable, Fetchab
     }
 }
 
-nonisolated struct PartRequirement: Equatable, Identifiable, Sendable {
-    let record: PartRecord
-    let links: [PartLink]
-    var id: UUID { record.id }
+// Every part and every saved link, as the parts state observes them.
+nonisolated struct PartLibrary: Equatable, Sendable {
+    var parts: [PartRecord] = []
+    var links: [UUID: [PartLink]] = [:]
 }
 
 nonisolated enum PartQueries {
-    static func fetchAll(_ db: Database) throws -> [PartRequirement] {
-        let records = try PartRecord.fetchAll(
-            db, sql: "SELECT * FROM partRequirement ORDER BY createdAt, id")
-        let links = try PartLink.fetchAll(db, sql: "SELECT * FROM partLink ORDER BY position, id")
-        let grouped = Dictionary(grouping: links, by: \.partID)
-        return records.map { PartRequirement(record: $0, links: grouped[$0.id] ?? []) }
+    static func fetchAll(_ db: Database) throws -> [PartRecord] {
+        try PartRecord.fetchAll(db, sql: "SELECT * FROM part ORDER BY position, createdAt, id")
     }
 
-    static func fetch(_ id: UUID, in db: Database) throws -> PartRequirement? {
-        guard
-            let record = try PartRecord.fetchOne(
-                db, sql: "SELECT * FROM partRequirement WHERE id = ?", arguments: [id.uuidString])
-        else { return nil }
-        let links = try PartLink.fetchAll(
+    static func library(_ db: Database) throws -> PartLibrary {
+        let links = try PartLink.fetchAll(db, sql: "SELECT * FROM partLink ORDER BY position, id")
+        return PartLibrary(
+            parts: try fetchAll(db), links: Dictionary(grouping: links, by: \.partID))
+    }
+
+    static func fetch(_ id: UUID, in db: Database) throws -> PartRecord? {
+        try PartRecord.fetchOne(
+            db, sql: "SELECT * FROM part WHERE id = ?", arguments: [id.uuidString])
+    }
+
+    static func links(of id: UUID, in db: Database) throws -> [PartLink] {
+        try PartLink.fetchAll(
             db, sql: "SELECT * FROM partLink WHERE partID = ? ORDER BY position, id",
             arguments: [id.uuidString])
-        return PartRequirement(record: record, links: links)
     }
 
-    static func unresolved(for jobID: UUID, in db: Database) throws -> [PartRecord] {
-        try PartRecord.fetchAll(
-            db,
-            sql: """
-                SELECT * FROM partRequirement WHERE jobID = ? AND status IN ('Needed', 'Ordered')
-                ORDER BY createdAt, id
-                """, arguments: [jobID.uuidString])
+    // The place after the job's last part.
+    static func nextPosition(on jobID: UUID, in db: Database) throws -> Int {
+        try Int.fetchOne(
+            db, sql: "SELECT coalesce(max(position) + 1, 0) FROM part WHERE jobID = ?",
+            arguments: [jobID.uuidString]) ?? 0
+    }
+
+    static func insert(_ record: PartRecord, in db: Database) throws {
+        try record.insert(db)
+        try SearchKey.refresh(record.id, table: .part, in: db)
+    }
+
+    static func update(_ record: PartRecord, in db: Database) throws {
+        try record.update(db)
+        try SearchKey.refresh(record.id, table: .part, in: db)
     }
 }

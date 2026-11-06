@@ -6,8 +6,9 @@ enum NewRecord {
     static func title(in section: WorkshopSection) -> String {
         switch section {
         case .jobs: JobService.newTitle
+        case .parts: PartService.newName
         case .calibers: "New Caliber"
-        case .watches, .parts: "New Watch"
+        case .watches: "New Watch"
         }
     }
 
@@ -15,18 +16,17 @@ enum NewRecord {
         guard !editing.isSaving else { return false }
         switch section {
         case .jobs: return !editing.jobs.isLoading && editing.jobs.loadError == nil
+        case .parts: return !editing.parts.isLoading && editing.parts.loadError == nil
         case .calibers: return !editing.calibers.isLoading && editing.calibers.loadError == nil
-        case .watches, .parts:
+        case .watches:
             return !editing.watches.isLoading && editing.watches.loadError == nil
         }
     }
 
-    // A new job starts without a watch, with the cursor in its title. A new watch opens in
-    // Watches and a new caliber in Calibers, each with the cursor in its name.
-    static func make(
-        in section: WorkshopSection, editing: WorkshopEditing, navigation: WorkshopNavigation,
-        search: SearchState
-    ) {
+    // A new job starts without a watch, with the cursor in its title. A new part in Parts is a
+    // spare in the drawer. A new watch opens in Watches and a new caliber in Calibers. Each
+    // puts the cursor in its name.
+    static func make(in section: WorkshopSection, editing: WorkshopEditing, search: SearchState) {
         guard canMake(in: section, editing: editing) else { return }
         editing.requestNavigation {
             search.close()
@@ -35,11 +35,12 @@ enum NewRecord {
             case .jobs:
                 editing.watches.select(nil)
                 editing.jobs.createCommand()
+            case .parts:
+                editing.parts.makeSpareCommand()
             case .calibers:
                 editing.calibers.createCommand()
-            case .watches, .parts:
+            case .watches:
                 editing.jobs.close()
-                navigation.selection = .watches
                 editing.watches.createCommand()
             }
         }
@@ -49,7 +50,6 @@ enum NewRecord {
 // The toolbar's New button for the selected section, such as "New Job".
 struct NewRecordButton: View {
     @Environment(WorkshopEditing.self) private var editing
-    @Environment(WorkshopNavigation.self) private var navigation
     @Environment(SearchState.self) private var search
     let section: WorkshopSection
 
@@ -62,6 +62,6 @@ struct NewRecordButton: View {
     }
 
     private func make() {
-        NewRecord.make(in: section, editing: editing, navigation: navigation, search: search)
+        NewRecord.make(in: section, editing: editing, search: search)
     }
 }
