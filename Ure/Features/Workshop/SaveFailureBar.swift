@@ -6,6 +6,8 @@ import SwiftUI
 struct SaveFailureBar: View {
     @Environment(WorkshopEditing.self) private var editing
     @State private var asksToDiscard = false
+    // A narrow window, such as Settings, gives the message more lines.
+    var lines = SaveFailureLayout.lines
 
     var body: some View {
         if let failure = editing.failure {
@@ -15,7 +17,7 @@ struct SaveFailureBar: View {
                     .accessibilityHidden(true)
                 message(failure)
                     .font(.system(size: NotesLayout.failureSize))
-                    .lineLimit(SaveFailureLayout.lines)
+                    .lineLimit(lines)
                     .help(editing.queue.failureDetails ?? failure)
                 Spacer(minLength: 8)
                 Button("Try Again", action: editing.tryAgain)

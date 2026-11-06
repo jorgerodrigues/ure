@@ -8,8 +8,11 @@ struct SettingsView: View {
     var body: some View {
         VStack(spacing: 0) {
             // A save that failed shows here too, with Try Again, because a rate typed in
-            // Settings waits behind it like any change.
-            SaveFailureBar().environment(restore.session.editing)
+            // Settings waits behind it like any change. It is as wide as the form with its
+            // margins, so a long message wraps instead of widening the window.
+            SaveFailureBar(lines: SettingsLayout.failureLines)
+                .environment(restore.session.editing)
+                .frame(width: SettingsLayout.width)
             form
         }
         .task(loadSummary)
@@ -84,7 +87,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 620)
+        .frame(width: SettingsLayout.formWidth, height: 620)
         .scenePadding()
     }
 
@@ -105,4 +108,12 @@ struct SettingsView: View {
     }
 
     private func refreshSummary() { Task { await backup.refresh() } }
+}
+
+enum SettingsLayout {
+    static let formWidth: CGFloat = 520
+    // The form with the scene's margins on both sides.
+    static let width: CGFloat = formWidth + 40
+    // The failure bar's message wraps more in Settings than in the main window.
+    static let failureLines = 6
 }
