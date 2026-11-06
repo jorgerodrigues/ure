@@ -3,76 +3,90 @@ import Testing
 
 @testable import Ure
 
-// One test for each rule of the edit queue's design. Each rule comes from a group of review
-// findings, listed in docs/planning/edit-queue-verification.md, and each test checks its rule in
-// more than one way.
+// Tests of the five rules of the edit queue's design, with the queue stopping at the first failed
+// save. Each rule comes from a group of review findings, listed in
+// docs/planning/edit-queue-verification.md, and each test checks its rule in more than one way.
 struct EditRuleTests {
-    // The screen is what counts. A save that fails leaves the screen as it is, the next save sends
-    // what the library still lacks, and an older change never saves over a later one.
+    // Rule 1: the library never falls behind. Edits run one at a time, in the order you made
+    // them, and none runs past a failed one. Try Again while the library still refuses keeps the
+    // queue stopped, and the next Try Again runs the failed edit and then every edit after it.
     @Test(.timeLimit(.minutes(1)))
-    func theScreenIsWhatSavesAfterAFailedSave() async throws {
+    func noEditRunsPastAFailedOne() async throws {
+        // A checklist: a tick fails, and an untick, a move and typing wait behind it.
         let clean = ChecklistStep(id: UUID(), text: "Clean")
         let oil = ChecklistStep(id: UUID(), text: "Oil")
         let checklist = try await ChecklistLibrary.make(steps: [clean, oil])
         let editor = checklist.editor
-
-        // A tick that failed and was then taken back by hand leaves nothing unsaved.
         try await JobTaskFixture.failWrites(checklist.coordinator, on: "checklistStep")
         editor.toggleTick(clean.id, undoManager: nil)
-        await checklist.queue.waitUntilIdle()
-        #expect(editor.saveError != nil && editor.hasUnsavedChanges)
+        #expect(await checklist.queue.waitUntilStopped())
         editor.toggleTick(clean.id, undoManager: nil)
-        await checklist.queue.waitUntilIdle()
-        #expect(editor.saveError == nil && !editor.hasUnsavedChanges)
-
-        // A tick that failed saves with the next change once writes work.
-        editor.toggleTick(clean.id, undoManager: nil)
-        await checklist.queue.waitUntilIdle()
-        try await JobTaskFixture.allowWrites(checklist.coordinator, on: "checklistStep")
-        editor.toggleTick(oil.id, undoManager: nil)
-        await checklist.queue.waitUntilIdle()
-        #expect(try await checklist.stored().map(\.isTicked) == [true, true])
-        #expect(editor.saveError == nil && !editor.hasUnsavedChanges)
-
-        // An untick that failed and typing in the same step save as the screen shows them.
-        try await JobTaskFixture.failWrites(checklist.coordinator, on: "checklistStep")
-        editor.toggleTick(oil.id, undoManager: nil)
-        await checklist.queue.waitUntilIdle()
-        try await JobTaskFixture.allowWrites(checklist.coordinator, on: "checklistStep")
+        editor.move(oil.id, by: -1, undoManager: nil)
         editor.beginEditing(oil.id)
         editor.change(oil.id, to: "Oil the escapement", undoManager: nil)
-        editor.saveNow()
-        await checklist.queue.waitUntilIdle()
-        #expect(
-            try await checklist.stored() == [
-                ChecklistStep(id: clean.id, text: "Clean", isTicked: true),
-                ChecklistStep(id: oil.id, text: "Oil the escapement"),
-            ])
         editor.endEditing(oil.id)
+        #expect(try await checklist.stored() == [clean, oil])
+        checklist.queue.retry()
+        #expect(await checklist.queue.waitUntilStopped())
+        #expect(try await checklist.stored() == [clean, oil])
+        try await JobTaskFixture.allowWrites(checklist.coordinator, on: "checklistStep")
+        checklist.queue.retry()
+        #expect(await !checklist.queue.waitUntilStopped())
+        let typed = ChecklistStep(id: oil.id, text: "Oil the escapement")
+        #expect(try await checklist.stored() == [typed, clean])
+        #expect(editor.steps == [typed, clean] && !editor.hasUnsavedChanges)
         try await checklist.close()
 
-        // A field works the same way: the text it shows is what saves.
+        // Notes that fail, and an archive after them: the archive waits, so the notes save
+        // before the record is archived.
         let notes = try await NotesLibrary.make(notes: "Saved", pause: PauseGate().pause)
-        let field = notes.field
         try await JobTaskFixture.failWrites(notes.coordinator, on: "caliber")
-        field.beginEditing()
-        field.change(to: "Saved and typed", undoManager: nil)
-        field.saveNow()
-        await notes.queue.waitUntilIdle()
-        #expect(field.saveError != nil && field.text == "Saved and typed")
-        field.change(to: "Saved", undoManager: nil)
-        field.saveNow()
-        #expect(field.saveError == nil && !field.hasUnsavedChanges)
+        notes.field.beginEditing()
+        notes.field.change(to: "Lift angle 52°", undoManager: nil)
+        notes.field.endEditing()
+        let archiving = notes.queue.submit(
+            .caliber(.archive(notes.caliberID, true)), in: .calibers)
+        #expect(await notes.queue.waitUntilStopped())
+        #expect(archiving.isPending && notes.queue.isBusy)
         try await JobTaskFixture.allowWrites(notes.coordinator, on: "caliber")
-        field.change(to: "Saved, then more", undoManager: nil)
-        field.saveNow()
-        await notes.queue.waitUntilIdle()
-        #expect(try await notes.stored() == "Saved, then more")
+        notes.queue.retry()
+        #expect(await archiving.saved)
+        #expect(try await notes.stored() == "Lift angle 52°")
         try await notes.close()
     }
 
-    // Each Undo step keeps what its own action did on screen. Undo puts back the screen as it was
-    // before the action, and Redo as it was after, also when the action saved nothing.
+    // Rule 1 also holds for several moves that wait: once they run, the library has the order
+    // the screen shows. Each move is worked out from the order the moves before it leave.
+    @Test(.timeLimit(.minutes(1)))
+    func movesThatWaitSaveTheOrderTheScreenShows() async throws {
+        let steps = ["A", "B", "C", "D"].map { ChecklistStep(id: UUID(), text: $0) }
+        let checklist = try await ChecklistLibrary.make(steps: steps)
+        let editor = checklist.editor
+        try await JobTaskFixture.failWrites(checklist.coordinator, on: "checklistStep")
+        for id in [steps[2].id, steps[2].id, steps[3].id, steps[3].id] {
+            editor.move(id, by: -1, undoManager: nil)
+        }
+        #expect(editor.steps.map(\.text) == ["C", "D", "A", "B"])
+        #expect(await checklist.queue.waitUntilStopped())
+        try await JobTaskFixture.allowWrites(checklist.coordinator, on: "checklistStep")
+        checklist.queue.retry()
+        #expect(await !checklist.queue.waitUntilStopped())
+        #expect(try await checklist.stored().map(\.text) == ["C", "D", "A", "B"])
+        try await checklist.close()
+
+        // The changes between any two orders of four steps, also with a step added and one
+        // taken away, give exactly the new order.
+        let added = ChecklistStep(id: UUID(), text: "E")
+        for order in permutations(of: steps) {
+            for new in [order, Array(order.dropLast()) + [added]] {
+                let changes = ChecklistOperation.changes(from: steps, to: new)
+                #expect(ChecklistOperation.applying(changes, to: steps).steps == new)
+            }
+        }
+    }
+
+    // Rule 2 also means that a field or the checklist shows its Undo at once, as the action
+    // showed on screen, and Redo as it was after, also when the action saved nothing.
     @Test(.timeLimit(.minutes(1)))
     func undoAndRedoPutBackWhatTheActionDidOnScreen() async throws {
         let gate = PauseGate()
@@ -113,23 +127,24 @@ struct EditRuleTests {
         #expect(editor.steps == [step, heading])
         #expect(try await checklist.stored() == [step, heading])
 
-        // A tick that failed goes from the screen with ⌘Z, and ⇧⌘Z brings it back and saves it.
+        // A tick that failed goes from the screen with ⌘Z at once, and ⇧⌘Z brings it back. Both
+        // wait behind the tick, and Try Again saves all three in order.
         try await JobTaskFixture.failWrites(checklist.coordinator, on: "checklistStep")
         grouped(undo) { editor.toggleTick(step.id, undoManager: undo) }
-        await checklist.queue.waitUntilIdle()
+        #expect(await checklist.queue.waitUntilStopped())
         undo.undo()
-        await checklist.queue.waitUntilIdle()
-        #expect(editor.step(step.id)?.isTicked == false && editor.saveError == nil)
+        #expect(editor.step(step.id)?.isTicked == false)
         try await JobTaskFixture.allowWrites(checklist.coordinator, on: "checklistStep")
         undo.redo()
-        await checklist.queue.waitUntilIdle()
+        checklist.queue.retry()
+        #expect(await !checklist.queue.waitUntilStopped())
         #expect(editor.step(step.id)?.isTicked == true)
         #expect(try await checklist.stored().first?.isTicked == true)
         try await checklist.close()
     }
 
-    // An Undo or Redo is an edit like any other. It shows at once and then saves through the
-    // queue, after every edit before it.
+    // Rule 2 also means that an Undo or Redo is an edit like any other. It shows at once and then
+    // saves through the queue, after every edit before it.
     @Test(.timeLimit(.minutes(1)))
     func undoShowsAtOnceAndSavesAfterTheEditsBeforeIt() async throws {
         // A field: ⌘Z and ⇧⌘Z while its save waits show at once and save in order.
@@ -176,15 +191,15 @@ struct EditRuleTests {
         let archived = try await checklist.coordinator.read {
             try WatchQueries.fetch(watch.id, in: $0)
         }?.archivedAt
-        #expect(archived == nil && checklist.queue.failures.isEmpty)
+        #expect(archived == nil && checklist.queue.failure == nil)
         try await checklist.close()
     }
 
-    // One action is one Undo step, registered when you act. A later action never reuses it, also
-    // after a failed save.
+    // Rule 3: one action is one Undo step, registered when you act. A later action never reuses
+    // it, also after a failed save.
     @Test(.timeLimit(.minutes(1)))
     func eachActionIsItsOwnUndoStep() async throws {
-        // A field: typing, Esc, failed typing and the typing after it are four steps.
+        // A field: typing, Esc, typing whose save failed and the typing after it are four steps.
         let notes = try await NotesLibrary.make(notes: "Saved", pause: PauseGate().pause)
         let field = notes.field
         let undo = UndoManager()
@@ -197,10 +212,11 @@ struct EditRuleTests {
         try await JobTaskFixture.failWrites(notes.coordinator, on: "caliber")
         grouped(undo) { field.change(to: "Second", undoManager: undo) }
         field.saveNow()
-        await notes.queue.waitUntilIdle()
+        #expect(await notes.queue.waitUntilStopped())
         try await JobTaskFixture.allowWrites(notes.coordinator, on: "caliber")
         grouped(undo) { field.change(to: "Second, then more", undoManager: undo) }
         field.saveNow()
+        notes.queue.retry()
         await notes.queue.waitUntilIdle()
         var shown: [String] = []
         while undo.canUndo {
@@ -218,9 +234,9 @@ struct EditRuleTests {
         let editor = checklist.editor
         try await JobTaskFixture.failWrites(checklist.coordinator, on: "checklistStep")
         grouped(undo) { editor.toggleTick(step.id, undoManager: undo) }
-        await checklist.queue.waitUntilIdle()
+        #expect(await checklist.queue.waitUntilStopped())
         try await JobTaskFixture.allowWrites(checklist.coordinator, on: "checklistStep")
-        editor.saveNow()
+        checklist.queue.retry()
         editor.beginEditing(step.id)
         grouped(undo) { editor.change(step.id, to: "Clean all parts", undoManager: undo) }
         editor.endEditing(step.id)
@@ -237,7 +253,7 @@ struct EditRuleTests {
         try await checklist.close()
     }
 
-    // The queue and the owners keep what an Undo step needs exactly as long as the undo manager
+    // Rule 4: the queue and the owners keep what an Undo step needs only while the undo manager
     // holds the step. Undo uses a step up, and a new action drops the Redo steps, also while
     // their saves wait.
     @Test(.timeLimit(.minutes(1)))
@@ -283,59 +299,127 @@ struct EditRuleTests {
         try await checklist.close()
     }
 
-    // An Undo that fails is reported like any failed edit, and Try Again runs it once more. Redo
-    // after it does nothing, because the change still holds, and leaves nothing to try again.
+    // Rule 5: a failure shows in one place, with Try Again and Discard Unsaved Changes, and
+    // nothing unsaved goes without asking. Discard drops the failed edit and every edit that
+    // waits, each field and checklist shows what the library holds, and Undo starts over.
     @Test(.timeLimit(.minutes(1)))
-    func anUndoThatFailsIsReportedAndCanBeTriedAgain() async throws {
+    func discardDropsEveryChangeThatDidNotSaveAndStartsUndoOver() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
-        let watch = try await WatchService(coordinator: coordinator).create(named: "Seamaster")
-        let queue = EditQueue(coordinator: coordinator)
+        let job = try await JobTaskFixture.job(coordinator)
+        let editing = EditingFixture.make(coordinator, pause: PauseGate().pause)
+        let observations = [
+            Task { await editing.jobs.observe() }, Task { await editing.parts.observe() },
+            Task { await editing.checklist.observe() },
+        ]
+        defer { observations.forEach { $0.cancel() } }
+        try await waitUntil {
+            !editing.jobs.isLoading && !editing.parts.isLoading && !editing.checklist.isLoading
+        }
         let undo = UndoManager()
         undo.groupsByEvent = false
-        func archived() async throws -> Bool {
-            try await coordinator.read { try WatchQueries.fetch(watch.id, in: $0) }?.archivedAt
-                != nil
-        }
+        let title = try #require(editing.jobs.facts(for: job.id)?.title)
+        grouped(undo) { title.change(to: "Saved title", undoManager: undo) }
+        title.saveNow()
+        await editing.queue.waitUntilIdle()
+
+        // The job's title fails, and a part, a checklist step and more typing wait or stay on
+        // screen.
+        try await JobTaskFixture.failWrites(coordinator, on: "job")
+        title.beginEditing()
+        grouped(undo) { title.change(to: "Failed title", undoManager: undo) }
+        title.saveNow()
+        var adding: EditTicket?
         grouped(undo) {
-            queue.submit(
-                .watch(.archive(watch.id, true)), in: .watches, undo: "Archive Watch",
-                undoManager: undo)
+            adding = editing.parts.add(named: "Crystal", to: job.id, undoManager: undo)
         }
-        await queue.waitUntilIdle()
+        let editor = editing.checklist.editor(for: job.id)
+        let step = editor.addID
+        editor.beginEditing(step)
+        grouped(undo) { editor.change(step, to: "Clean all parts", undoManager: undo) }
+        #expect(await editing.saveAllFields() == .stopped)
+        grouped(undo) { title.change(to: "Failed title, then more", undoManager: undo) }
+        #expect(editing.hasUnsavedFields && undo.canUndo)
 
-        try await JobTaskFixture.failWrites(coordinator, on: "watch")
-        undo.undo()
-        await queue.waitUntilIdle()
-        #expect(queue.failure(in: .watches) != nil)
-        #expect(try await archived())
-        try await JobTaskFixture.allowWrites(coordinator, on: "watch")
-        #expect(queue.retryUndo(in: .watches))
-        await queue.waitUntilIdle()
-        #expect(queue.failure(in: .watches) == nil)
-        #expect(try await archived() == false)
+        editing.discardUnsaved()
+        #expect(editing.failure == nil && editing.queue.isIdle && !editing.hasUnsavedFields)
+        #expect(title.text == "Saved title" && editor.steps.isEmpty)
+        #expect(await !adding.didSave)
+        #expect(!undo.canUndo && !undo.canRedo)
+        try await JobTaskFixture.allowWrites(coordinator, on: "job")
+        #expect(
+            try await coordinator.read { try JobQueries.fetch(job.id, in: $0) }?.title
+                == "Saved title")
+        #expect(try await coordinator.read { try PartQueries.fetchAll($0) }.isEmpty)
 
-        undo.redo()
-        await queue.waitUntilIdle()
-        try await JobTaskFixture.failWrites(coordinator, on: "watch")
-        undo.undo()
-        await queue.waitUntilIdle()
-        #expect(queue.failure(in: .watches) != nil)
-        try await JobTaskFixture.allowWrites(coordinator, on: "watch")
-        undo.redo()
-        await queue.waitUntilIdle()
-        #expect(!queue.retryUndo(in: .watches))
-        #expect(try await archived())
-        undo.undo()
-        await queue.waitUntilIdle()
-        #expect(try await archived() == false)
+        // The queue runs again: the next change saves at once.
+        title.change(to: "After discard", undoManager: nil)
+        title.endEditing()
+        await editing.queue.waitUntilIdle()
+        #expect(
+            try await coordinator.read { try JobQueries.fetch(job.id, in: $0) }?.title
+                == "After discard")
+        observations.forEach { $0.cancel() }
+        for observation in observations { await observation.value }
         try await coordinator.close()
     }
 
-    // Rule 2 also holds when the field that made a change is gone by the time of ⇧⌘Z, because
-    // the owner hands the queue the edit for its Redo.
+    // Rule 5 also covers leaving: quitting and closing the window while a save failed ask, and
+    // try again, discard or stay as you choose. A backup is never made without the changes.
+    @Test(.timeLimit(.minutes(1)))
+    func quittingClosingAndExportingAskWhileASaveFailed() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let owners = try await NoteFixture.owners(coordinator)
+        let editing = EditingFixture.make(coordinator, pause: PauseGate().pause)
+        await editing.notes.load(owners[0])
+        let notes = try #require(editing.notes.field(for: owners[0]))
+        let service = RecordNotesService(coordinator: coordinator)
+        try await JobTaskFixture.failWrites(coordinator, on: "watch")
+        notes.change(to: "Typed before quitting", undoManager: nil)
+
+        // Stay keeps the app open and the change waiting.
+        var asked: [String] = []
+        let stays = await UnsavedChanges.save(editing, toQuit: true) { failure in
+            asked.append(failure)
+            return .stay
+        }
+        #expect(!stays && asked.count == 1 && editing.failure != nil)
+
+        // A backup is not made while the change waits.
+        let backup = BackupState(coordinator: coordinator, editing: editing)
+        await backup.refresh()
+        backup.chooseDestination()
+        #expect(backup.errorMessage == BackupState.unsavedChanges && !backup.isExporting)
+
+        // Try Again while writes still fail asks once more. Once writes work, Try Again saves the
+        // change and the window closes.
+        var answers: [UnsavedChanges.Choice] = [.tryAgain, .stay]
+        let staysAgain = await UnsavedChanges.save(editing, toQuit: false) { _ in
+            answers.removeFirst()
+        }
+        #expect(!staysAgain && answers.isEmpty && editing.failure != nil)
+        try await JobTaskFixture.allowWrites(coordinator, on: "watch")
+        let closes = await UnsavedChanges.save(editing, toQuit: false) { _ in .tryAgain }
+        #expect(closes && editing.failure == nil)
+        #expect(try await service.text(for: owners[0]) == "Typed before quitting")
+
+        // Discard quits without the change.
+        try await JobTaskFixture.failWrites(coordinator, on: "watch")
+        notes.change(to: "Discarded", undoManager: nil)
+        let discards = await UnsavedChanges.save(editing, toQuit: true) { _ in .discard }
+        #expect(discards && notes.text == "Typed before quitting")
+        #expect(try await service.text(for: owners[0]) == "Typed before quitting")
+        try await JobTaskFixture.allowWrites(coordinator, on: "watch")
+        try await coordinator.close()
+    }
+
+    // Rule 2 also holds when the field that made a change is gone by the time of ⇧⌘Z: typing
+    // that had not submitted submits before its Undo, so the library has the step.
     @Test(.timeLimit(.minutes(1)))
     func redoWorksAfterTheOwnerOfItsStepIsGone() async throws {
         // A field that goes after ⌘Z of typing that never saved.
@@ -387,107 +471,81 @@ struct EditRuleTests {
         undo.redo()
         await editing.queue.waitUntilIdle()
         #expect(try await partName(part.id, coordinator) == "Mainspring 1.10")
-        #expect(editing.queue.failures.isEmpty)
+        #expect(editing.queue.failure == nil)
         observation.cancel()
         await observation.value
         try await coordinator.close()
     }
 
-    // Rule 1 also decides what the checklist reports: its failure shows only while the screen
-    // holds something that the library will not.
+    // Rule 2: Undo comes from the stored data. Each edit reads its inverse in its own
+    // transaction, and it is right, because the library holds every edit before it. A field or
+    // the checklist shows its Undo at once, and that change saves like any edit. So Redo works
+    // also when the field is gone by then, and after a failed save.
     @Test(.timeLimit(.minutes(1)))
-    func aFailureShowsOnlyWhileSomethingIsUnsaved() async throws {
-        let clean = ChecklistStep(id: UUID(), text: "Clean")
-        let oil = ChecklistStep(id: UUID(), text: "Oil")
-        let checklist = try await ChecklistLibrary.make(steps: [clean, oil])
-        let editor = checklist.editor
-
-        // A tick and an untick while the library is held. The tick fails, and the untick then
-        // leaves the screen as the library holds it.
-        try await JobTaskFixture.failWrites(checklist.coordinator, on: "checklistStep")
-        let (hold, holding) = try await LibraryHold.start(on: checklist.coordinator)
-        editor.toggleTick(clean.id, undoManager: nil)
-        editor.toggleTick(clean.id, undoManager: nil)
-        hold.release()
-        _ = try await holding.value
-        await checklist.queue.waitUntilIdle()
-        #expect(editor.saveError == nil && !editor.hasUnsavedChanges)
-
-        // A tick that failed keeps its failure while you type in another step, until the next
-        // save sends both.
-        editor.toggleTick(oil.id, undoManager: nil)
-        await checklist.queue.waitUntilIdle()
-        #expect(editor.saveError != nil)
-        try await JobTaskFixture.allowWrites(checklist.coordinator, on: "checklistStep")
-        editor.beginEditing(clean.id)
-        editor.change(clean.id, to: "Clean all parts", undoManager: nil)
-        #expect(editor.saveError != nil)
-        editor.endEditing(clean.id)
-        await checklist.queue.waitUntilIdle()
-        #expect(editor.saveError == nil && !editor.hasUnsavedChanges)
-        #expect(
-            try await checklist.stored() == [
-                ChecklistStep(id: clean.id, text: "Clean all parts"),
-                ChecklistStep(id: oil.id, text: "Oil", isTicked: true),
-            ])
-        try await checklist.close()
-    }
-
-    // Rule 5 also covers an Undo that failed. It keeps the change's inverse while Try Again can
-    // run it, and lets go once its failure is gone and its way back has left the Redo list.
-    @Test(.timeLimit(.minutes(1)))
-    func aFailedUndoKeepsItsDataOnlyWhileItCanRunAgain() async throws {
+    func undoComesFromTheStoredDataAlsoAfterAFailedSave() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
-        let first = try await WatchService(coordinator: coordinator).create(named: "Seamaster")
-        let second = try await WatchService(coordinator: coordinator).create(named: "Speedmaster")
-        let caliber = try await CaliberService(coordinator: coordinator).create(named: "552")
-        let queue = EditQueue(coordinator: coordinator)
+        let job = try await JobTaskFixture.job(coordinator)
+        let editing = EditingFixture.make(coordinator, pause: PauseGate().pause)
+        let parts = editing.parts
+        let observation = Task { await parts.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { !parts.isLoading }
         let undo = UndoManager()
         undo.groupsByEvent = false
-        func archive(_ edit: LibraryEdit, in scope: EditScope) {
-            grouped(undo) {
-                queue.submit(edit, in: scope, undo: "Archive", undoManager: undo)
+
+        // A part named A, renamed to B and then C. The Undo of C fails and waits, and Try Again
+        // saves it, so the library holds B again before the next ⌘Z.
+        var adding: EditTicket?
+        grouped(undo) { adding = parts.add(named: "A", to: job.id, undoManager: undo) }
+        let part = try #require(await adding?.part)
+        do {
+            let name = try #require(parts.facts(for: part.id)?.name)
+            name.beginEditing()
+            for text in ["B", "C"] {
+                grouped(undo) { name.change(to: text, undoManager: undo) }
+                name.saveNow()
             }
-        }
-        func archived(_ id: UUID) async throws -> Bool {
-            try await coordinator.read { try WatchQueries.fetch(id, in: $0) }?.archivedAt != nil
+            await editing.queue.waitUntilIdle()
+            try await JobTaskFixture.failWrites(coordinator, on: "part")
+            undo.undo()
+            #expect(name.text == "B")
+            #expect(await editing.queue.waitUntilStopped())
+            try await JobTaskFixture.allowWrites(coordinator, on: "part")
+            editing.queue.retry()
+            #expect(await !editing.queue.waitUntilStopped())
+            #expect(try await partName(part.id, coordinator) == "B")
+            undo.undo()
+            await editing.queue.waitUntilIdle()
+            #expect(try await partName(part.id, coordinator) == "A")
         }
 
-        // An action in another scope drops the failed Undo's Redo step, but its failure still
-        // shows, so Try Again still runs it, and then nothing is left for the dropped step.
-        archive(.watch(.archive(first.id, true)), in: .watches)
-        await queue.waitUntilIdle()
-        try await JobTaskFixture.failWrites(coordinator, on: "watch")
+        // ⌘Z of the addition takes the part's fields away. Redo brings back the part and then
+        // the rename to B, from the stored data.
         undo.undo()
-        await queue.waitUntilIdle()
-        #expect(queue.failure(in: .watches) != nil)
-        try await JobTaskFixture.allowWrites(coordinator, on: "watch")
-        archive(.caliber(.archive(caliber.id, true)), in: .calibers)
-        await queue.waitUntilIdle()
-        #expect(queue.retryUndo(in: .watches))
-        await queue.waitUntilIdle()
-        #expect(try await archived(first.id) == false)
-        #expect(queue.keptUndoCount == 1)
-
-        // A new edit in the same scope clears the failure and the Redo step, and the failed
-        // Undo goes with them.
-        archive(.watch(.archive(second.id, true)), in: .watches)
-        await queue.waitUntilIdle()
-        try await JobTaskFixture.failWrites(coordinator, on: "watch")
-        undo.undo()
-        await queue.waitUntilIdle()
-        #expect(queue.failure(in: .watches) != nil)
-        try await JobTaskFixture.allowWrites(coordinator, on: "watch")
-        archive(.watch(.archive(first.id, true)), in: .watches)
-        await queue.waitUntilIdle()
-        #expect(!queue.retryUndo(in: .watches) && queue.failure(in: .watches) == nil)
-        #expect(try await archived(second.id))
-        #expect(try await archived(first.id))
-        #expect(queue.keptUndoCount == 2)
+        await editing.queue.waitUntilIdle()
+        #expect(try await partName(part.id, coordinator) == nil)
+        undo.redo()
+        undo.redo()
+        await editing.queue.waitUntilIdle()
+        #expect(try await partName(part.id, coordinator) == "B")
+        #expect(editing.queue.failure == nil)
+        observation.cancel()
+        await observation.value
         try await coordinator.close()
+    }
+
+    private func permutations(of steps: [ChecklistStep]) -> [[ChecklistStep]] {
+        guard steps.count > 1 else { return [steps] }
+        var all: [[ChecklistStep]] = []
+        for (index, step) in steps.enumerated() {
+            var rest = steps
+            rest.remove(at: index)
+            for order in permutations(of: rest) { all.append([step] + order) }
+        }
+        return all
     }
 
     private func partName(_ id: UUID, _ coordinator: LibraryCoordinator) async throws -> String? {

@@ -188,15 +188,15 @@ struct ChecklistEditorTests {
         editor.beginEditing(id)
         type("Clean all parts", in: id, editor, undo)
         editor.endEditing(id)
-        try await waitUntil { editor.saveError != nil }
+        #expect(await library.queue.waitUntilStopped())
         #expect(editor.steps.map(\.text) == ["Clean all parts"] && editor.hasUnsavedChanges)
         // Stored steps never replace what did not save.
         editor.refresh([])
         #expect(editor.steps.map(\.text) == ["Clean all parts"])
         try await JobTaskFixture.allowWrites(library.coordinator, on: "checklistStep")
-        editor.saveNow()
+        library.queue.retry()
         try await waitUntil { !editor.hasUnsavedChanges }
-        #expect(editor.saveError == nil)
+        #expect(!library.queue.isStopped)
         #expect(try await library.stored().map(\.text) == ["Clean all parts"])
         editor.refresh([ChecklistStep(id: id, text: "Clean all parts", isTicked: true)])
         #expect(editor.step(id)?.isTicked == true)
@@ -320,19 +320,20 @@ struct ChecklistServiceTests {
         #expect(state.focusedStep?.id == id)
         act(undo) { editor.perform(.tick, for: id, undoManager: undo) }
         #expect(!queue.isIdle)
-        #expect(await queue.saveEverything())
+        #expect(await queue.saveEverything() == .saved)
         editor.endEditing(id)
         #expect(state.focusedJobID == nil)
         try await waitUntil { state.records.count == 1 }
         #expect(state.records.first?.text == "Clean all parts" && state.records[0].isTicked)
         #expect(state.progress(for: job.id).summary == "1 of 1 done")
-        // A failed save keeps the steps on the page and says so.
+        // A failed save keeps the steps on the page, and the queue waits for Try Again.
         try await JobTaskFixture.failWrites(coordinator, on: "checklistStep")
         act(undo) { editor.perform(.tick, for: id, undoManager: undo) }
-        #expect(await !queue.saveEverything())
-        #expect(editor.saveError != nil && editor.step(id)?.isTicked == false)
+        #expect(await queue.saveEverything() == .stopped)
+        #expect(queue.failure != nil && editor.step(id)?.isTicked == false)
         try await JobTaskFixture.allowWrites(coordinator, on: "checklistStep")
-        #expect(await queue.saveEverything())
+        queue.retry()
+        #expect(await queue.saveEverything() == .saved)
         try await waitUntil { state.records.first?.isTicked == false }
         observation.cancel()
         await observation.value

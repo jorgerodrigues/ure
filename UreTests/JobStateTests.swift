@@ -32,8 +32,12 @@ struct JobStateTests {
         let archived = try await makeWatch(coordinator)
         _ = try await ArchiveService(coordinator: coordinator).setWatch(archived.id, archived: true)
         state.close()
-        #expect(await !state.start(for: archived.id).didSave)
-        #expect(state.saveError != nil && state.selectedJob == nil)
+        // An archived watch takes no job, so the start stops the queue with its reason.
+        #expect(state.start(for: archived.id) != nil)
+        #expect(await state.queue.waitUntilStopped())
+        #expect(state.queue.failure != nil && state.selectedJob == nil)
+        state.queue.discardUnsaved()
+        #expect(state.queue.isIdle)
         observation.cancel()
         await observation.value
         try await coordinator.close()
@@ -178,14 +182,14 @@ struct JobStateTests {
         try await waitUntil { !field.hasUnsavedChanges && !state.isSaving }
         var saved = try #require(try await stored(job.id, coordinator))
         #expect(saved.stage == .waiting && saved.waitingFor == "a crystal")
-        #expect(field.saveError == nil && state.saveError == nil)
+        #expect(state.refusal == nil)
         undo.redo()
         undo.redo()
         await state.queue.waitUntilIdle()
         try await waitUntil { !field.hasUnsavedChanges && !state.isSaving }
         saved = try #require(try await stored(job.id, coordinator))
         #expect(saved.stage == .done && saved.waitingFor == nil)
-        #expect(field.saveError == nil && state.saveError == nil)
+        #expect(state.refusal == nil)
         #expect(await state.setStage(.inProgress, undoManager: nil).didSave)
         observation.cancel()
         await observation.value
@@ -216,14 +220,14 @@ struct JobStateTests {
         facts.title.change(to: "", undoManager: nil)
         facts.title.endEditing()
         #expect(await !state.setStage(.inProgress).didSave)
-        #expect(state.saveError != nil && !state.isSaving)
+        #expect(state.refusal != nil && !state.isSaving)
         saved = try #require(try await stored(job.id, coordinator))
         #expect(saved.stage == .done && saved.title == "New Job")
         facts.title.beginEditing()
         facts.title.change(to: "Crystal", undoManager: nil)
         #expect(await state.setStage(.inProgress).didSave)
         saved = try #require(try await stored(job.id, coordinator))
-        #expect(saved.stage == .inProgress && saved.title == "Crystal" && state.saveError == nil)
+        #expect(saved.stage == .inProgress && saved.title == "Crystal" && state.refusal == nil)
         observation.cancel()
         await observation.value
         try await coordinator.close()
@@ -247,7 +251,7 @@ struct JobStateTests {
         let undo = UndoManager()
         #expect(await !state.setStage(.inProgress, undoManager: undo).didSave)
         #expect(
-            state.saveError
+            state.refusal
                 == "This watch already has an open job. Open that job to continue its repair.")
         #expect(!undo.canUndo && state.selectedJob == done)
         #expect(state.openJob(for: watch.id) == second)

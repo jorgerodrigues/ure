@@ -196,7 +196,7 @@ struct JobWatchTests {
         #expect(try await stored(typed.id, coordinator)?.title == "New crystal")
         state.open(stays)
         #expect(await !state.chooseWatch(ventura.id).didSave)
-        #expect(state.saveError == JobError.openJobExists(open).localizedDescription)
+        #expect(state.refusal == JobError.openJobExists(open).localizedDescription)
         #expect(try await stored(typed.id, coordinator)?.watchID == nil)
         for observation in observations {
             observation.cancel()
@@ -311,9 +311,11 @@ struct JobWatchTests {
 
         state.close()
         try await JobTaskFixture.failWrites(coordinator, on: "job")
-        #expect(await !state.create().didSave)
-        #expect(state.selectedID == nil && state.saveError != nil)
+        #expect(state.create() != nil)
+        #expect(await state.queue.waitUntilStopped())
+        #expect(state.selectedID == nil && state.queue.failure != nil)
         try await JobTaskFixture.allowWrites(coordinator, on: "job")
+        state.queue.discardUnsaved()
         observation.cancel()
         await observation.value
         try await coordinator.close()

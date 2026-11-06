@@ -178,7 +178,7 @@ struct MaterialStateTests {
 
         field.beginEditing()
         field.change(to: "Typed before quitting", undoManager: nil)
-        #expect(await state.queue.saveEverything())
+        #expect(await state.queue.saveEverything() == .saved)
         #expect(
             try await coordinator.read(LibraryItemQueries.fetchAll).first?.title
                 == "Typed before quitting")

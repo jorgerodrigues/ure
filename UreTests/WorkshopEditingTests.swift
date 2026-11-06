@@ -28,7 +28,7 @@ struct WorkshopEditingTests {
         try await waitUntil { !facts.name.hasUnsavedChanges }
         facts.notes.beginEditing()
         facts.notes.change(to: "From Cousins, 3 November", undoManager: nil)
-        #expect(await editing.saveAllFields())
+        #expect(await editing.saveAllFields() == .saved)
         #expect(!editing.hasUnsavedFields)
         let saved = try #require(
             try await coordinator.read { try PartQueries.fetch(part.id, in: $0) })
@@ -60,7 +60,7 @@ struct WorkshopEditingTests {
         try await waitUntil { !facts.title.hasUnsavedChanges }
         facts.problem.beginEditing()
         facts.problem.change(to: "Stops overnight.", undoManager: nil)
-        #expect(await editing.saveAllFields())
+        #expect(await editing.saveAllFields() == .saved)
         #expect(!editing.hasUnsavedFields)
         let saved = try #require(
             try await coordinator.read { try JobQueries.fetch(job.id, in: $0) })
@@ -93,7 +93,7 @@ struct WorkshopEditingTests {
         #expect(navigated)
         try await waitUntil { !editor.hasUnsavedChanges }
         editor.change(step, to: "Clean all parts twice", undoManager: nil)
-        #expect(await editing.saveAllFields())
+        #expect(await editing.saveAllFields() == .saved)
         #expect(!editing.hasUnsavedFields)
         #expect(
             try await coordinator.read(ChecklistQueries.fetchAll).map(\.text) == [
@@ -129,7 +129,7 @@ struct WorkshopEditingTests {
         #expect(try await owner(of: watchID, coordinator) == "Ana Ribeiro")
         facts.contact.beginEditing()
         facts.contact.change(to: "ana@example.pt", undoManager: nil)
-        #expect(await editing.saveAllFields())
+        #expect(await editing.saveAllFields() == .saved)
         #expect(!editing.hasUnsavedFields)
         #expect(
             try await coordinator.read { try WatchQueries.fetch(watchID, in: $0)?.contact }

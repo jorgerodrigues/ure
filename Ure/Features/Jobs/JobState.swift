@@ -132,6 +132,11 @@ final class JobState {
         then: ((EditResult) -> Void)? = nil
     ) -> EditTicket? {
         guard !isSaving, let job = selectedJob, job.watchID == nil else { return nil }
+        // A watch has one open job at a time, so an open job takes no watch that has one.
+        if job.stage.isOpen, let open = openJob(for: watchID), open.id != job.id {
+            queue.report(JobError.openJobExists(open).localizedDescription, in: .jobs)
+            return nil
+        }
         return queue.submit(
             .job(.watch(job.id, watchID)), in: .jobs, undo: Self.watchActionName,
             undoManager: undoManager

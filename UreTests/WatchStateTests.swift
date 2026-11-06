@@ -214,7 +214,7 @@ struct WatchStateTests {
         #expect(await state.toggleArchive().didSave)
         let archived = try #require(try await coordinator.read(WatchQueries.fetchAll).first)
         #expect(archived.brand == "Omega" && archived.archivedAt != nil)
-        #expect(!facts.brand.hasUnsavedChanges && facts.brand.saveError == nil)
+        #expect(!facts.brand.hasUnsavedChanges)
         await #expect(throws: ArchiveError.archived) {
             try await service.update(watch.id, .brand("Changed while archived"))
         }
@@ -223,13 +223,13 @@ struct WatchStateTests {
         facts.lugWidth.change(to: "wide", undoManager: nil)
         facts.lugWidth.endEditing()
         #expect(await !state.toggleArchive().didSave)
-        #expect(state.saveError != nil && facts.lugWidth.text == "wide")
+        #expect(state.refusal != nil && facts.lugWidth.text == "wide")
         #expect(try await coordinator.read(WatchQueries.fetchAll).first?.archivedAt == nil)
         facts.lugWidth.beginEditing()
         facts.lugWidth.change(to: "20", undoManager: nil)
         #expect(await state.toggleArchive().didSave)
         let saved = try #require(try await coordinator.read(WatchQueries.fetchAll).first)
-        #expect(saved.lugWidth == 20 && saved.archivedAt != nil && state.saveError == nil)
+        #expect(saved.lugWidth == 20 && saved.archivedAt != nil && state.refusal == nil)
         observation.cancel()
         await observation.value
         try await coordinator.close()

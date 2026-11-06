@@ -237,7 +237,7 @@ struct PartStateTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func aNameThatDidNotSaveStaysWithTryAgainWhileTheNextIsTyped() async throws {
+    func aNameThatDidNotSaveWaitsWithTheNextUntilTryAgain() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -259,24 +259,21 @@ struct PartStateTests {
         #expect(entry.text.isEmpty && entry.description.isEmpty)
         try await waitUntil { parts.parts(on: job.id).map(\.name) == ["Mainspring"] }
 
+        // A name that does not save stops the queue, and the next name waits behind it, also
+        // when you quit.
         try await JobTaskFixture.failWrites(coordinator, on: "part")
         entry.change(to: "Crys")
         let crystal = PartEntryText(name: "Crystal", description: "Sapphire 30.0 mm")
-        #expect(await !parts.submit(crystal, spare: nil, on: entry).didSave)
-        #expect(entry.unsaved == [crystal] && entry.text == "Crys" && parts.queue.hasUnsavedTyping)
-        #expect(await !parts.submit(PartEntryText(name: "Gasket"), spare: nil, on: entry).didSave)
-        for ticket in parts.retryUnsaved(entry) { #expect(await !ticket.saved) }
-        #expect(entry.unsaved.map(\.name) == ["Crystal", "Gasket"])
-        // Quitting tries them again and says that they did not save.
-        #expect(await !parts.queue.saveEverything())
-        #expect(entry.unsaved.map(\.name) == ["Crystal", "Gasket"])
+        #expect(parts.submit(crystal, spare: nil, on: entry) != nil)
+        #expect(await parts.queue.waitUntilStopped())
+        #expect(entry.text == "Crys")
+        #expect(parts.submit(PartEntryText(name: "Gasket"), spare: nil, on: entry) != nil)
+        #expect(await parts.queue.saveEverything() == .stopped)
         try await JobTaskFixture.allowWrites(coordinator, on: "part")
         // Two Try Agains at once add each name once.
-        parts.retryUnsaved(entry)
-        parts.retryUnsaved(entry)
-        await parts.queue.waitUntilIdle()
-        #expect(entry.unsaved.isEmpty && !parts.queue.hasUnsavedTyping)
-        #expect(await parts.queue.saveEverything())
+        parts.queue.retry()
+        parts.queue.retry()
+        #expect(await parts.queue.saveEverything() == .saved)
         #expect(parts.parts(on: job.id).map(\.name) == ["Mainspring", "Crystal", "Gasket"])
         #expect(parts.parts(on: job.id).map(\.description) == [nil, "Sapphire 30.0 mm", nil])
         entry.endEditing()
@@ -527,7 +524,7 @@ struct PartStateTests {
         hold.release()
         _ = try await holding.value
         // Quitting goes ahead only once the click and the part have both saved.
-        #expect(await quitting.value)
+        #expect(await quitting.value == .saved)
         #expect(clicking?.isPending == false && adding?.isPending == false)
         #expect(await clicking.didSave)
         #expect(await adding.didSave)
@@ -538,7 +535,7 @@ struct PartStateTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func aDeletionWaitsForTypingThatDidNotSave() async throws {
+    func aDeletionWaitsForTypingThatFailedUntilTryAgain() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -555,16 +552,17 @@ struct PartStateTests {
         facts.name.beginEditing()
         facts.name.change(to: "Mainspring 1.10", undoManager: nil)
 
+        // The typing saves first and fails, so the deletion waits behind it.
         try await JobTaskFixture.failWrites(coordinator, on: "part")
-        #expect(await !parts.remove(part.id).didSave)
-        #expect(parts.part(part.id) != nil && parts.saveError == PartState.failedFields)
-        #expect(facts.name.text == "Mainspring 1.10" && facts.name.saveError != nil)
-        try await JobTaskFixture.allowWrites(coordinator, on: "part")
         let undoManager = UndoManager()
         undoManager.groupsByEvent = false
         undoManager.beginUndoGrouping()
         let removing = parts.remove(part.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
+        #expect(await parts.queue.waitUntilStopped())
+        #expect(parts.part(part.id) != nil && facts.name.text == "Mainspring 1.10")
+        try await JobTaskFixture.allowWrites(coordinator, on: "part")
+        parts.queue.retry()
         #expect(await removing.didSave)
         undoManager.undo()
         await parts.queue.waitUntilIdle()

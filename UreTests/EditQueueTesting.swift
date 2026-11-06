@@ -38,6 +38,15 @@ extension EditTicket {
     }
 }
 
+extension EditQueue {
+    // Waits until every edit has run, or until one failed and stopped the queue. True when an
+    // edit failed.
+    func waitUntilStopped() async -> Bool {
+        await waitUntilIdle()
+        return isStopped
+    }
+}
+
 extension Optional where Wrapped == EditTicket {
     // Whether an edit was submitted and saved. Nothing submitted is not saved.
     var didSave: Bool {

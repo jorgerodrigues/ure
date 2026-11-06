@@ -128,7 +128,7 @@ struct CaliberStateTests {
         field.endEditing()
         #expect(field.problem == "Enter a number, such as 28,800 vph.")
         #expect(field.text == "19,80" && queue.hasUnsavedTyping)
-        #expect(await !queue.saveEverything())
+        #expect(await queue.saveEverything() == .textNotValid)
         #expect(try await coordinator.read(CaliberQueries.fetchAll) == [caliber])
         _ = try await service.update(caliber.id, .name("552 Elaboré"))
         try await waitUntil { state.calibers.first?.designation == "552 Elaboré" }
@@ -195,7 +195,7 @@ struct CaliberStateTests {
         #expect(await state.toggleArchive().didSave)
         let archived = try #require(try await coordinator.read(CaliberQueries.fetchAll).first)
         #expect(archived.manufacturer == "Omega" && archived.archivedAt != nil)
-        #expect(!maker.hasUnsavedChanges && maker.saveError == nil)
+        #expect(!maker.hasUnsavedChanges)
         await #expect(throws: ArchiveError.archived) {
             try await service.update(caliber.id, .maker("Changed while archived"))
         }
@@ -205,13 +205,13 @@ struct CaliberStateTests {
         beatRate.change(to: "fast", undoManager: nil)
         beatRate.endEditing()
         #expect(await !state.toggleArchive().didSave)
-        #expect(state.saveError != nil && beatRate.text == "fast")
+        #expect(state.refusal != nil && beatRate.text == "fast")
         #expect(try await coordinator.read(CaliberQueries.fetchAll).first?.archivedAt == nil)
         beatRate.beginEditing()
         beatRate.change(to: "28800", undoManager: nil)
         #expect(await state.toggleArchive().didSave)
         let saved = try #require(try await coordinator.read(CaliberQueries.fetchAll).first)
-        #expect(saved.beatRate == 28_800 && saved.archivedAt != nil && state.saveError == nil)
+        #expect(saved.beatRate == 28_800 && saved.archivedAt != nil && state.refusal == nil)
         observation.cancel()
         await observation.value
         try await coordinator.close()
@@ -243,7 +243,7 @@ struct CaliberStateTests {
                 == "552 typed before leaving")
         facts.powerReserve.beginEditing()
         facts.powerReserve.change(to: "42", undoManager: nil)
-        #expect(await editing.saveAllFields())
+        #expect(await editing.saveAllFields() == .saved)
         #expect(try await coordinator.read(CaliberQueries.fetchAll).first?.powerReserve == 42)
         #expect(!editing.hasUnsavedFields)
         observation.cancel()
