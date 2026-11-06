@@ -550,6 +550,88 @@ struct EditRuleTests {
         try await coordinator.close()
     }
 
+    // Rule 6 also covers normal saving: an edit that could fail for good when its turn comes is
+    // refused when you act. While a record's deletion or archive waits or runs, even when it
+    // saves slowly or runs again after Try Again, that record takes no edits, and a spare whose
+    // use waits is offered to no other line. Every other record keeps taking edits.
+    @Test(.timeLimit(.minutes(1)))
+    func aRecordTakesNoEditsWhileItsDeletionOrArchiveSaves() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        let watchID = try #require(job.watchID)
+        let other = try await WatchService(coordinator: coordinator).create(named: "Ventura")
+        let caliber = try await CaliberService(coordinator: coordinator).create(named: "552")
+        let service = PartService(coordinator: coordinator)
+        let mainspring = try await service.add(named: "Mainspring", to: job.id)
+        let crystal = try await service.add(named: "Crystal", to: job.id)
+        let spare = try await service.add(named: "Spare crystal", to: nil)
+        let link = try await MaterialService(coordinator: coordinator).addLink(
+            try #require(URL(string: "https://example.org")), for: .watch(other.id))
+        let editing = EditingFixture.make(coordinator, pause: PauseGate().pause)
+        let observations = [
+            Task { await editing.watches.observe() }, Task { await editing.jobs.observe() },
+            Task { await editing.parts.observe() }, Task { await editing.calibers.observe() },
+            Task { await editing.material.observe() },
+        ]
+        defer { observations.forEach { $0.cancel() } }
+        try await waitUntil {
+            !editing.watches.isLoading && !editing.jobs.isLoading && !editing.parts.isLoading
+                && !editing.calibers.isLoading && editing.material.records.count == 1
+        }
+        let parts = editing.parts
+        let queue = editing.queue
+        let linkRecord = try #require(editing.material.records.first)
+
+        // A deletion, an archive, a material removal and a spare's use save slowly.
+        var (hold, holding) = try await LibraryHold.start(on: coordinator)
+        #expect(parts.remove(mainspring.id) != nil)
+        editing.watches.select(watchID)
+        #expect(editing.watches.toggleArchive() != nil)
+        #expect(editing.material.remove(linkRecord, on: .watch(other.id), undoManager: nil) != nil)
+        #expect(parts.useSpare(spare.id, on: job.id) != nil)
+        #expect(queue.isBusy && !queue.isStopped)
+        // The records that end take no edits, and their commands refuse at once.
+        #expect(!editing.canWrite(mainspring) && !editing.canWrite(.watch(watchID)))
+        #expect(queue.isEnding(.material(link.id)))
+        #expect(parts.advance(mainspring.id) == nil && parts.remove(mainspring.id) == nil)
+        // The spare is offered to no other line and can't be used twice.
+        #expect(parts.spares(matching: "Spare").isEmpty)
+        #expect(parts.useSpare(spare.id, on: job.id) == nil)
+        // Every other record still takes edits, the part's own job among them.
+        #expect(editing.canWrite(crystal) && editing.canWrite(.job(job.id)))
+        #expect(editing.canWrite(.watch(other.id)) && editing.canWrite(.caliber(caliber.id)))
+        hold.release()
+        _ = try await holding.value
+        await queue.waitUntilIdle()
+        #expect(queue.failure == nil && parts.part(mainspring.id) == nil)
+        #expect(parts.part(spare.id)?.jobID == job.id)
+
+        // Right after Try Again, the deletion runs again while the queue is no longer stopped,
+        // and its part still takes no edits.
+        try await JobTaskFixture.failWrites(coordinator, on: "job")
+        let title = try #require(editing.jobs.facts(for: job.id)?.title)
+        title.beginEditing()
+        title.change(to: "Overhaul", undoManager: nil)
+        title.endEditing()
+        #expect(await queue.waitUntilStopped())
+        #expect(parts.remove(crystal.id) != nil)
+        try await JobTaskFixture.allowWrites(coordinator, on: "job")
+        (hold, holding) = try await LibraryHold.start(on: coordinator)
+        editing.tryAgain()
+        #expect(!queue.isStopped && !queue.holdsRecords)
+        #expect(!editing.canWrite(crystal) && editing.canWrite(.job(job.id)))
+        hold.release()
+        _ = try await holding.value
+        await queue.waitUntilIdle()
+        #expect(queue.failure == nil && parts.part(crystal.id) == nil)
+        observations.forEach { $0.cancel() }
+        for observation in observations { await observation.value }
+        try await coordinator.close()
+    }
+
     // Rule 2 also holds when the field that made a change is gone by the time of ⇧⌘Z: typing
     // that had not submitted submits before its Undo, so the library has the step.
     @Test(.timeLimit(.minutes(1)))

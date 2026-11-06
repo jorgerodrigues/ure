@@ -201,6 +201,26 @@ final class EditQueue {
     // has the cursor keeps it.
     var holdsRecords: Bool { failure != nil && pending.contains(where: \.holdsScreen) }
 
+    // A record whose deletion or archive waits or runs, during normal saving too, while the queue
+    // is stopped, and while Try Again runs it. An edit to the record made meanwhile would fail
+    // for good after it, so the record takes no edits. Every other record does.
+    func isEnding(_ record: EndedRecord) -> Bool {
+        waitingEdits().contains { $0.endedRecord == record }
+    }
+
+    // A spare whose use waits or runs, so it is offered to no other line.
+    func isUsingSpare(_ id: UUID) -> Bool { waitingEdits().contains { $0.usedSpare == id } }
+
+    // The edits that wait or run. An Undo is the inverse it will apply, once its change saved.
+    private func waitingEdits() -> [LibraryEdit] {
+        pending.compactMap { item in
+            switch item.work {
+            case .edit(let edit): edit
+            case .reverse(let change): inverses[change]
+            }
+        }
+    }
+
     // A change you made, other than typing, is still saving. Lists and record buttons wait.
     var isBusy: Bool { pending.contains(where: \.holdsScreen) }
 

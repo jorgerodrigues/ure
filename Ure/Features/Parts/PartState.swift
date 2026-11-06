@@ -62,7 +62,8 @@ final class PartState {
         let typed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !typed.isEmpty else { return [] }
         let found = parts.filter { part in
-            part.isSpare && part.stage == .inHand
+            part.isSpare && part.stage == .inHand && !queue.isUsingSpare(part.id)
+                && !queue.isEnding(.part(part.id))
                 && part.name.range(of: typed, options: [.caseInsensitive, .diacriticInsensitive])
                     != nil
         }
@@ -171,7 +172,10 @@ final class PartState {
     // the drawer.
     @discardableResult
     func useSpare(_ id: UUID, on jobID: UUID, undoManager: UndoManager? = nil) -> EditTicket? {
-        guard let spare = part(id), spare.isSpare else { return nil }
+        // A spare whose use or deletion waits can't be used again.
+        guard let spare = part(id), spare.isSpare, !queue.isUsingSpare(id),
+            !queue.isEnding(.part(id))
+        else { return nil }
         return queue.submit(
             .part(.useSpare(id, job: jobID)), in: .parts, undo: Self.spareActionName,
             undoManager: undoManager)
@@ -186,7 +190,7 @@ final class PartState {
     // move it on twice. ⌘Z puts back the state it had, with its dates.
     @discardableResult
     func advance(_ id: UUID, undoManager: UndoManager? = nil) -> EditTicket? {
-        guard part(id)?.stage.next != nil else { return nil }
+        guard part(id)?.stage.next != nil, !queue.isEnding(.part(id)) else { return nil }
         return queue.submit(
             .part(.advance(id)), in: .parts, undo: Self.stageActionName,
             undoManager: undoManager)
@@ -204,7 +208,7 @@ final class PartState {
     func setStage(_ stage: PartStage, of id: UUID, undoManager: UndoManager? = nil)
         -> EditTicket?
     {
-        guard let current = part(id) else { return nil }
+        guard let current = part(id), !queue.isEnding(.part(id)) else { return nil }
         if !isSaving, current.stage == stage { return nil }
         return queue.submit(
             .part(.stage(id, stage)), in: .parts, undo: Self.stageActionName,
@@ -220,7 +224,7 @@ final class PartState {
     // with the part.
     @discardableResult
     func remove(_ id: UUID, undoManager: UndoManager? = nil) -> EditTicket? {
-        guard part(id) != nil else { return nil }
+        guard part(id) != nil, !queue.isEnding(.part(id)) else { return nil }
         return queue.submit(
             .part(.remove(id)), in: .parts, undo: Self.removeActionName, undoManager: undoManager)
     }

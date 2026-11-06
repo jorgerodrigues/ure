@@ -24,6 +24,44 @@ nonisolated enum LibraryEdit: Equatable, Sendable {
     case material(MaterialEdit)
 }
 
+// A record that an edit deletes or archives.
+nonisolated enum EndedRecord: Hashable, Sendable {
+    case watch(UUID)
+    case caliber(UUID)
+    case job(UUID)
+    case part(UUID)
+    case material(UUID)
+
+    init(_ owner: LibraryItemOwner) {
+        switch owner {
+        case .watch(let id): self = .watch(id)
+        case .caliber(let id): self = .caliber(id)
+        case .job(let id): self = .job(id)
+        }
+    }
+}
+
+extension LibraryEdit {
+    // The record this edit deletes or archives. An edit to that record that ran after it would
+    // fail for good, so the record takes no edits while this one waits or runs.
+    nonisolated var endedRecord: EndedRecord? {
+        switch self {
+        case .watch(.archive(let id, true)): .watch(id)
+        case .caliber(.archive(let id, true)): .caliber(id)
+        case .job(.discardIfBlank(let id)): .job(id)
+        case .part(.remove(let id)): .part(id)
+        case .material(.remove(let id, _)): .material(id)
+        default: nil
+        }
+    }
+
+    // The spare this edit takes from the drawer. A second use of it would fail for good.
+    nonisolated var usedSpare: UUID? {
+        if case .part(.useSpare(let id, _)) = self { return id }
+        return nil
+    }
+}
+
 nonisolated enum CaliberEdit: Equatable, Sendable {
     case create
     case set(UUID, CaliberFact)

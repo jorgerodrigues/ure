@@ -101,6 +101,7 @@ struct MaterialSectionView: View {
 // "4 Watch" artboard, and fewer in a narrower window.
 private struct MaterialTiles: View {
     @Environment(MaterialState.self) private var material
+    @Environment(WorkshopEditing.self) private var editing
     let owner: LibraryItemOwner
     let isEditable: Bool
     let style: RecordSectionStyle
@@ -130,7 +131,10 @@ private struct MaterialTiles: View {
         } else {
             LazyVGrid(columns: columns, alignment: .leading, spacing: MaterialLayout.tileSpacing) {
                 ForEach(records) { record in
-                    MaterialTile(record: record, page: owner, isEditable: isEditable, style: style)
+                    MaterialTile(
+                        record: record, page: owner,
+                        isEditable: isEditable && !editing.queue.isEnding(.material(record.id)),
+                        style: style)
                 }
             }
             .padding(.vertical, style == .form ? 4 : 0)
