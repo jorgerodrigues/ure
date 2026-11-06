@@ -46,6 +46,7 @@ Development Mac: Apple silicon, macOS 27.3, Xcode 27.2. The SDK cache workaround
 | `make lint` | Passed |
 | `make build` | Passed, unsigned Debug |
 | `make check` | Passed lint, unsigned Debug, and 252 tests in 341 runs with no failures or skips, on the final code, commit `c2433ce`. Result bundle `ure-20261106-060753.xcresult`. An earlier run, while Codex ran on the same Mac, failed two backup export tests on a 10-second wait. Both pass alone in 0.2 seconds and in the final run, and no backup code changed. All test targets also compile, including the rewritten UI test |
+| `make release` | Passed, unsigned optimized Release, on the final code |
 | `make recovery` | Passed all 58 recovery scenarios, including upgrades of the retained v10 and v15 libraries with every interruption checkpoint |
 | Isolated running app | Passed. See below |
 | Local window check | Passed on the final code. See below |
