@@ -137,6 +137,9 @@ final class EditQueue {
     // The way back of an Undo that failed, and the change that Undo was for. The change still
     // holds, so its way back does nothing and hands the inverse on to the next Undo.
     @ObservationIgnored private var retries: [EditChange: EditChange] = [:]
+    // The latest Undo or Redo that failed in each scope: the change it was for and its way back.
+    // Try Again there runs it once more.
+    @ObservationIgnored private var failedUndos: [EditScope: FailedUndo] = [:]
     @ObservationIgnored private var isSubmittingTyping = false
     @ObservationIgnored private let undoManagers = NSHashTable<UndoManager>.weakObjects()
     @ObservationIgnored private var localTyping: [UUID: LocalTyping] = [:]
@@ -166,6 +169,22 @@ final class EditQueue {
     func report(_ message: String, in scope: EditScope) { failures[scope] = message }
 
     func clearFailure(in scope: EditScope) { failures[scope] = nil }
+
+    // Try Again for an Undo or Redo that failed in a scope runs it once more, after everything
+    // submitted before. False when no Undo failed there.
+    @discardableResult
+    func retryUndo(in scope: EditScope) -> Bool {
+        guard let failed = failedUndos.removeValue(forKey: scope) else { return false }
+        retries[failed.back] = nil
+        failures[scope] = nil
+        flushTyping()
+        enqueue(
+            QueuedEdit(
+                work: .reverse(failed.undone), change: failed.back, scope: scope,
+                holdsScreen: failed.holdsScreen, isUndo: true, reportsFailure: true,
+                requires: nil, then: nil))
+        return true
+    }
 
     // Text on screen that has not saved: typing that has not reached the queue, text the field
     // does not take yet, and text whose save failed.
@@ -311,6 +330,7 @@ final class EditQueue {
         inverses = [:]
         typingUndo = [:]
         retries = [:]
+        failedUndos = [:]
     }
 
     private func register(_ step: EditUndoStep, on undoManager: UndoManager) {
@@ -452,6 +472,8 @@ final class EditQueue {
         case .failed(let error):
             if case .reverse(let undone) = item.work, let back = item.change {
                 retries[back] = undone
+                failedUndos[item.scope] = FailedUndo(
+                    undone: undone, back: back, holdsScreen: item.holdsScreen)
             }
             if item.reportsFailure, !(error is CancellationError) {
                 failures[item.scope] = error.localizedDescription
@@ -460,6 +482,12 @@ final class EditQueue {
         item.ticket.finish(result)
         item.then?(result)
     }
+}
+
+private nonisolated struct FailedUndo: Sendable {
+    let undone: EditChange
+    let back: EditChange
+    let holdsScreen: Bool
 }
 
 // The value the undo manager keeps for one Undo or Redo step.

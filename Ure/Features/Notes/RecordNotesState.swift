@@ -33,6 +33,12 @@ final class RecordNotesState {
         fields[owner]?.saveError ?? queue.failure(in: .notes(owner))
     }
 
+    // Try Again: the notes save again, or the Undo that failed runs once more.
+    func retry(_ owner: LibraryItemOwner) {
+        if queue.retryUndo(in: .notes(owner)) { return }
+        fields[owner]?.saveNow()
+    }
+
     func load(_ owner: LibraryItemOwner) async {
         loadErrors[owner] = nil
         do {

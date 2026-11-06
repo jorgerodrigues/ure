@@ -277,9 +277,10 @@ final class ChecklistEditor {
         show(ChecklistOperation.applying(local, to: base()).steps)
     }
 
-    // Try Again: the changes that did not save go again, each under its own Undo step, and then
-    // the typing on screen.
+    // Try Again: an Undo of the checklist that failed runs once more, the changes that did not
+    // save go again, each under its own Undo step, and then the typing on screen.
     func saveNow() {
+        queue.retryUndo(in: scope)
         let retrying = failed
         failed = []
         for entry in retrying {

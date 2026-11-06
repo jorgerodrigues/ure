@@ -404,6 +404,81 @@ struct EditQueueTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
+    func tryAgainRunsANotesUndoThatFailed() async throws {
+        let library = try await NotesLibrary.make(notes: "Saved", pause: PauseGate().pause)
+        let field = library.field
+        let owner = LibraryItemOwner.caliber(library.caliberID)
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        field.beginEditing()
+        undo.beginUndoGrouping()
+        field.change(to: "Saved and typed", undoManager: undo)
+        undo.endUndoGrouping()
+        field.endEditing()
+        await library.queue.waitUntilIdle()
+        try await JobTaskFixture.failWrites(library.coordinator, on: "caliber")
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(library.notes.saveError(for: owner) != nil)
+        #expect(try await library.stored() == "Saved and typed")
+        try await JobTaskFixture.allowWrites(library.coordinator, on: "caliber")
+        library.notes.retry(owner)
+        await library.queue.waitUntilIdle()
+        #expect(library.notes.saveError(for: owner) == nil && field.text == "Saved")
+        #expect(try await library.stored() == "Saved")
+        // Redo gives the typing back, from what the retried Undo read.
+        undo.redo()
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored() == "Saved and typed")
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func theLatestSaveOfAFieldDecidesWhetherItsTextIsUnsaved() async throws {
+        let library = try await NotesLibrary.make(notes: "Saved", pause: PauseGate().pause)
+        let field = library.field
+        try await library.coordinator.mutate { db, _, _ in
+            try db.execute(
+                sql: """
+                    CREATE TRIGGER failFirstAlpha BEFORE UPDATE ON caliber
+                    WHEN NEW.notes = 'Alpha' AND OLD.notes = 'Saved'
+                    BEGIN SELECT RAISE(ABORT, 'fixture disk failure'); END
+                    """)
+        }
+        field.beginEditing()
+        let (hold, holding) = try await LibraryHold.start(on: library.coordinator)
+        for text in ["Alpha", "Beta", "Alpha"] {
+            field.change(to: text, undoManager: nil)
+            field.saveNow()
+        }
+        hold.release()
+        _ = try await holding.value
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored() == "Alpha")
+        #expect(field.saveError == nil && !field.hasUnsavedChanges)
+        #expect(!library.queue.hasUnsavedTyping)
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func typingBackTheSavedTextClearsAFailure() async throws {
+        let library = try await NotesLibrary.make(notes: "Saved", pause: PauseGate().pause)
+        let field = library.field
+        try await JobTaskFixture.failWrites(library.coordinator, on: "caliber")
+        field.beginEditing()
+        field.change(to: "Saved and typed", undoManager: nil)
+        field.saveNow()
+        await library.queue.waitUntilIdle()
+        #expect(field.saveError != nil && field.hasUnsavedText)
+        field.change(to: "Saved", undoManager: nil)
+        field.saveNow()
+        #expect(field.saveError == nil && !field.hasUnsavedChanges)
+        #expect(!library.queue.hasUnsavedTyping)
+        try await JobTaskFixture.allowWrites(library.coordinator, on: "caliber")
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
     func anUndoThatFailedCanBeTriedAgain() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }

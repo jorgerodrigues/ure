@@ -37,6 +37,8 @@ final class AutosaveField {
     // What the library holds, as far as this field knows.
     @ObservationIgnored private var storedText: String
     @ObservationIgnored private var latest: EditTicket?
+    // The number of the latest submission, so a failure can tell whether a later one followed.
+    @ObservationIgnored private var submissions = 0
     @ObservationIgnored private var isTracked = false
 
     init(
@@ -130,6 +132,8 @@ final class AutosaveField {
         isTyping = false
         defer { track() }
         guard text != savedText else {
+            // The text that did not save is gone, so its failure is too.
+            if !isSaving { saveError = nil }
             settle()
             return
         }
@@ -146,8 +150,10 @@ final class AutosaveField {
         unsavedChange = nil
         savedText = value
         isSaving = true
+        submissions += 1
+        let number = submissions
         latest = queue.submitTyping(submitted, in: scope, as: change) { [weak self] result in
-            self?.finished(value, change: change, result: result)
+            self?.finished(value, number: number, change: change, result: result)
         }
     }
 
@@ -162,18 +168,21 @@ final class AutosaveField {
         track()
     }
 
-    private func finished(_ value: String, change: EditChange?, result: EditResult) {
+    private func finished(
+        _ value: String, number: Int, change: EditChange?, result: EditResult
+    ) {
+        let isLatest = number == submissions
         if latest?.isPending != true { isSaving = false }
         switch result {
         case .saved:
             storedText = value
-            if savedText == value { saveError = nil }
+            if isLatest { saveError = nil }
             if let change { queue.typingSettled(change) }
             showSavedText()
         case .failed(let error):
             // Only the latest save's failure keeps its text on screen as not saved. An older one
             // that a later save took over settles.
-            if savedText == value {
+            if isLatest {
                 saveError = error.localizedDescription
                 savedText = storedText
                 if unsavedChange == nil { unsavedChange = change }

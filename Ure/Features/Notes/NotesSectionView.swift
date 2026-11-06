@@ -28,7 +28,7 @@ struct NotesSectionView: View {
         if let field = notes.field(for: owner) {
             NotesEditor(
                 field: field, saveError: notes.saveError(for: owner),
-                isEditable: editing.canWrite(owner)
+                isEditable: editing.canWrite(owner), retry: retrySave
             ).id(owner)
         } else if let error = notes.loadErrors[owner] {
             Label(error, systemImage: "exclamationmark.triangle")
@@ -39,6 +39,7 @@ struct NotesSectionView: View {
     }
 
     private func load() async { await notes.load(owner) }
+    private func retrySave() { notes.retry(owner) }
     private func retry() { Task { await notes.load(owner) } }
 }
 
@@ -46,6 +47,7 @@ private struct NotesEditor: View {
     let field: AutosaveField
     let saveError: String?
     let isEditable: Bool
+    let retry: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -57,7 +59,7 @@ private struct NotesEditor: View {
                     }
                 }
             if let error = saveError {
-                NotesSaveFailure(message: error, retry: field.saveNow)
+                NotesSaveFailure(message: error, retry: retry)
             } else if field.isEditing {
                 Text("Saved as you type · Esc undoes this field")
                     .font(.system(size: NotesLayout.hintSize))
