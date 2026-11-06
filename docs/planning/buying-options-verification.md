@@ -69,11 +69,22 @@ After the rebase onto the queue, the steps allowed three more rounds, with the u
 
 - Round six found one problem that normal use hits. A price refused for its mark, such as "£10" on an option in euros, stayed unsaved after you chose GBP as its message asks, so Mark as Bought would not open. Rule 3 now saves it. The test is in `anOptionsCurrencyNeverRelabelsAnAmountAndUndoPutsItBack`, and the same holds for a new home currency in `anOptionWithoutACurrencyFollowsANewHomeCurrency`.
 - Round seven found nothing.
-- ROUND8
+- Round eight ran on `689131c`, after the Settings layout fix that the window check found, and found nothing.
+
+No finding was declined, and no corner case came up after the rebase.
 
 ## Executed checks
 
-CHECKS
+Development Mac: Apple silicon, macOS 27.3, Xcode 27.2. The SDK cache workaround `SDK_STAT_CACHE_ENABLE=NO` was passed where the steps run `xcodebuild` directly.
+
+| Check | Result |
+| --- | --- |
+| `make check` | Passed on `689131c`: lint, unsigned Debug build, and 427 of 427 unit test runs |
+| `make release` | Passed on `689131c`, unsigned optimized Release build |
+| Isolated running app | The Debug build ran with `URE_TESTING=1` and a new test library id on a copy of a `v26-parts` library with five saved links. It upgraded the library to `v27-buying-options`, kept running, and quit on `kill -TERM`. The upgraded database had five options, no `partLink`, and passed the integrity and foreign key checks |
+| Local window check | Passed on the code of `689131c`. It was copied into `UreTests` for each run and removed after it |
+| No network for rates | `NoNetworkRatesTests` checks that the app has no network entitlement and makes no URL request while you set rates and mark a part bought |
+| GitHub CI | Off since 6 November, as the user asked while the app is a prototype. The gate in its place is `make check` and `make release` on the final code |
 
 ## Not verified
 
