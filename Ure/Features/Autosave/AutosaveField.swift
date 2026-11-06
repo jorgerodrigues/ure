@@ -96,7 +96,7 @@ final class AutosaveField {
             if unsavedChange == nil {
                 unsavedChange = queue.beginTyping(
                     actionName, in: scope, undoManager: undoManager
-                ) { [weak self] in self?.undoReachedTyping() }
+                ) { [weak self] change in self?.undoReachedTyping(change) }
             }
         }
         text = newText
@@ -104,9 +104,11 @@ final class AutosaveField {
         scheduleSubmit()
     }
 
-    // Esc puts back the text from when focus entered the field, as part of the typing going on.
+    // Esc puts back the text from when focus entered the field. The typing before it submits
+    // first, so Esc is an Undo step of its own and ⌘Z brings the typing back.
     func revert(undoManager: UndoManager?) {
         guard let textBeforeEditing, textBeforeEditing != text else { return }
+        if isTyping { saveNow() }
         change(to: textBeforeEditing, undoManager: undoManager)
         saveNow()
     }
@@ -169,9 +171,15 @@ final class AutosaveField {
             if let change { queue.typingSettled(change) }
             showSavedText()
         case .failed(let error):
-            saveError = error.localizedDescription
-            if savedText == value { savedText = storedText }
-            if unsavedChange == nil { unsavedChange = change }
+            // Only the latest save's failure keeps its text on screen as not saved. An older one
+            // that a later save took over settles.
+            if savedText == value {
+                saveError = error.localizedDescription
+                savedText = storedText
+                if unsavedChange == nil { unsavedChange = change }
+            } else if let change {
+                queue.typingSettled(change)
+            }
         }
         track()
     }
@@ -192,7 +200,8 @@ final class AutosaveField {
     // Undo reached this field's typing while it was still on screen. Text that can save submits
     // first, so the Undo that follows takes it back from the library. Text that can't goes back
     // to the stored text, as nothing of it saved.
-    private func undoReachedTyping() {
+    private func undoReachedTyping(_ change: EditChange) {
+        guard unsavedChange == change else { return }
         if isTyping, text != savedText, accepts(text), saveError == nil {
             saveNow()
             return

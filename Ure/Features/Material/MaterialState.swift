@@ -100,6 +100,8 @@ final class MaterialState {
         case .materialRemoved(let id):
             records.removeAll { $0.id == id }
             if presented?.itemID == id { presented = nil }
+            // Its title goes with it, and text that did not save there no longer counts.
+            titleFields.removeValue(forKey: id)?.discard()
         case .imported(_, let results):
             for result in results {
                 if case .success(let record) = result.outcome { insert(record) }
@@ -110,7 +112,8 @@ final class MaterialState {
         }
     }
 
-    // Keeps one autosave field per material, made the first time the material shows.
+    // Keeps one autosave field per material, made the first time the material shows. Undo of a
+    // rename comes from the stored title, so removed material needs no field.
     private func adoptTitle(of record: MaterialRecord) {
         if let field = titleFields[record.id] {
             field.refresh(record.item.title)

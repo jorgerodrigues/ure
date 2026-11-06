@@ -22,9 +22,9 @@ final class ChecklistState {
     ) {
         self.queue = queue
         self.pause = pause
-        queue.listen { [weak self] change, byUndo in
+        queue.listen { [weak self] change, _ in
             guard case .checklist(let jobID, let steps) = change else { return }
-            self?.adopt(steps, for: jobID, force: byUndo)
+            self?.adopt(steps, for: jobID)
         }
     }
 
@@ -69,11 +69,11 @@ final class ChecklistState {
         }
     }
 
-    // A job's saved steps after an edit. Undo and Redo show them also while a step has the
-    // cursor.
-    private func adopt(_ steps: [ChecklistStepRecord], for jobID: UUID, force: Bool) {
+    // A job's saved steps after an edit, Undo and Redo included. They show also while a step
+    // has the cursor.
+    private func adopt(_ steps: [ChecklistStepRecord], for jobID: UUID) {
         records = records.filter { $0.jobID != jobID } + steps
-        editors[jobID]?.refresh(stored(for: jobID), force: force)
+        editors[jobID]?.refresh(stored(for: jobID), fromQueue: true)
     }
 
     private func stored(for jobID: UUID) -> [ChecklistStep] {

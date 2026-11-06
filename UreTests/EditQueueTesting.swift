@@ -97,3 +97,26 @@ nonisolated final class LibraryHold: Sendable {
         return (hold, holding)
     }
 }
+
+// What a fixture's checklist holds before and after it is set.
+nonisolated struct ChecklistSaved: Equatable, Sendable {
+    let before: [ChecklistStep]
+    let after: [ChecklistStepRecord]
+}
+
+extension ChecklistService {
+    // Makes a job's saved checklist exactly these steps, through the changes that make the
+    // stored steps these, as a fixture needs.
+    @discardableResult
+    nonisolated func save(_ steps: [ChecklistStep], for jobID: UUID) async throws
+        -> ChecklistSaved
+    {
+        let stored = try await coordinator.read {
+            try ChecklistQueries.ordered(for: jobID, in: $0)
+        }.map(ChecklistStep.init(record:))
+        let change = try await apply(
+            ChecklistOperation.changes(from: stored, to: steps.filter { !$0.isBlank }),
+            for: jobID)
+        return ChecklistSaved(before: stored, after: change.after)
+    }
+}

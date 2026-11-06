@@ -274,8 +274,7 @@ struct ChecklistServiceTests {
                 ChecklistStep(id: ids[1], text: "Clean all parts", isTicked: true),
             ], for: job.id)
         let moved = revision.after
-        // The save gives back the steps the job had, so Undo can put them back.
-        #expect(revision.before == saved.map(ChecklistStep.init(record:)) && revision.changed)
+        #expect(revision.before == saved.map(ChecklistStep.init(record:)))
         #expect(moved.map(\.id) == [ids[3], ids[1]] && moved.map(\.position) == [0, 1])
         #expect(moved[0].updatedAt == now && moved[1].updatedAt == saved[1].updatedAt)
         #expect(try await coordinator.read(ChecklistQueries.fetchAll) == moved)
@@ -286,11 +285,6 @@ struct ChecklistServiceTests {
         let other = try await JobTaskFixture.job(coordinator)
         await #expect(throws: ChecklistError.stepMismatch) {
             try await service.save([ChecklistStep(id: ids[1], text: "Clean")], for: other.id)
-        }
-        await #expect(throws: ChecklistError.stepMismatch) {
-            try await service.save(
-                [ChecklistStep(id: ids[0], text: "A"), ChecklistStep(id: ids[0], text: "B")],
-                for: other.id)
         }
         try await coordinator.mutate { db, _, _ in
             try db.execute(

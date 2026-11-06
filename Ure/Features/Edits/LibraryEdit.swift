@@ -18,8 +18,8 @@ nonisolated enum LibraryEdit: Equatable, Sendable {
     case watch(WatchEdit)
     case job(JobEdit)
     case part(PartEdit)
-    // Makes a job's saved checklist these steps.
-    case checklist(UUID, [ChecklistStep])
+    // Changes steps of a job's checklist, applied to the steps it holds when its turn comes.
+    case checklist(UUID, [ChecklistOperation])
     case notes(LibraryItemOwner, String)
     case material(MaterialEdit)
 }
@@ -123,8 +123,8 @@ nonisolated struct LibraryEditor: Sendable {
         case .watch(let edit): try await apply(edit)
         case .job(let edit): try await apply(edit)
         case .part(let edit): try await apply(edit)
-        case .checklist(let jobID, let steps):
-            try await saveChecklist(steps, for: jobID)
+        case .checklist(let jobID, let operations):
+            try await changeChecklist(operations, of: jobID)
         case .notes(let owner, let text):
             try await saveNotes(text, for: owner)
         case .material(let edit): try await apply(edit)
@@ -246,13 +246,13 @@ nonisolated struct LibraryEditor: Sendable {
                 ? .part(.place(id, PartPlacement(part: revision.before))) : nil)
     }
 
-    private func saveChecklist(_ steps: [ChecklistStep], for jobID: UUID) async throws
-        -> EditApplied
+    private func changeChecklist(_ operations: [ChecklistOperation], of jobID: UUID)
+        async throws -> EditApplied
     {
-        let revision = try await checklists.save(steps, for: jobID)
+        let change = try await checklists.apply(operations, for: jobID)
         return EditApplied(
-            changes: [.checklist(jobID, revision.after)],
-            inverse: revision.changed ? .checklist(jobID, revision.before) : nil)
+            changes: [.checklist(jobID, change.after)],
+            inverse: change.inverse.isEmpty ? nil : .checklist(jobID, change.inverse))
     }
 
     private func saveNotes(_ text: String, for owner: LibraryItemOwner) async throws

@@ -29,7 +29,7 @@ struct EditQueueTests {
             (.caliber(.set(caliber.id, .maker("Omega"))), .calibers),
             (.notes(.job(job.id), "Ordered from Cousins"), .notes(.job(job.id))),
             (.job(.stage(job.id, .done)), .jobs),
-            (.checklist(job.id, [step]), .checklist(job.id)),
+            (.checklist(job.id, [.place(step, after: nil)]), .checklist(job.id)),
         ]
         var finished: [Int] = []
         var tickets: [EditTicket] = []
@@ -202,6 +202,213 @@ struct EditQueueTests {
                 == "Full service")
         #expect(
             try await coordinator.read { try PartQueries.fetchAll($0) }.map(\.name) == ["Crystal"])
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aChecklistChangeMadeWhileAnUndoWaitsKeepsTheUndo() async throws {
+        let first = ChecklistStep(id: UUID(), text: "Clean all parts")
+        let second = ChecklistStep(id: UUID(), text: "Oil the escapement")
+        let library = try await ChecklistLibrary.make(steps: [first, second])
+        let editor = library.editor
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        undo.beginUndoGrouping()
+        editor.toggleTick(first.id, undoManager: undo)
+        undo.endUndoGrouping()
+        await library.queue.waitUntilIdle()
+
+        // ⌘Z takes back the first tick while the library is held, and the second step is
+        // ticked before that Undo has run.
+        let (hold, holding) = try await LibraryHold.start(on: library.coordinator)
+        undo.undo()
+        undo.beginUndoGrouping()
+        editor.toggleTick(second.id, undoManager: undo)
+        undo.endUndoGrouping()
+        hold.release()
+        _ = try await holding.value
+        await library.queue.waitUntilIdle()
+        let saved = try await library.stored()
+        #expect(saved.map(\.isTicked) == [false, true])
+        #expect(editor.steps.map(\.isTicked) == [false, true] && !editor.hasUnsavedChanges)
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func anUndoThatFailedCanBeTriedAgain() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        let editing = EditingFixture.make(coordinator)
+        let parts = editing.parts
+        let observation = Task { await parts.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { !parts.isLoading }
+        let part = try #require(await parts.add(named: "Mainspring", to: job.id)?.part)
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        undo.beginUndoGrouping()
+        let removing = parts.remove(part.id, undoManager: undo)
+        undo.endUndoGrouping()
+        #expect(await removing.didSave)
+
+        // The part can't come back while the library refuses writes.
+        try await JobTaskFixture.failWrites(coordinator, on: "part")
+        undo.undo()
+        await editing.queue.waitUntilIdle()
+        #expect(try await stored(part.id, coordinator) == nil && parts.saveError != nil)
+        try await JobTaskFixture.allowWrites(coordinator, on: "part")
+        // The deletion still holds, so Redo does nothing, and the next Undo brings the part back.
+        undo.redo()
+        await editing.queue.waitUntilIdle()
+        #expect(try await stored(part.id, coordinator) == nil)
+        undo.undo()
+        await editing.queue.waitUntilIdle()
+        #expect(try await stored(part.id, coordinator)?.name == "Mainspring")
+        #expect(parts.saveError == nil)
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func undoTakesBackAChecklistChangeThatDidNotSave() async throws {
+        let step = ChecklistStep(id: UUID(), text: "Clean all parts")
+        let library = try await ChecklistLibrary.make(steps: [step])
+        let editor = library.editor
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        try await JobTaskFixture.failWrites(library.coordinator, on: "checklistStep")
+        undo.beginUndoGrouping()
+        editor.toggleTick(step.id, undoManager: undo)
+        undo.endUndoGrouping()
+        await library.queue.waitUntilIdle()
+        #expect(editor.saveError != nil && editor.step(step.id)?.isTicked == true)
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(editor.saveError == nil && editor.step(step.id)?.isTicked == false)
+        #expect(!library.queue.hasUnsavedTyping)
+        try await JobTaskFixture.allowWrites(library.coordinator, on: "checklistStep")
+        #expect(await library.queue.saveEverything())
+        #expect(try await library.stored() == [step])
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func escIsAnUndoStepOfItsOwn() async throws {
+        let library = try await NotesLibrary.make(notes: "Saved", pause: PauseGate().pause)
+        let field = library.field
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        field.beginEditing()
+        undo.beginUndoGrouping()
+        field.change(to: "Saved and typed", undoManager: undo)
+        undo.endUndoGrouping()
+        undo.beginUndoGrouping()
+        field.revert(undoManager: undo)
+        undo.endUndoGrouping()
+        #expect(field.text == "Saved")
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored() == "Saved")
+        // ⌘Z brings back the typing that Esc took away, and ⌘Z again takes it back too.
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(field.text == "Saved and typed")
+        #expect(try await library.stored() == "Saved and typed")
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(field.text == "Saved")
+        #expect(try await library.stored() == "Saved")
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func typingAfterAFailedSaveThatALaterSaveTookOverIsItsOwnUndoStep() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        let editing = EditingFixture.make(coordinator, pause: PauseGate().pause)
+        let parts = editing.parts
+        let observation = Task { await parts.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { !parts.isLoading }
+        let part = try #require(await parts.add(named: "Mainspring", to: job.id)?.part)
+        let name = try #require(parts.facts(for: part.id)?.name)
+        try await coordinator.mutate { db, _, _ in
+            try db.execute(
+                sql: """
+                    CREATE TRIGGER failBadName BEFORE UPDATE ON part WHEN NEW.name = 'Bad'
+                    BEGIN SELECT RAISE(ABORT, 'fixture disk failure'); END
+                    """)
+        }
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        name.beginEditing()
+
+        // Two bursts save while the library is held. The first fails and the second saves.
+        let (hold, holding) = try await LibraryHold.start(on: coordinator)
+        for text in ["Bad", "Good"] {
+            undo.beginUndoGrouping()
+            name.change(to: text, undoManager: undo)
+            undo.endUndoGrouping()
+            name.saveNow()
+        }
+        hold.release()
+        _ = try await holding.value
+        await editing.queue.waitUntilIdle()
+        #expect(try await stored(part.id, coordinator)?.name == "Good" && name.saveError == nil)
+
+        // The next burst is an Undo step of its own, so ⌘Z takes back only that one.
+        undo.beginUndoGrouping()
+        name.change(to: "Good again", undoManager: undo)
+        undo.endUndoGrouping()
+        name.saveNow()
+        await editing.queue.waitUntilIdle()
+        undo.undo()
+        await editing.queue.waitUntilIdle()
+        #expect(try await stored(part.id, coordinator)?.name == "Good")
+        undo.undo()
+        await editing.queue.waitUntilIdle()
+        #expect(try await stored(part.id, coordinator)?.name == "Mainspring")
+        name.endEditing()
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aTitleThatDidNotSaveGoesWithItsMaterial() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let owner = try #require(try await ReferenceFixture.owners(coordinator).first)
+        let link = try await MaterialService(coordinator: coordinator).addLink(
+            try #require(URL(string: "https://example.org")), for: owner)
+        let editing = EditingFixture.make(coordinator, pause: PauseGate().pause)
+        let material = editing.material
+        let observation = Task { await material.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { material.records.count == 1 }
+        let title = try #require(material.titleField(for: link.id))
+        try await JobTaskFixture.failWrites(coordinator, on: "libraryItem")
+        title.beginEditing()
+        title.change(to: "Supplier page", undoManager: nil)
+        title.endEditing()
+        await editing.queue.waitUntilIdle()
+        #expect(title.saveError != nil && editing.hasUnsavedFields)
+        try await JobTaskFixture.allowWrites(coordinator, on: "libraryItem")
+        let record = try #require(material.records.first)
+        let removing = material.remove(record, on: owner, undoManager: nil)
+        #expect(await removing.didSave)
+        #expect(!editing.hasUnsavedFields && material.titleField(for: link.id) == nil)
+        #expect(await editing.saveAllFields())
         observation.cancel()
         await observation.value
         try await coordinator.close()
