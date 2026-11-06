@@ -32,9 +32,11 @@ struct SearchStateTests {
         let service = PartService(coordinator: coordinator)
         let part = try await service.add(named: "Mainspring", to: job.id)
         _ = try await service.update(part.id, .description("0012–Å/stock"))
+        // Each list shows the part once it has the saved description.
         try await SearchEditingFixture.waitUntil {
-            search.results.first?.recordID == part.id && editing.parts.parts.count == 1
-                && list.rows.count == 1
+            search.results.first?.recordID == part.id
+                && editing.parts.part(part.id)?.description == "0012–Å/stock"
+                && list.rows.first?.part.description == "0012–Å/stock"
         }
         list.searchText = "0012–å/stock"
         #expect(list.filteredRows.map(\.id) == [part.id])
