@@ -38,32 +38,34 @@ struct WorkshopView: View {
             }
             .navigationSplitViewColumnWidth(min: 260, ideal: UreLayout.listWidth, max: 400)
         } detail: {
-            GeometryReader { geometry in
-                HStack(spacing: 0) {
-                    detail.frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .safeAreaInset(edge: .bottom) {
-                            if hasActiveJob, bench.reference != nil, bench.showsPane,
-                                !BenchLayout.showsPane(
-                                    availableWidth: geometry.size.width, requested: true)
-                            {
-                                HStack {
-                                    Text("Widen the window to show the pinned reference.")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                    Spacer()
-                                    Button("Open Reference Window", action: openReference)
-                                }.padding()
+            VStack(spacing: 0) {
+                SaveFailureBar()
+                GeometryReader { geometry in
+                    HStack(spacing: 0) {
+                        detail.frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .safeAreaInset(edge: .bottom) {
+                                if hasActiveJob, bench.reference != nil, bench.showsPane,
+                                    !BenchLayout.showsPane(
+                                        availableWidth: geometry.size.width, requested: true)
+                                {
+                                    HStack {
+                                        Text("Widen the window to show the pinned reference.")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                        Spacer()
+                                        Button("Open Reference Window", action: openReference)
+                                    }.padding()
+                                }
                             }
+                        if hasActiveJob
+                            && BenchLayout.showsPane(
+                                availableWidth: geometry.size.width, requested: bench.showsPane)
+                        {
+                            Divider()
+                            BenchPaneView().frame(width: BenchLayout.referenceWidth)
                         }
-                    if hasActiveJob
-                        && BenchLayout.showsPane(
-                            availableWidth: geometry.size.width, requested: bench.showsPane)
-                    {
-                        Divider()
-                        BenchPaneView().frame(width: BenchLayout.referenceWidth)
                     }
                 }
             }
-            .safeAreaInset(edge: .top, spacing: 0) { SaveFailureBar() }
         }
         .task(watches.observe)
         .task(calibers.observe)

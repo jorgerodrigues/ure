@@ -14,7 +14,8 @@ struct SaveFailureBar: View {
                     Text(
                         "Your changes are not saving. They are still on screen and will save in order once Try Again works. \(failure)"
                     )
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(SaveFailureLayout.lines)
+                    .help(failure)
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill")
                 }
@@ -51,4 +52,7 @@ struct SaveFailureBar: View {
 enum SaveFailureLayout {
     static let inset: CGFloat = 16
     static let verticalInset: CGFloat = 8
+    // A long reason, such as a database error, is cut after this many lines. Its help tag shows
+    // all of it.
+    static let lines = 3
 }
