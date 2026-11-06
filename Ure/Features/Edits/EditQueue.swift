@@ -62,8 +62,14 @@ struct EditCheck {
 // before it.
 @Observable
 final class EditTicket {
+    // The Undo step the edit belongs to, if it has one.
+    let change: EditChange?
     private(set) var result: EditResult?
     @ObservationIgnored private var waiters: [CheckedContinuation<EditResult, Never>] = []
+
+    init(change: EditChange?) {
+        self.change = change
+    }
 
     var isPending: Bool { result == nil }
 
@@ -317,9 +323,10 @@ final class EditQueue {
 
     // Undo and Redo: the typing of the change, if it is still on screen, submits or goes first,
     // then the rest of the typing, and then the inverse, which is read once the change itself
-    // has run. The way back registers now, under a new change.
+    // has run. When the change did not save, there is no inverse, and its screen takes the
+    // change back then. The way back registers now, under a new change.
     private func reverse(_ step: EditUndoStep, undoManager: UndoManager?) {
-        typingUndo.removeValue(forKey: step.change)?(step.change)
+        typingUndo[step.change]?(step.change)
         flushTyping()
         let back = EditUndoStep(
             change: makeChange(), actionName: step.actionName, scope: step.scope,
@@ -408,7 +415,10 @@ final class EditQueue {
                 inverses[back] = inverses.removeValue(forKey: undone)
                 return .saved(EditApplied())
             }
-            guard let inverse = inverses[change] else { return .saved(EditApplied()) }
+            guard let inverse = inverses[change] else {
+                typingUndo.removeValue(forKey: change)?(change)
+                return .saved(EditApplied())
+            }
             edit = inverse
         }
         let editor = editor
@@ -428,7 +438,10 @@ final class EditQueue {
     private func finish(_ item: QueuedEdit, with result: EditResult) {
         switch result {
         case .saved(let applied):
-            if case .reverse(let undone) = item.work { inverses[undone] = nil }
+            if case .reverse(let undone) = item.work {
+                inverses[undone] = nil
+                typingUndo[undone] = nil
+            }
             if let change = item.change {
                 typingUndo[change] = nil
                 if let inverse = applied.inverse { inverses[change] = inverse }
@@ -464,7 +477,6 @@ private struct QueuedEdit {
         case reverse(EditChange)
     }
 
-    let ticket = EditTicket()
     let work: Work
     let change: EditChange?
     let scope: EditScope
@@ -473,6 +485,22 @@ private struct QueuedEdit {
     let reportsFailure: Bool
     let requires: EditCheck?
     let then: ((EditResult) -> Void)?
+    let ticket: EditTicket
+
+    init(
+        work: Work, change: EditChange?, scope: EditScope, holdsScreen: Bool, isUndo: Bool,
+        reportsFailure: Bool, requires: EditCheck?, then: ((EditResult) -> Void)?
+    ) {
+        self.work = work
+        self.change = change
+        self.scope = scope
+        self.holdsScreen = holdsScreen
+        self.isUndo = isUndo
+        self.reportsFailure = reportsFailure
+        self.requires = requires
+        self.then = then
+        ticket = EditTicket(change: change)
+    }
 }
 
 // The target of the Undo steps of one line's typing that saves nowhere. The queue keeps it, so

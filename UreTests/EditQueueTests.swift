@@ -327,6 +327,83 @@ struct EditQueueTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
+    func aTickSavedWithTryAgainKeepsItsUndo() async throws {
+        let step = ChecklistStep(id: UUID(), text: "Clean all parts")
+        let library = try await ChecklistLibrary.make(steps: [step])
+        let editor = library.editor
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        try await JobTaskFixture.failWrites(library.coordinator, on: "checklistStep")
+        undo.beginUndoGrouping()
+        editor.toggleTick(step.id, undoManager: undo)
+        undo.endUndoGrouping()
+        await library.queue.waitUntilIdle()
+        #expect(editor.saveError != nil)
+        try await JobTaskFixture.allowWrites(library.coordinator, on: "checklistStep")
+        editor.saveNow()
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored().map(\.isTicked) == [true] && editor.saveError == nil)
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored().map(\.isTicked) == [false])
+        #expect(editor.steps.map(\.isTicked) == [false])
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func undoOfTypingWhoseSaveFailsTakesTheTextBack() async throws {
+        let library = try await NotesLibrary.make(notes: "Saved", pause: PauseGate().pause)
+        let field = library.field
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        field.beginEditing()
+        undo.beginUndoGrouping()
+        field.change(to: "Saved and typed", undoManager: undo)
+        undo.endUndoGrouping()
+        // ⌘Z comes before the typing pause, and the typing's save then fails.
+        try await JobTaskFixture.failWrites(library.coordinator, on: "caliber")
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(field.text == "Saved" && field.saveError == nil)
+        #expect(!library.queue.hasUnsavedTyping)
+        try await JobTaskFixture.allowWrites(library.coordinator, on: "caliber")
+        #expect(await library.queue.saveEverything())
+        #expect(try await library.stored() == "Saved")
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func undoOfOneFailedTickKeepsTheOtherOnScreen() async throws {
+        let first = ChecklistStep(id: UUID(), text: "Clean all parts")
+        let second = ChecklistStep(id: UUID(), text: "Oil the escapement")
+        let library = try await ChecklistLibrary.make(steps: [first, second])
+        let editor = library.editor
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        try await JobTaskFixture.failWrites(library.coordinator, on: "checklistStep")
+        for step in [first, second] {
+            undo.beginUndoGrouping()
+            editor.toggleTick(step.id, undoManager: undo)
+            undo.endUndoGrouping()
+        }
+        await library.queue.waitUntilIdle()
+        #expect(editor.steps.map(\.isTicked) == [true, true] && editor.saveError != nil)
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(editor.steps.map(\.isTicked) == [true, false] && editor.saveError != nil)
+        try await JobTaskFixture.allowWrites(library.coordinator, on: "checklistStep")
+        editor.saveNow()
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored().map(\.isTicked) == [true, false])
+        #expect(editor.saveError == nil && !editor.hasUnsavedChanges)
+        // The first tick's Undo works after Try Again saved it.
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored().map(\.isTicked) == [false, false])
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
     func anUndoThatFailedCanBeTriedAgain() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
