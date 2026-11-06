@@ -368,7 +368,7 @@ private struct OptionPasteStrip: NSViewRepresentable {
     func updateNSView(_ view: OptionPasteStripView, context: Context) { view.onPaste = paste }
 }
 
-final class OptionPasteStripView: NSView {
+final class OptionPasteStripView: NSView, ReadingOrderStop {
     var onPaste: (String?) -> Void = { _ in }
     var pasteboard = NSPasteboard.general
     private let label = NSHostingView(rootView: OptionPasteStripLabel(isTargeted: false))
@@ -408,10 +408,12 @@ final class OptionPasteStripView: NSView {
         if bounds.contains(convert(event.locationInWindow, from: nil)) { paste(nil) }
     }
 
+    var takesReadingOrderFocus: Bool { true }
+
     override func keyDown(with event: NSEvent) {
         if event.charactersIgnoringModifiers == " " {
             paste(nil)
-        } else {
+        } else if !ReadingOrder.moveFocus(for: event, from: self) {
             super.keyDown(with: event)
         }
     }

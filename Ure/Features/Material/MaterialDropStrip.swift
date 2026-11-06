@@ -30,7 +30,7 @@ struct MaterialDropStrip: NSViewRepresentable {
     }
 }
 
-final class MaterialDropStripView: NSView {
+final class MaterialDropStripView: NSView, ReadingOrderStop {
     var onChoose: () -> Void = {}
     var onDrop: ([URL]) -> Void = { _ in }
     var onPaste: (String?) -> Void = { _ in }
@@ -80,10 +80,12 @@ final class MaterialDropStripView: NSView {
         if bounds.contains(convert(event.locationInWindow, from: nil)) { onChoose() }
     }
 
+    var takesReadingOrderFocus: Bool { true }
+
     override func keyDown(with event: NSEvent) {
         if event.charactersIgnoringModifiers == " " {
             onChoose()
-        } else {
+        } else if !ReadingOrder.moveFocus(for: event, from: self) {
             super.keyDown(with: event)
         }
     }

@@ -100,25 +100,31 @@ struct CaliberListView: View {
     }
 }
 
-// A caliber in the list: its maker and name, then its winding and how many watches use it,
-// such as "Automatic · 2 watches". An archived caliber reads quieter and says when it was
-// archived. Right-click archives or unarchives it.
+// A caliber in the list: its first photo, as on "5 Caliber", its maker and name, then its
+// winding and how many watches use it, such as "Automatic · 2 watches". An archived caliber
+// reads quieter and says when it was archived. Right-click archives or unarchives it.
 private struct CaliberRow: View {
     @Environment(CaliberState.self) private var calibers
+    @Environment(MaterialState.self) private var material
     @Environment(WorkshopEditing.self) private var editing
     @Environment(\.undoManager) private var undoManager
     let caliber: CaliberRecord
     let watchCount: Int
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UreLayout.textSpacing) {
-            Text(caliber.title)
-                .font(.body)
-                .fontWeight(.semibold)
-                .foregroundStyle(isArchived ? .secondary : .primary)
-            Text(detail)
-                .font(.subheadline)
-                .foregroundStyle(isArchived ? .tertiary : .secondary)
+        HStack(spacing: UreLayout.rowSpacing) {
+            PhotoThumbnailView(photoID: photoID)
+                .frame(width: UreLayout.rowThumbnailSize, height: UreLayout.rowThumbnailSize)
+                .opacity(isArchived ? 0.7 : 1)
+            VStack(alignment: .leading, spacing: UreLayout.textSpacing) {
+                Text(caliber.title)
+                    .font(.body)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(isArchived ? .secondary : .primary)
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(isArchived ? .tertiary : .secondary)
+            }
         }
         .contextMenu {
             Button(isArchived ? "Unarchive Caliber" : "Archive Caliber", action: toggleArchive)
@@ -127,6 +133,11 @@ private struct CaliberRow: View {
     }
 
     private var isArchived: Bool { caliber.archivedAt != nil }
+
+    // The same photo as the caliber page's header.
+    private var photoID: UUID? {
+        material.records(for: .caliber(caliber.id)).first { $0.item.kind == .photo }?.id
+    }
 
     private func toggleArchive() {
         editing.requestNavigation {

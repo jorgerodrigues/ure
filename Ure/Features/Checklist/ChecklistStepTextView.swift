@@ -138,7 +138,7 @@ struct ChecklistStepTextView: NSViewRepresentable {
         // Tab, Shift-Tab, and Return on a step without text, move to the next or previous field
         // in reading order.
         private func moveOn(from control: NSControl, forward: Bool) {
-            guard !InPlaceTextField.moveFocus(from: control, forward: forward) else { return }
+            guard !ReadingOrder.moveFocus(from: control, forward: forward) else { return }
             if forward {
                 control.window?.selectKeyView(following: control)
             } else {

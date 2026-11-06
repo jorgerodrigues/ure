@@ -117,7 +117,7 @@ struct PartEntryTextView: NSViewRepresentable {
                 if entry.isBlank {
                     // Return on an empty line moves on past the line's own description, so the
                     // checklist can follow.
-                    let moved = InPlaceTextField.moveFocus(from: control, forward: true) {
+                    let moved = ReadingOrder.moveFocus(from: control, forward: true) {
                         $0.accessibilityIdentifier().hasPrefix(PartEntryWording.descriptionID)
                     }
                     if !moved { control.window?.makeFirstResponder(nil) }
@@ -127,7 +127,7 @@ struct PartEntryTextView: NSViewRepresentable {
                     // cursor goes back to the name for the next part.
                     textView.string = ""
                     if role == .description {
-                        _ = InPlaceTextField.moveFocus(from: control, forward: false)
+                        _ = ReadingOrder.moveFocus(from: control, forward: false)
                     }
                 }
                 return true
@@ -148,12 +148,12 @@ struct PartEntryTextView: NSViewRepresentable {
                 }
                 return true
             case #selector(NSResponder.insertTab(_:)):
-                if !InPlaceTextField.moveFocus(from: control, forward: true) {
+                if !ReadingOrder.moveFocus(from: control, forward: true) {
                     control.window?.selectNextKeyView(nil)
                 }
                 return true
             case #selector(NSResponder.insertBacktab(_:)):
-                if !InPlaceTextField.moveFocus(from: control, forward: false) {
+                if !ReadingOrder.moveFocus(from: control, forward: false) {
                     control.window?.selectPreviousKeyView(nil)
                 }
                 return true

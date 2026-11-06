@@ -64,10 +64,14 @@ struct NotesTextView: NSViewRepresentable {
                 field.revert(undoManager: textView.window?.undoManager)
                 return true
             case #selector(NSResponder.insertTab(_:)):
-                textView.window?.selectNextKeyView(nil)
+                if !ReadingOrder.moveFocus(from: textView, forward: true) {
+                    textView.window?.selectNextKeyView(nil)
+                }
                 return true
             case #selector(NSResponder.insertBacktab(_:)):
-                textView.window?.selectPreviousKeyView(nil)
+                if !ReadingOrder.moveFocus(from: textView, forward: false) {
+                    textView.window?.selectPreviousKeyView(nil)
+                }
                 return true
             default:
                 return false
@@ -76,7 +80,7 @@ struct NotesTextView: NSViewRepresentable {
     }
 }
 
-final class NotesEditingView: NSTextView {
+final class NotesEditingView: NSTextView, ReadingOrderStop {
     var onBeginEditing: () -> Void = {}
     var onEndEditing: () -> Void = {}
     private var storage: NSTextStorage?
@@ -112,6 +116,8 @@ final class NotesEditingView: NSTextView {
     }
 
     required init?(coder: NSCoder) { return nil }
+
+    var takesReadingOrderFocus: Bool { isEditable }
 
     override func becomeFirstResponder() -> Bool {
         guard super.becomeFirstResponder() else { return false }
