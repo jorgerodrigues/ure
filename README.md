@@ -145,7 +145,7 @@ Every watch, caliber, and job has one plain-text **Notes** section. Type in it. 
 
 **Command-Z** undoes a notes change, even after it saved, and **Shift-Command-Z** redoes it. **Esc** puts back the notes as they were when you started typing in them. **Command-D** types today's date. Text preserves Unicode, line breaks, and spacing. No rich text or Markdown rendering is added.
 
-When a save fails, your changes stay on screen, and one bar at the top of the window says that they are not saving, with **Try Again** and **Discard Unsaved Changes…**. Changes you make after it wait and save in order once **Try Again** works. Quitting or closing the window while a save failed asks whether to try again, discard the changes, or stay. A Done job's notes still change. Archived notes stay readable but cannot change until the record is unarchived.
+When a save fails, your changes stay on screen, and one bar at the top of the window says that they are not saving, with **Try Again** and **Discard Unsaved Changes…**. Changes you make after it wait and save in order once **Try Again** works. If a later change leaves an Undo or Redo nothing it may do, such as ⌘Z of Done after another job started on the same watch, the page says "Nothing was undone." with the reason, and nothing changes. Quitting or closing the window while a save failed asks whether to try again, discard the changes, or stay. A Done job's notes still change. Archived notes stay readable but cannot change until the record is unarchived.
 
 Libraries from before W033 had separate note records. The upgrade joins each record's notes into its notes text, oldest first. Each old note starts with its date, kind, and title.
 

@@ -679,6 +679,77 @@ struct EditRuleTests {
         try await coordinator.close()
     }
 
+    // Rule 6 can't refuse an Undo or Redo when you act: AppKit takes the step when you press ⌘Z,
+    // and a change without an Undo step of its own, such as Start Job or a blank job that goes,
+    // can come after it. So a rule that refuses an Undo or Redo when its turn comes skips it. It
+    // changed nothing, its message shows on the record's page, and the queue goes on. A disk
+    // error in an Undo still stops the queue, as undoComesFromTheStoredDataAlsoAfterAFailedSave
+    // shows.
+    @Test(.timeLimit(.minutes(1)))
+    func anUndoOrRedoThatARuleRefusesIsSkipped() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let first = try await JobTaskFixture.job(coordinator)
+        let watchID = try #require(first.watchID)
+        let editing = EditingFixture.make(coordinator, pause: PauseGate().pause)
+        let jobs = editing.jobs
+        let observation = Task { await jobs.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { !jobs.isLoading }
+        func stage(_ id: UUID) async throws -> JobStage? {
+            try await coordinator.read { try JobQueries.fetch(id, in: $0) }?.stage
+        }
+
+        // The first job is Done, and a second job starts on the same watch. ⌘Z of Done can't
+        // reopen the first job while the second is open.
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        jobs.open(first)
+        grouped(undo) { jobs.setStage(.done, undoManager: undo) }
+        await editing.queue.waitUntilIdle()
+        #expect(await jobs.start(for: watchID)?.saved == true)
+        let second = try #require(jobs.selectedID)
+        undo.undo()
+        await editing.queue.waitUntilIdle()
+        #expect(editing.failure == nil && editing.queue.isIdle)
+        #expect(try await stage(first.id) == .done)
+        #expect(try await stage(second) == .inProgress)
+        #expect(jobs.refusal?.hasPrefix("Nothing was undone. This watch already has") == true)
+
+        // The queue goes on, and it keeps nothing for the skipped step.
+        grouped(undo) { jobs.setStage(.done, undoManager: undo) }
+        await editing.queue.waitUntilIdle()
+        #expect(try await stage(second) == .done)
+        #expect(jobs.refusal == nil && editing.queue.keptUndoCount == 1)
+
+        // A blank job's notes: typed, undone, and then the blank job goes. ⇧⌘Z can't put the
+        // notes back on a job that is gone. The notes field shows what the library holds, and the
+        // message shows on the job page.
+        #expect(await jobs.create()?.saved == true)
+        let blank = try #require(jobs.selectedID)
+        await editing.notes.load(.job(blank))
+        let notes = try #require(editing.notes.field(for: .job(blank)))
+        let redo = UndoManager()
+        redo.groupsByEvent = false
+        notes.beginEditing()
+        grouped(redo) { notes.change(to: "Check the crown", undoManager: redo) }
+        notes.endEditing()
+        redo.undo()
+        await editing.queue.waitUntilIdle()
+        #expect(notes.text.isEmpty)
+        #expect(await editing.queue.submit(.job(.discardIfBlank(blank)), in: .jobs).saved)
+        #expect(try await stage(blank) == nil)
+        redo.redo()
+        await editing.queue.waitUntilIdle()
+        #expect(editing.failure == nil && editing.queue.isIdle && notes.text.isEmpty)
+        #expect(jobs.refusal == "Nothing was redone. This job is no longer available.")
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
     // Rule 2 also holds when the field that made a change is gone by the time of ⇧⌘Z: typing
     // that had not submitted submits before its Undo, so the library has the step.
     @Test(.timeLimit(.minutes(1)))
