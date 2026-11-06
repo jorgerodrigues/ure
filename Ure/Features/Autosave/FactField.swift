@@ -35,7 +35,7 @@ nonisolated struct FactSuggestion: Equatable, Sendable {
 }
 
 // One fact on a record page, such as a caliber's beat rate, written in place. The text saves as
-// you type through AutosaveField. A text the rule does not take stays on screen and never
+// you type through AutosaveField, as one edit of the record on the library's queue. A text the rule does not take stays on screen and never
 // saves, so the record keeps its last good value. The field says so once focus leaves it, and
 // keeps saying so while you correct it. As you type, the library's matching values show under
 // the field, and taking one puts it all in the field.
@@ -56,7 +56,7 @@ final class FactField {
     init(
         label: String, prompt: String, actionName: String, text: String, rule: FactRule,
         suggestions: @escaping () -> [FactSuggestion] = { [] },
-        save: @escaping (String) async throws -> Void,
+        queue: EditQueue, scope: EditScope, edit: @escaping (String) throws -> LibraryEdit,
         pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.label = label
@@ -64,14 +64,15 @@ final class FactField {
         self.rule = rule
         self.suggestions = suggestions
         editor = AutosaveField(
-            text: text, actionName: actionName, save: save, pause: pause,
-            accepts: { rule.problem($0) == nil })
+            text: text, actionName: actionName, queue: queue, scope: scope, edit: edit,
+            pause: pause, accepts: { rule.problem($0) == nil }, normalized: rule.normalized)
     }
 
     var text: String { editor.text }
     var isEditing: Bool { editor.isEditing }
     var saveError: String? { editor.saveError }
     var hasUnsavedChanges: Bool { editor.hasUnsavedChanges }
+    var hasUnsavedText: Bool { editor.hasUnsavedText }
     var unit: String? { rule.unit }
 
     // The library's values that start with what you typed. Tab or Return takes the first.
@@ -129,7 +130,6 @@ final class FactField {
         offer = nil
         flagsWhileEditing = false
         editor.endEditing()
-        Task { await showSavedText() }
     }
 
     func revert(undoManager: UndoManager?) {
@@ -138,19 +138,9 @@ final class FactField {
     }
 
     // Adopts a stored value when nothing typed here is waiting to save.
-    func refresh(_ stored: String) { editor.refresh(stored) }
+    func refresh(_ stored: String, force: Bool = false) { editor.refresh(stored, force: force) }
 
     func saveNow() { editor.saveNow() }
-
-    @discardableResult
-    func flush() async -> Bool { await editor.flush() }
-
-    func discardUndo() { editor.discardUndo() }
-
-    private func showSavedText() async {
-        guard await editor.flush(), !editor.isEditing else { return }
-        editor.refresh(rule.normalized(editor.text))
-    }
 
     private func matches(for text: String) -> [FactSuggestion] {
         guard !text.isEmpty else { return [] }

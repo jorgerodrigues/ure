@@ -75,13 +75,21 @@ nonisolated enum ChecklistError: LocalizedError, Equatable {
     }
 }
 
+// A save of a job's checklist: the steps it had, and the steps it has now.
+nonisolated struct ChecklistRevision: Equatable, Sendable {
+    let before: [ChecklistStep]
+    let after: [ChecklistStepRecord]
+
+    var changed: Bool { before != after.map(ChecklistStep.init(record:)) }
+}
+
 nonisolated struct ChecklistService: Sendable {
     let coordinator: LibraryCoordinator
 
     // Makes the job's saved checklist the steps given, in their order. Steps without text are
     // left out. A step that did not change keeps its edit time. The job can be Done, but not
     // archived.
-    func save(_ steps: [ChecklistStep], for jobID: UUID) async throws -> [ChecklistStepRecord] {
+    func save(_ steps: [ChecklistStep], for jobID: UUID) async throws -> ChecklistRevision {
         try await coordinator.mutate { db, _, dependencies in
             _ = try JobService.requireJob(jobID, in: db)
             let now = Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
@@ -90,6 +98,7 @@ nonisolated struct ChecklistService: Sendable {
                 throw ChecklistError.stepMismatch
             }
             let existing = try ChecklistQueries.ordered(for: jobID, in: db)
+            let before = existing.map(ChecklistStep.init(record:))
             let byID = Dictionary(uniqueKeysWithValues: existing.map { ($0.id, $0) })
             let keptIDs = Set(kept.map(\.id))
             for record in existing where !keptIDs.contains(record.id) {
@@ -121,7 +130,8 @@ nonisolated struct ChecklistService: Sendable {
                     ).insert(db)
                 }
             }
-            return try ChecklistQueries.ordered(for: jobID, in: db)
+            return ChecklistRevision(
+                before: before, after: try ChecklistQueries.ordered(for: jobID, in: db))
         }
     }
 }

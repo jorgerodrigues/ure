@@ -292,7 +292,7 @@ private struct PartEntryLine: View {
     private func use(_ spare: PartRecord) {
         entry.clear()
         let jobID = entry.jobID
-        Task { await parts.useSpare(spare.id, on: jobID, undoManager: undoManager) }
+        parts.useSpare(spare.id, on: jobID, undoManager: undoManager)
     }
 }
 

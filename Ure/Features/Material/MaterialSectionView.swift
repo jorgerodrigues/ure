@@ -60,7 +60,7 @@ struct MaterialSectionView: View {
                 Text(readOnlyMessage).foregroundStyle(.secondary)
             }
             MaterialImportProgress(owner: owner)
-            if let error = material.errors[owner] {
+            if let error = material.error(for: owner) {
                 Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
             }
             if let caliber {
@@ -85,12 +85,12 @@ struct MaterialSectionView: View {
 
     private func addDropped(_ urls: [URL]) {
         guard editing.canWrite(owner), !editing.isSaving else { return }
-        Task { await material.add(urls, for: owner) }
+        material.add(urls, for: owner)
     }
 
     private func paste(_ text: String?) {
         guard editing.canWrite(owner), !editing.isSaving else { return }
-        Task { await material.paste(text, for: owner) }
+        material.paste(text, for: owner)
     }
 
     private func retry() { Task { await material.observe() } }
@@ -220,7 +220,7 @@ private struct MaterialTileMenu: View {
     private func open() { editing.requestNavigation { material.open(record, on: page) } }
 
     private func remove() {
-        Task { await material.remove(record, on: page, undoManager: undoManager) }
+        material.remove(record, on: page, undoManager: undoManager)
     }
 
     private func copyLink() {

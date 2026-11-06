@@ -1,42 +1,40 @@
 import Foundation
 
 // The facts on one job's page that you write in place: its title, the problem, and what it
-// waits for while it is Waiting. Each saves on its own as you type, with Undo.
+// waits for while it is Waiting. Each saves on its own as you type, as an edit on the library's
+// queue, with Undo.
 struct JobFacts {
     let title: FactField
     let problem: AutosaveField
     let waitingFor: FactField
 
     var editors: [AutosaveField] { [title.editor, waitingFor.editor, problem] }
-    var hasUnsavedChanges: Bool { editors.contains { $0.hasUnsavedChanges } }
+    // A field holds text that has not saved, such as a blank title.
+    var hasUnsavedText: Bool { editors.contains(where: \.hasUnsavedText) }
 
-    // A waiting text saves only once state changes still saving have finished, and only while
-    // the job still waits, so Undo of a state and of its text land in the order they were made.
     init(
-        job: JobRecord, service: JobService, stillWaits: @escaping () async -> Bool = { true },
+        job: JobRecord, queue: EditQueue,
         pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         let id = job.id
         title = FactField(
             label: "Title", prompt: "Title", actionName: "Title", text: job.title,
-            rule: .required("Enter a title."),
-            save: { text in _ = try await service.update(id, .title(text)) }, pause: pause)
+            rule: .required("Enter a title."), queue: queue, scope: .jobs,
+            edit: { .job(.set(id, .title($0))) }, pause: pause)
         problem = AutosaveField(
-            text: job.problem ?? "", actionName: "Problem",
-            save: { text in _ = try await service.update(id, .problem(text)) }, pause: pause)
+            text: job.problem ?? "", actionName: "Problem", queue: queue, scope: .jobs,
+            edit: { .job(.set(id, .problem($0))) }, pause: pause)
         waitingFor = FactField(
             label: "Waiting for", prompt: "Add what it waits for", actionName: "Waiting For",
-            text: job.waitingFor ?? "", rule: .anyText,
-            save: { text in
-                guard await stillWaits() else { return }
-                _ = try await service.update(id, .waitingFor(text))
-            }, pause: pause)
+            text: job.waitingFor ?? "", rule: .anyText, queue: queue, scope: .jobs,
+            edit: { .job(.set(id, .waitingFor($0))) }, pause: pause)
     }
 
-    // Shows the stored values in every field that has nothing waiting to save.
-    func refresh(_ job: JobRecord) {
-        title.refresh(job.title)
-        problem.refresh(job.problem ?? "")
-        waitingFor.refresh(job.waitingFor ?? "")
+    // Shows the stored values in every field that has nothing waiting to save. After Undo and
+    // Redo the fields take them also while one has the cursor.
+    func refresh(_ job: JobRecord, force: Bool = false) {
+        title.refresh(job.title, force: force)
+        problem.refresh(job.problem ?? "", force: force)
+        waitingFor.refresh(job.waitingFor ?? "", force: force)
     }
 }

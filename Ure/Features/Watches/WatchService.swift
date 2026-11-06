@@ -49,7 +49,7 @@ nonisolated struct WatchService: Sendable {
     }
 
     // Saves one fact. A value that is already saved changes nothing, not even the edit time.
-    func update(_ id: UUID, _ fact: WatchFact) async throws -> WatchRecord {
+    func update(_ id: UUID, _ fact: WatchFact) async throws -> Revision<WatchRecord> {
         try await coordinator.mutate { db, _, dependencies in
             guard var record = try WatchQueries.fetch(id, in: db) else {
                 throw ArchiveError.missingRecord
@@ -57,7 +57,7 @@ nonisolated struct WatchService: Sendable {
             try RecordAccess.requireWatch(id, in: db)
             let saved = record
             try record.apply(fact)
-            guard record != saved else { return saved }
+            guard record != saved else { return Revision(before: saved, after: saved) }
             if let caliberID = record.caliberID, caliberID != saved.caliberID {
                 guard let caliber = try CaliberQueries.fetch(caliberID, in: db) else {
                     throw WatchError.unavailableCaliber
@@ -68,7 +68,7 @@ nonisolated struct WatchService: Sendable {
             record.updatedAt = Date(
                 timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
             try WatchQueries.update(record, in: db)
-            return record
+            return Revision(before: saved, after: record)
         }
     }
 }

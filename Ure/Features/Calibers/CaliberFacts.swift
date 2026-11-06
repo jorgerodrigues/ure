@@ -17,7 +17,7 @@ nonisolated enum CaliberNumbers {
 }
 
 // The facts on one caliber's page, in reading order. The name is the page's title. Each one is
-// written in place and saves on its own.
+// written in place and saves on its own, as an edit on the library's queue.
 struct CaliberFacts {
     let name: FactField
     let maker: FactField
@@ -28,57 +28,70 @@ struct CaliberFacts {
     let liftAngle: FactField
 
     var all: [FactField] { [name, maker, winding, beatRate, jewels, powerReserve, liftAngle] }
-    var hasUnsavedChanges: Bool { all.contains { $0.hasUnsavedChanges } }
+    // A fact holds text that has not saved, such as text the fact does not take.
+    var hasUnsavedText: Bool { all.contains(where: \.hasUnsavedText) }
 
     init(
-        caliber: CaliberRecord, service: CaliberService, locale: Locale,
+        caliber: CaliberRecord, queue: EditQueue, locale: Locale,
         makers: @escaping () -> [FactSuggestion],
         pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         let id = caliber.id
         let values = Self.texts(of: caliber, locale: locale)
-        name = FactField(
-            label: "Name", prompt: "Name", actionName: "Name", text: values.name,
-            rule: .required("Enter a name."),
-            save: { text in _ = try await service.update(id, .name(text)) }, pause: pause)
-        maker = FactField(
-            label: "Maker", prompt: "Add maker", actionName: "Maker", text: values.maker,
-            rule: .anyText, suggestions: makers,
-            save: { text in _ = try await service.update(id, .maker(text)) }, pause: pause)
-        winding = FactField(
-            label: "Winding", prompt: "Add winding", actionName: "Winding",
-            text: values.winding, rule: Self.windingRule,
-            save: { text in _ = try await service.update(id, .winding(Winding(written: text))) },
-            pause: pause)
-        beatRate = Self.number(
-            "Beat rate", prompt: "Add beat rate", actionName: "Beat Rate", text: values.beatRate,
-            entry: CaliberNumbers.beatRate, locale: locale, pause: pause
-        ) { value in _ = try await service.update(id, .beatRate(value)) }
-        jewels = Self.number(
-            "Jewels", prompt: "Add jewels", actionName: "Jewels", text: values.jewels,
-            entry: CaliberNumbers.jewels, locale: locale, pause: pause
-        ) { value in _ = try await service.update(id, .jewels(value)) }
-        powerReserve = Self.number(
+        func fact(
+            _ label: String, prompt: String, actionName: String, _ text: String,
+            rule: FactRule, suggestions: @escaping () -> [FactSuggestion] = { [] },
+            _ fact: @escaping (String) throws -> CaliberFact
+        ) -> FactField {
+            FactField(
+                label: label, prompt: prompt, actionName: actionName, text: text, rule: rule,
+                suggestions: suggestions, queue: queue, scope: .calibers,
+                edit: { text in .caliber(.set(id, try fact(text))) }, pause: pause)
+        }
+        func number(
+            _ label: String, prompt: String, actionName: String, _ text: String,
+            entry: NumberEntry, _ make: @escaping (Double?) -> CaliberFact
+        ) -> FactField {
+            fact(
+                label, prompt: prompt, actionName: actionName, text,
+                rule: .number(entry, locale: locale)
+            ) { text in make(try entry.value(from: text, locale: locale)) }
+        }
+        name = fact(
+            "Name", prompt: "Name", actionName: "Name", values.name,
+            rule: .required("Enter a name."), CaliberFact.name)
+        maker = fact(
+            "Maker", prompt: "Add maker", actionName: "Maker", values.maker, rule: .anyText,
+            suggestions: makers, CaliberFact.maker)
+        winding = fact(
+            "Winding", prompt: "Add winding", actionName: "Winding", values.winding,
+            rule: Self.windingRule
+        ) { text in .winding(Winding(written: text)) }
+        beatRate = number(
+            "Beat rate", prompt: "Add beat rate", actionName: "Beat Rate", values.beatRate,
+            entry: CaliberNumbers.beatRate, CaliberFact.beatRate)
+        jewels = number(
+            "Jewels", prompt: "Add jewels", actionName: "Jewels", values.jewels,
+            entry: CaliberNumbers.jewels, CaliberFact.jewels)
+        powerReserve = number(
             "Power reserve", prompt: "Add power reserve", actionName: "Power Reserve",
-            text: values.powerReserve, entry: CaliberNumbers.powerReserve, locale: locale,
-            pause: pause
-        ) { value in _ = try await service.update(id, .powerReserve(value)) }
-        liftAngle = Self.number(
-            "Lift angle", prompt: "Add lift angle", actionName: "Lift Angle",
-            text: values.liftAngle, entry: CaliberNumbers.liftAngle, locale: locale, pause: pause
-        ) { value in _ = try await service.update(id, .liftAngle(value)) }
+            values.powerReserve, entry: CaliberNumbers.powerReserve, CaliberFact.powerReserve)
+        liftAngle = number(
+            "Lift angle", prompt: "Add lift angle", actionName: "Lift Angle", values.liftAngle,
+            entry: CaliberNumbers.liftAngle, CaliberFact.liftAngle)
     }
 
-    // Shows the stored values in every field that has nothing waiting to save.
-    func refresh(_ caliber: CaliberRecord, locale: Locale) {
+    // Shows the stored values in every field that has nothing waiting to save. After Undo and
+    // Redo the fields take them also while one has the cursor.
+    func refresh(_ caliber: CaliberRecord, locale: Locale, force: Bool = false) {
         let values = Self.texts(of: caliber, locale: locale)
-        name.refresh(values.name)
-        maker.refresh(values.maker)
-        winding.refresh(values.winding)
-        beatRate.refresh(values.beatRate)
-        jewels.refresh(values.jewels)
-        powerReserve.refresh(values.powerReserve)
-        liftAngle.refresh(values.liftAngle)
+        name.refresh(values.name, force: force)
+        maker.refresh(values.maker, force: force)
+        winding.refresh(values.winding, force: force)
+        beatRate.refresh(values.beatRate, force: force)
+        jewels.refresh(values.jewels, force: force)
+        powerReserve.refresh(values.powerReserve, force: force)
+        liftAngle.refresh(values.liftAngle, force: force)
     }
 
     private static let windingRule = FactRule(
@@ -88,18 +101,6 @@ struct CaliberFacts {
             return "Choose Manual, Automatic or Quartz."
         },
         normalized: { text in Winding(written: text)?.rawValue ?? "" })
-
-    private static func number(
-        _ label: String, prompt: String, actionName: String, text: String, entry: NumberEntry,
-        locale: Locale, pause: @escaping (Duration) async throws -> Void,
-        save: @escaping (Double?) async throws -> Void
-    ) -> FactField {
-        FactField(
-            label: label, prompt: prompt, actionName: actionName, text: text,
-            rule: .number(entry, locale: locale),
-            save: { text in try await save(entry.value(from: text, locale: locale)) },
-            pause: pause)
-    }
 
     private static func texts(of caliber: CaliberRecord, locale: Locale) -> CaliberTexts {
         CaliberTexts(

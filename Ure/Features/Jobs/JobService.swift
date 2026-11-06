@@ -81,23 +81,26 @@ nonisolated struct JobService: Sendable {
     // job needs a watch that is not archived and has no other open job. When the watch goes,
     // a cover the watch took from this job's photos goes too, so the watch never shows a photo
     // that is no longer its own.
-    func setWatch(_ id: UUID, to watchID: UUID?) async throws -> JobRecord {
+    func setWatch(_ id: UUID, to watchID: UUID?) async throws -> Revision<JobRecord> {
         try await coordinator.mutate { db, _, dependencies in
-            try Self.setWatch(id, to: watchID, at: dependencies.now(), in: db)
+            let before = try Self.requireJob(id, in: db)
+            let after = try Self.setWatch(id, to: watchID, at: dependencies.now(), in: db)
+            return Revision(before: before, after: after)
         }
     }
 
     // Makes a watch with the name you typed in the picker and gives it to the job, in one go.
-    func setNewWatch(_ id: UUID, named name: String) async throws -> JobRecord {
+    func setNewWatch(_ id: UUID, named name: String) async throws -> Revision<JobRecord> {
         try await coordinator.mutate { db, _, dependencies in
-            _ = try Self.requireJob(id, in: db)
+            let before = try Self.requireJob(id, in: db)
             let now = Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
             let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
             let watch = WatchRecord(
                 id: dependencies.makeID(), name: trimmed.isEmpty ? WatchService.newName : trimmed,
                 createdAt: now, updatedAt: now)
             try WatchQueries.insert(watch, in: db)
-            return try Self.setWatch(id, to: watch.id, at: now, in: db)
+            let after = try Self.setWatch(id, to: watch.id, at: now, in: db)
+            return Revision(before: before, after: after)
         }
     }
 
@@ -123,16 +126,16 @@ nonisolated struct JobService: Sendable {
 
     // Saves one fact. A value that is already saved changes nothing, not even the edit time. A
     // Done job takes changes like any other.
-    func update(_ id: UUID, _ fact: JobFact) async throws -> JobRecord {
+    func update(_ id: UUID, _ fact: JobFact) async throws -> Revision<JobRecord> {
         try await coordinator.mutate { db, _, dependencies in
             var record = try Self.requireJob(id, in: db)
             let saved = record
             try record.apply(fact)
-            guard record != saved else { return saved }
+            guard record != saved else { return Revision(before: saved, after: saved) }
             record.updatedAt = Date(
                 timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
             try JobQueries.update(record, in: db)
-            return record
+            return Revision(before: saved, after: record)
         }
     }
 
@@ -154,11 +157,12 @@ nonisolated struct JobService: Sendable {
     }
 
     // Puts back a state as it was, with its waiting text and done date. Undo and Redo use it.
-    func restoreStage(_ id: UUID, to value: JobStageValue) async throws -> JobRecord {
+    func restoreStage(_ id: UUID, to value: JobStageValue) async throws -> JobStageChange {
         try await coordinator.mutate { db, _, dependencies in
             let existing = try Self.requireJob(id, in: db)
             let now = Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
-            return try Self.write(value, to: existing, at: now, in: db)
+            let job = try Self.write(value, to: existing, at: now, in: db)
+            return JobStageChange(prior: JobStageValue(job: existing), job: job)
         }
     }
 

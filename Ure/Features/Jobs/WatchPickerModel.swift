@@ -37,38 +37,40 @@ final class WatchPickerModel {
         highlighted = 0
     }
 
-    // Gives the selected job the picked watch and selects that watch. A watch with an open job
-    // opens that job instead, because a watch has one open job at a time. The job being set up
-    // goes then only once every field has saved and it holds nothing. True when the job page
-    // now shows a job with a watch.
+    // Gives the selected job the picked watch and selects that watch once it has saved. A watch
+    // with an open job opens that job instead, because a watch has one open job at a time. The
+    // job being set up goes then, after everything typed before it, when it holds nothing and no
+    // typing is left unsaved. False when nothing could be picked.
     @discardableResult
-    func pick(
-        _ item: WatchPickerItem, editing: WorkshopEditing, undoManager: UndoManager?
-    ) async -> Bool {
+    func pick(_ item: WatchPickerItem, editing: WorkshopEditing, undoManager: UndoManager?)
+        -> Bool
+    {
         let jobs = editing.jobs
         let watches = editing.watches
         switch item {
         case .watch(let choice) where choice.openJob != nil:
-            // The pick belongs to the job it started on. Choosing another job while the fields
-            // save stops it.
-            let jobID = jobs.selectedID
-            let saved = await editing.saveAllFields()
-            guard jobs.selectedID == jobID else { return false }
-            let blankID = saved && !editing.hasUnsavedFields ? jobID : nil
-            guard let job = await jobs.openOpenJob(of: choice.watch.id, discardingBlank: blankID)
+            guard let job = jobs.openOpenJob(of: choice.watch.id, discardingBlank: jobs.selectedID)
             else { return false }
             watches.select(job.watchID)
+            reset()
         case .watch(let choice):
-            guard await jobs.chooseWatch(choice.watch.id, undoManager: undoManager) else {
-                return false
+            let watchID = choice.watch.id
+            let picked = jobs.chooseWatch(watchID, undoManager: undoManager) { [weak self] result in
+                guard result.isSaved else { return }
+                watches.select(watchID)
+                self?.reset()
             }
-            watches.select(choice.watch.id)
+            return picked != nil
         case .newWatch(let name):
-            guard let watchID = await jobs.chooseNewWatch(named: name, undoManager: undoManager)
-            else { return false }
-            watches.select(watchID)
+            let picked = jobs.chooseNewWatch(named: name, undoManager: undoManager) {
+                [weak self] result in
+                for case .job(let job) in result.changes {
+                    watches.select(job.watchID)
+                    self?.reset()
+                }
+            }
+            return picked != nil
         }
-        reset()
         return true
     }
 }

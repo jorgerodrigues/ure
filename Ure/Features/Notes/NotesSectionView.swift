@@ -26,7 +26,10 @@ struct NotesSectionView: View {
 
     @ViewBuilder private var content: some View {
         if let field = notes.field(for: owner) {
-            NotesEditor(field: field, isEditable: editing.canWrite(owner)).id(owner)
+            NotesEditor(
+                field: field, saveError: notes.saveError(for: owner),
+                isEditable: editing.canWrite(owner)
+            ).id(owner)
         } else if let error = notes.loadErrors[owner] {
             Label(error, systemImage: "exclamationmark.triangle")
             Button("Retry", action: retry)
@@ -41,6 +44,7 @@ struct NotesSectionView: View {
 
 private struct NotesEditor: View {
     let field: AutosaveField
+    let saveError: String?
     let isEditable: Bool
 
     var body: some View {
@@ -52,7 +56,7 @@ private struct NotesEditor: View {
                         NotesPrompt(isEditable: isEditable)
                     }
                 }
-            if let error = field.saveError {
+            if let error = saveError {
                 NotesSaveFailure(message: error, retry: field.saveNow)
             } else if field.isEditing {
                 Text("Saved as you type · Esc undoes this field")

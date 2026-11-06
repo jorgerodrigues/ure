@@ -34,7 +34,7 @@ nonisolated struct CaliberService: Sendable {
     }
 
     // Saves one fact. A value that is already saved changes nothing, not even the edit time.
-    func update(_ id: UUID, _ fact: CaliberFact) async throws -> CaliberRecord {
+    func update(_ id: UUID, _ fact: CaliberFact) async throws -> Revision<CaliberRecord> {
         try await coordinator.mutate { db, _, dependencies in
             guard var record = try CaliberQueries.fetch(id, in: db) else {
                 throw ArchiveError.missingRecord
@@ -42,11 +42,11 @@ nonisolated struct CaliberService: Sendable {
             try RecordAccess.requireCaliber(id, in: db)
             let saved = record
             try record.apply(fact)
-            guard record != saved else { return saved }
+            guard record != saved else { return Revision(before: saved, after: saved) }
             record.updatedAt = Date(
                 timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
             try CaliberQueries.update(record, in: db)
-            return record
+            return Revision(before: saved, after: record)
         }
     }
 }

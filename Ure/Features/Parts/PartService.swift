@@ -110,16 +110,16 @@ nonisolated struct PartService: Sendable {
     }
 
     // Saves one fact. A value that is already saved changes nothing, not even the edit time.
-    func update(_ id: UUID, _ fact: PartFact) async throws -> PartRecord {
+    func update(_ id: UUID, _ fact: PartFact) async throws -> Revision<PartRecord> {
         try await coordinator.mutate { db, _, dependencies in
             var record = try Self.requirePart(id, in: db)
             let saved = record
             try record.apply(fact)
-            guard record != saved else { return saved }
+            guard record != saved else { return Revision(before: saved, after: saved) }
             record.updatedAt = Date(
                 timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
             try PartQueries.update(record, in: db)
-            return record
+            return Revision(before: saved, after: record)
         }
     }
 
@@ -145,32 +145,35 @@ nonisolated struct PartService: Sendable {
     }
 
     // Puts back a state as it was, with its dates. Undo and Redo use it.
-    func restoreStage(_ id: UUID, to value: PartStageValue) async throws -> PartRecord {
+    func restoreStage(_ id: UUID, to value: PartStageValue) async throws -> PartStageChange {
         try await coordinator.mutate { db, _, dependencies in
             let existing = try Self.requirePart(id, in: db)
-            return try Self.write(value, to: existing, at: dependencies.now(), in: db)
+            let part = try Self.write(value, to: existing, at: dependencies.now(), in: db)
+            return PartStageChange(prior: PartStageValue(part: existing), part: part)
         }
     }
 
     // Moves a spare that is in hand from the drawer to the end of a job's parts.
-    func useSpare(_ id: UUID, on jobID: UUID) async throws -> PartRecord {
+    func useSpare(_ id: UUID, on jobID: UUID) async throws -> Revision<PartRecord> {
         try await coordinator.mutate { db, _, dependencies in
             let spare = try Self.requirePart(id, in: db)
             guard spare.isSpare, spare.stage == .inHand else { throw PartError.spareTaken }
             _ = try JobService.requireJob(jobID, in: db)
             let placement = PartPlacement(
                 jobID: jobID, position: try PartQueries.nextPosition(on: jobID, in: db))
-            return try Self.place(spare, at: placement, time: dependencies.now(), in: db)
+            let used = try Self.place(spare, at: placement, time: dependencies.now(), in: db)
+            return Revision(before: spare, after: used)
         }
     }
 
     // Puts a part back where it was, on a job or in the drawer. Undo and Redo of a spare's use
     // call it.
-    func place(_ id: UUID, at placement: PartPlacement) async throws -> PartRecord {
+    func place(_ id: UUID, at placement: PartPlacement) async throws -> Revision<PartRecord> {
         try await coordinator.mutate { db, _, dependencies in
             let part = try Self.requirePart(id, in: db)
             if let jobID = placement.jobID { _ = try JobService.requireJob(jobID, in: db) }
-            return try Self.place(part, at: placement, time: dependencies.now(), in: db)
+            let placed = try Self.place(part, at: placement, time: dependencies.now(), in: db)
+            return Revision(before: part, after: placed)
         }
     }
 

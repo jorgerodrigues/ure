@@ -9,7 +9,7 @@ nonisolated enum WatchNumbers {
 }
 
 // The facts on one watch's page, in reading order. The name is the page's title. Each one is
-// written in place and saves on its own. The caliber fact holds the caliber's ID, and its
+// written in place and saves on its own, as an edit on the library's queue. The caliber fact holds the caliber's ID, and its
 // pop-up shows the caliber's maker and name.
 struct WatchFacts {
     let name: FactField
@@ -31,10 +31,11 @@ struct WatchFacts {
             owner, contact,
         ]
     }
-    var hasUnsavedChanges: Bool { all.contains { $0.hasUnsavedChanges } }
+    // A fact holds text that has not saved, such as text the fact does not take.
+    var hasUnsavedText: Bool { all.contains(where: \.hasUnsavedText) }
 
     init(
-        watch: WatchRecord, service: WatchService, locale: Locale,
+        watch: WatchRecord, queue: EditQueue, locale: Locale,
         brands: @escaping () -> [FactSuggestion],
         pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
@@ -47,8 +48,8 @@ struct WatchFacts {
         ) -> FactField {
             FactField(
                 label: label, prompt: prompt, actionName: actionName, text: value, rule: rule,
-                suggestions: suggestions,
-                save: { text in _ = try await service.update(id, fact(text)) }, pause: pause)
+                suggestions: suggestions, queue: queue, scope: .watches,
+                edit: { text in .watch(.set(id, fact(text))) }, pause: pause)
         }
         func number(
             _ label: String, prompt: String, actionName: String, _ value: String,
@@ -56,9 +57,8 @@ struct WatchFacts {
         ) -> FactField {
             FactField(
                 label: label, prompt: prompt, actionName: actionName, text: value,
-                rule: .number(entry, locale: locale),
-                save: { text in
-                    _ = try await service.update(id, fact(entry.value(from: text, locale: locale)))
+                rule: .number(entry, locale: locale), queue: queue, scope: .watches,
+                edit: { text in .watch(.set(id, fact(try entry.value(from: text, locale: locale))))
                 }, pause: pause)
         }
         name = text(
@@ -98,21 +98,22 @@ struct WatchFacts {
             fact: WatchFact.contact)
     }
 
-    // Shows the stored values in every field that has nothing waiting to save.
-    func refresh(_ watch: WatchRecord, locale: Locale) {
+    // Shows the stored values in every field that has nothing waiting to save. After Undo and
+    // Redo the fields take them also while one has the cursor.
+    func refresh(_ watch: WatchRecord, locale: Locale, force: Bool = false) {
         let values = Self.texts(of: watch, locale: locale)
-        name.refresh(values.name)
-        brand.refresh(values.brand)
-        model.refresh(values.model)
-        reference.refresh(values.reference)
-        serial.refresh(values.serial)
-        year.refresh(values.year)
-        caliber.refresh(values.caliber)
-        caseMaterial.refresh(values.caseMaterial)
-        diameter.refresh(values.diameter)
-        lugWidth.refresh(values.lugWidth)
-        owner.refresh(values.owner)
-        contact.refresh(values.contact)
+        name.refresh(values.name, force: force)
+        brand.refresh(values.brand, force: force)
+        model.refresh(values.model, force: force)
+        reference.refresh(values.reference, force: force)
+        serial.refresh(values.serial, force: force)
+        year.refresh(values.year, force: force)
+        caliber.refresh(values.caliber, force: force)
+        caseMaterial.refresh(values.caseMaterial, force: force)
+        diameter.refresh(values.diameter, force: force)
+        lugWidth.refresh(values.lugWidth, force: force)
+        owner.refresh(values.owner, force: force)
+        contact.refresh(values.contact, force: force)
     }
 
     private static func texts(of watch: WatchRecord, locale: Locale) -> WatchTexts {

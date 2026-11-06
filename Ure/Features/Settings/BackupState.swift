@@ -12,13 +12,18 @@ final class BackupState {
     private(set) var message: String?
     private(set) var errorMessage: String?
     private let coordinator: LibraryCoordinator
+    private let editing: WorkshopEditing
     private let defaults: UserDefaults
     private let exportKey: String
     private var operation: Task<Void, Never>?
     private var panel: NSSavePanel?
 
-    init(coordinator: LibraryCoordinator, defaults: UserDefaults = .standard) {
+    init(
+        coordinator: LibraryCoordinator, editing: WorkshopEditing,
+        defaults: UserDefaults = .standard
+    ) {
         self.coordinator = coordinator
+        self.editing = editing
         self.defaults = defaults
         exportKey = "lastLibraryExport." + coordinator.root.standardizedFileURL.path
         if let saved = defaults.object(forKey: exportKey) as? Date { lastExport = saved }
@@ -78,7 +83,11 @@ final class BackupState {
         let version =
             Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
             ?? "Unknown"
-        operation = Task { await performExport(to: destination, version: version) }
+        operation = Task {
+            // The backup holds every change made before it, including typing on screen.
+            _ = await editing.saveAllFields()
+            await performExport(to: destination, version: version)
+        }
     }
 
     func cancel() {

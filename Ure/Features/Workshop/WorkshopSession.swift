@@ -4,6 +4,8 @@ import Observation
 @Observable
 final class WorkshopSession {
     let id = UUID()
+    // Every change to the library goes through this one queue, in the order you made it.
+    let queue: EditQueue
     let navigation: WorkshopNavigation
     let watches: WatchState
     let calibers: CaliberState
@@ -19,17 +21,19 @@ final class WorkshopSession {
     let bench: BenchReferenceState
 
     init(coordinator: LibraryCoordinator, configuration: AppConfiguration) {
+        queue = EditQueue(coordinator: coordinator)
         navigation = WorkshopNavigation(configuration: configuration)
-        watches = WatchState(service: WatchService(coordinator: coordinator))
-        calibers = CaliberState(service: CaliberService(coordinator: coordinator))
-        jobs = JobState(service: JobService(coordinator: coordinator))
-        checklist = ChecklistState(service: ChecklistService(coordinator: coordinator))
-        parts = PartState(service: PartService(coordinator: coordinator))
-        notes = RecordNotesState(service: RecordNotesService(coordinator: coordinator))
-        material = MaterialState(service: MaterialService(coordinator: coordinator))
+        watches = WatchState(queue: queue)
+        calibers = CaliberState(queue: queue)
+        jobs = JobState(queue: queue)
+        checklist = ChecklistState(queue: queue)
+        parts = PartState(service: PartService(coordinator: coordinator), queue: queue)
+        notes = RecordNotesState(queue: queue)
+        material = MaterialState(
+            service: MaterialService(coordinator: coordinator), queue: queue)
         editing = WorkshopEditing(
-            watches: watches, calibers: calibers, jobs: jobs, notes: notes, material: material,
-            checklist: checklist, parts: parts)
+            queue: queue, watches: watches, calibers: calibers, jobs: jobs, notes: notes,
+            material: material, checklist: checklist, parts: parts)
         search = SearchState(coordinator: coordinator)
         jobList = JobListState(coordinator: coordinator)
         partList = PartListState(coordinator: coordinator)
@@ -41,12 +45,6 @@ final class WorkshopSession {
     func prepareForRestore() {
         bench.stop()
         bench.clearForRestore()
-        notes.discardUndo()
-        material.discardUndo()
-        calibers.discardUndo()
-        watches.discardUndo()
-        jobs.discardUndo()
-        checklist.discardUndo()
-        parts.discardUndo()
+        queue.discardUndo()
     }
 }

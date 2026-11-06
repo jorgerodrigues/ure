@@ -23,14 +23,16 @@ final class RestoreState {
     init(library: LibraryState, configuration: AppConfiguration) {
         self.library = library
         self.configuration = configuration
-        session = WorkshopSession(coordinator: library.coordinator, configuration: configuration)
-        backup = BackupState(coordinator: library.coordinator)
+        let session = WorkshopSession(
+            coordinator: library.coordinator, configuration: configuration)
+        self.session = session
+        backup = BackupState(coordinator: library.coordinator, editing: session.editing)
     }
 
     var isBusy: Bool { isStaging || isActivating }
     var canRestore: Bool {
         guard case .ready = library.phase else { return false }
-        return !isBusy && !backup.isExporting && !session.editing.isSaving
+        return !isBusy && !backup.isExporting && session.editing.queue.isIdle
             && !session.editing.hasUnsavedFields
     }
 
@@ -119,18 +121,21 @@ final class RestoreState {
         errorMessage = nil
         let coordinator = library.coordinator
         self.staged = nil
+        let editing = session.editing
         session.prepareForRestore()
         library.beginRestore()
         operation = Task {
             defer { isActivating = false; operation = nil }
             do {
+                // A change that came in since the check saves before the library is replaced.
+                _ = await editing.saveAllFields()
                 let result = try await coordinator.activateRestore(staged)
                 recoveryDirectory = result.recovery?.directory
                 self.staged = result.candidate
                 library.finishRestore(result)
                 session = WorkshopSession(
                     coordinator: library.coordinator, configuration: configuration)
-                backup = BackupState(coordinator: library.coordinator)
+                backup = BackupState(coordinator: library.coordinator, editing: session.editing)
                 if case .restored = result.outcome {
                     message = result.message
                 } else {

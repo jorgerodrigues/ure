@@ -2,6 +2,7 @@ import Observation
 
 @Observable
 final class WorkshopEditing {
+    let queue: EditQueue
     let watches: WatchState
     let calibers: CaliberState
     let jobs: JobState
@@ -11,9 +12,11 @@ final class WorkshopEditing {
     let parts: PartState
 
     init(
-        watches: WatchState, calibers: CaliberState, jobs: JobState, notes: RecordNotesState,
-        material: MaterialState, checklist: ChecklistState, parts: PartState
+        queue: EditQueue, watches: WatchState, calibers: CaliberState, jobs: JobState,
+        notes: RecordNotesState, material: MaterialState, checklist: ChecklistState,
+        parts: PartState
     ) {
+        self.queue = queue
         self.watches = watches
         self.calibers = calibers
         self.jobs = jobs
@@ -55,41 +58,21 @@ final class WorkshopEditing {
         material.close()
     }
 
-    // Fields that save as you type, such as notes, material titles, the facts on watch,
-    // caliber, job and part pages, and checklists. They never ask to be saved, so nothing is a
-    // draft.
-    var hasUnsavedFields: Bool {
-        notes.hasUnsavedChanges || material.hasUnsavedTitles || calibers.hasUnsavedFacts
-            || watches.hasUnsavedFacts || jobs.hasUnsavedFacts || checklist.hasUnsavedChanges
-            || parts.hasUnsavedFacts
-    }
+    // Text on screen that has not saved, in fields that save as you type, such as notes,
+    // material titles, the facts on watch, caliber, job and part pages, checklists, and part
+    // names that did not save. They never ask to be saved, so nothing is a draft.
+    var hasUnsavedFields: Bool { queue.hasUnsavedTyping }
 
-    func saveFieldsNow() {
-        notes.saveNow()
-        material.saveTitlesNow()
-        calibers.saveFactsNow()
-        watches.saveFactsNow()
-        jobs.saveFactsNow()
-        checklist.saveNow()
-        parts.saveFactsNow()
-    }
+    // Submits the typing on screen now, as leaving a page does.
+    func saveFieldsNow() { queue.flushTyping() }
 
-    func saveAllFields() async -> Bool {
-        let notesSaved = await notes.saveAll()
-        let titlesSaved = await material.saveAllTitles()
-        let caliberFactsSaved = await calibers.saveAllFacts()
-        let watchFactsSaved = await watches.saveAllFacts()
-        let jobFactsSaved = await jobs.saveAllFacts()
-        let checklistsSaved = await checklist.saveAll()
-        let partFactsSaved = await parts.saveAllFacts()
-        return notesSaved && titlesSaved && caliberFactsSaved && watchFactsSaved
-            && jobFactsSaved && checklistsSaved && partFactsSaved
-    }
+    // The one wait before quitting, closing the window, restoring and exporting a backup: every
+    // field saves, and every change waiting in the queue runs. True when nothing on screen is
+    // left unsaved.
+    func saveAllFields() async -> Bool { await queue.saveEverything() }
 
-    var isSaving: Bool {
-        watches.isSaving || calibers.isSaving || jobs.isSaving || material.isBusy
-            || parts.isSaving
-    }
+    // A change other than typing is still saving, or a file is being copied out.
+    var isSaving: Bool { queue.isBusy || material.isExporting }
 
     // Leaving a page saves what you typed on it and asks nothing. Nothing moves while a change
     // is still saving.

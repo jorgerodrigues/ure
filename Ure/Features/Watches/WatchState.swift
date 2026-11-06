@@ -4,19 +4,16 @@ import Observation
 
 // The watches in the library and the page you write each one on. A watch page has no draft:
 // each fact saves on its own as you type, like notes. Any watch can be archived, and Undo
-// brings it back.
+// brings it back. Every change goes through the library's edit queue.
 @Observable
 final class WatchState {
-    private let service: WatchService
+    private let queue: EditQueue
     @ObservationIgnored private let locale: Locale
     @ObservationIgnored private let pause: (Duration) async throws -> Void
-    @ObservationIgnored private let archiving = ChangeUndo<Bool>()
     private(set) var watches: [WatchRecord] = []
     private(set) var selectedID: UUID?
     private(set) var isLoading = true
-    private(set) var isSaving = false
     private(set) var loadError: String?
-    private(set) var saveError: String?
     private(set) var facts: [UUID: WatchFacts] = [:]
     // A watch just made with ⌘N. Its page puts the cursor in its name.
     private(set) var nameToFocus: UUID?
@@ -25,13 +22,21 @@ final class WatchState {
     var showsArchived = false
 
     init(
-        service: WatchService, locale: Locale = .autoupdatingCurrent,
+        queue: EditQueue, locale: Locale = .autoupdatingCurrent,
         pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
-        self.service = service
+        self.queue = queue
         self.locale = locale
         self.pause = pause
+        queue.listen { [weak self] change, byUndo in
+            guard case .watch(let record) = change else { return }
+            self?.adopt(record, force: byUndo)
+        }
     }
+
+    // A watch change, such as ⌘N or an archive, is still saving.
+    var isSaving: Bool { queue.isBusy(.watches) }
+    var saveError: String? { queue.failure(in: .watches) }
 
     var selectedWatch: WatchRecord? { watches.first { $0.id == selectedID } }
 
@@ -57,13 +62,11 @@ final class WatchState {
         }
     }
 
-    var hasUnsavedFacts: Bool { facts.values.contains { $0.hasUnsavedChanges } }
-
     func observe() async {
         isLoading = true
         loadError = nil
         do {
-            let values = try await service.coordinator.watchValues()
+            let values = try await queue.coordinator.watchValues()
             for try await records in values {
                 apply(records)
                 isLoading = false
@@ -82,76 +85,45 @@ final class WatchState {
     }
 
     // ⌘N makes a watch and puts the cursor in its name.
-    func createCommand() { Task { await create() } }
+    func createCommand() { create() }
 
     @discardableResult
-    func create() async -> Bool {
-        guard !isSaving else { return false }
-        isSaving = true
-        saveError = nil
-        defer { isSaving = false }
-        do {
-            let record = try await service.create()
-            if !watches.contains(where: { $0.id == record.id }) {
-                apply(watches + [record])
+    func create() -> EditTicket? {
+        guard !isSaving else { return nil }
+        return queue.submit(.watch(.create), in: .watches) { [weak self] result in
+            guard let self else { return }
+            for case .watch(let record) in result.changes {
+                searchText = ""
+                selectedID = record.id
+                nameToFocus = record.id
             }
-            searchText = ""
-            selectedID = record.id
-            nameToFocus = record.id
-            return true
-        } catch {
-            saveError = error.localizedDescription
-            return false
         }
     }
 
     func nameFocused() { nameToFocus = nil }
 
-    func toggleArchiveCommand(undoManager: UndoManager?) {
-        Task { await toggleArchive(undoManager: undoManager) }
-    }
+    func toggleArchiveCommand(undoManager: UndoManager?) { toggleArchive(undoManager: undoManager) }
 
-    // Archives the selected watch, or unarchives it. Undo puts it back as it was.
+    // Archives the selected watch, or unarchives it. Undo puts it back as it was. Typing on the
+    // page saves first. A fact that does not save stops the archive, because an archived
+    // watch's facts can't be corrected.
     @discardableResult
-    func toggleArchive(undoManager: UndoManager? = nil) async -> Bool {
-        guard !isSaving, let record = selectedWatch else { return false }
+    func toggleArchive(undoManager: UndoManager? = nil) -> EditTicket? {
+        guard !isSaving, let record = selectedWatch else { return nil }
         let id = record.id
         let archived = record.archivedAt == nil
-        let write: ChangeUndo<Bool>.Write = { [weak self] archived in
-            await self?.writeArchive(id, archived: archived) ?? false
+        queue.flushTyping()
+        if archived, facts[id]?.hasUnsavedText == true {
+            queue.report(CaliberState.unsavedFacts, in: .watches)
+            return nil
         }
-        guard await archiving.perform(archived, write: write) else { return false }
-        archiving.registerUndo(
-            setting: !archived, redoing: archived,
-            actionName: archived ? "Archive Watch" : "Unarchive Watch",
-            undoManager: undoManager, write: write)
-        return true
-    }
-
-    // Waits for an archive change that Undo or Redo started.
-    func waitForArchiveChanges() async { await archiving.wait() }
-
-    func saveFactsNow() {
-        for field in unsavedFields { field.saveNow() }
-    }
-
-    func saveAllFacts() async -> Bool {
-        var succeeded = true
-        for field in unsavedFields {
-            if await !field.flush() { succeeded = false }
-        }
-        return succeeded
-    }
-
-    func discardUndo() {
-        for facts in facts.values {
-            for field in facts.all { field.discardUndo() }
-        }
-        archiving.discardUndo()
-    }
-
-    private var unsavedFields: [FactField] {
-        facts.values.flatMap(\.all).filter(\.hasUnsavedChanges)
+        return queue.submit(
+            .watch(.archive(id, archived)), in: .watches,
+            undo: archived ? "Archive Watch" : "Unarchive Watch", undoManager: undoManager,
+            requires: EditCheck { [weak self] in
+                archived && self?.facts[id]?.hasUnsavedText == true
+                    ? CaliberState.unsavedFacts : nil
+            })
     }
 
     private func matching(_ records: [WatchRecord]) -> [WatchRecord] {
@@ -166,42 +138,26 @@ final class WatchState {
         }
     }
 
-    // Facts still saving finish first. A fact that does not save stops the archive, because an
-    // archived watch's facts can't be corrected.
-    private func writeArchive(_ id: UUID, archived: Bool) async -> Bool {
-        isSaving = true
-        saveError = nil
-        defer { isSaving = false }
-        if archived, let facts = facts[id] {
-            for field in facts.all where field.hasUnsavedChanges {
-                guard await field.flush() else {
-                    saveError = "A fact on this page did not save. Correct it or undo it first."
-                    return false
-                }
-            }
+    private func adopt(_ record: WatchRecord, force: Bool) {
+        var records = watches
+        if let index = records.firstIndex(where: { $0.id == record.id }) {
+            records[index] = record
+        } else {
+            records.append(record)
         }
-        do {
-            let saved = try await ArchiveService(coordinator: service.coordinator).setWatch(
-                id, archived: archived)
-            if let index = watches.firstIndex(where: { $0.id == saved.id }) {
-                watches[index] = saved
-            }
-            if saved.archivedAt != nil, saved.id == selectedID { showsArchived = true }
-            return true
-        } catch {
-            saveError = error.localizedDescription
-            return false
-        }
+        apply(records, forcing: force ? record.id : nil)
+        if record.archivedAt != nil, record.id == selectedID { showsArchived = true }
     }
 
-    private func apply(_ records: [WatchRecord]) {
+    // Undo and Redo of a watch's fact show the stored value also in a field with the cursor.
+    private func apply(_ records: [WatchRecord], forcing forced: UUID? = nil) {
         watches = records
         for record in records {
             if let existing = facts[record.id] {
-                existing.refresh(record, locale: locale)
+                existing.refresh(record, locale: locale, force: record.id == forced)
             } else {
                 facts[record.id] = WatchFacts(
-                    watch: record, service: service, locale: locale,
+                    watch: record, queue: queue, locale: locale,
                     brands: { [weak self] in self?.brands ?? [] }, pause: pause)
             }
         }

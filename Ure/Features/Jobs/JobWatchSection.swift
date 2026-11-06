@@ -148,7 +148,7 @@ private struct WatchPickerField: View {
         let editing = editing
         let undoManager = undoManager
         editing.requestNavigation {
-            Task { await picker.pick(item, editing: editing, undoManager: undoManager) }
+            picker.pick(item, editing: editing, undoManager: undoManager)
         }
     }
 }
