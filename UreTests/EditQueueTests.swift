@@ -479,6 +479,91 @@ struct EditQueueTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
+    func undoShowsAtOnceSoTypingAfterItBuildsOnTheUndoneText() async throws {
+        let library = try await NotesLibrary.make(notes: "Saved", pause: PauseGate().pause)
+        let field = library.field
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        field.beginEditing()
+        undo.beginUndoGrouping()
+        field.change(to: "Saved and typed", undoManager: undo)
+        undo.endUndoGrouping()
+        field.saveNow()
+        await library.queue.waitUntilIdle()
+
+        // ⌘Z while the library is held shows the text before at once, and typing follows it.
+        let (hold, holding) = try await LibraryHold.start(on: library.coordinator)
+        undo.undo()
+        #expect(field.text == "Saved")
+        undo.beginUndoGrouping()
+        field.change(to: "Saved again", undoManager: undo)
+        undo.endUndoGrouping()
+        field.saveNow()
+        hold.release()
+        _ = try await holding.value
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored() == "Saved again" && field.text == "Saved again")
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func redoBringsBackTextThatFailedToSaveAndWasUndone() async throws {
+        let library = try await NotesLibrary.make(notes: "Saved", pause: PauseGate().pause)
+        let field = library.field
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        try await JobTaskFixture.failWrites(library.coordinator, on: "caliber")
+        field.beginEditing()
+        undo.beginUndoGrouping()
+        field.change(to: "Saved and typed", undoManager: undo)
+        undo.endUndoGrouping()
+        field.saveNow()
+        await library.queue.waitUntilIdle()
+        #expect(field.saveError != nil)
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(field.text == "Saved" && field.saveError == nil && !library.queue.hasUnsavedTyping)
+        try await JobTaskFixture.allowWrites(library.coordinator, on: "caliber")
+        undo.redo()
+        await library.queue.waitUntilIdle()
+        #expect(field.text == "Saved and typed")
+        #expect(try await library.stored() == "Saved and typed")
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func redoAfterAFailedUndoLeavesNothingForTryAgain() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let watch = try await WatchService(coordinator: coordinator).create(named: "Seamaster")
+        let queue = EditQueue(coordinator: coordinator)
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        undo.beginUndoGrouping()
+        let archiving = queue.submit(
+            .watch(.archive(watch.id, true)), in: .watches, undo: "Archive Watch",
+            undoManager: undo)
+        undo.endUndoGrouping()
+        #expect(await archiving.saved)
+        try await JobTaskFixture.failWrites(coordinator, on: "watch")
+        undo.undo()
+        await queue.waitUntilIdle()
+        #expect(queue.failure(in: .watches) != nil)
+        try await JobTaskFixture.allowWrites(coordinator, on: "watch")
+        undo.redo()
+        await queue.waitUntilIdle()
+        #expect(!queue.retryUndo(in: .watches))
+        undo.undo()
+        await queue.waitUntilIdle()
+        #expect(
+            try await coordinator.read { try WatchQueries.fetch(watch.id, in: $0) }?.archivedAt
+                == nil)
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
     func anUndoThatFailedCanBeTriedAgain() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
@@ -612,9 +697,14 @@ struct EditQueueTests {
         undo.endUndoGrouping()
         name.saveNow()
         await editing.queue.waitUntilIdle()
+        try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failBadName") }
         undo.undo()
         await editing.queue.waitUntilIdle()
         #expect(try await stored(part.id, coordinator)?.name == "Good")
+        // Each ⌘Z puts back the text the field showed before that burst.
+        undo.undo()
+        await editing.queue.waitUntilIdle()
+        #expect(try await stored(part.id, coordinator)?.name == "Bad")
         undo.undo()
         await editing.queue.waitUntilIdle()
         #expect(try await stored(part.id, coordinator)?.name == "Mainspring")

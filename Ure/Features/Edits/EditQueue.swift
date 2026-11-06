@@ -44,6 +44,10 @@ enum EditResult {
     }
 }
 
+// The field or checklist that made a change, asked when Undo or Redo reaches it. It gets the
+// change and the way back's number, and says whether it put the change back itself.
+typealias UndoOwner = (_ undone: EditChange, _ back: EditChange) -> Bool
+
 // An edit the queue did not apply, because what it needs did not hold when its turn came, such
 // as a field on the record that did not save.
 nonisolated struct EditRefusal: LocalizedError, Equatable {
@@ -131,9 +135,10 @@ final class EditQueue {
     @ObservationIgnored private var lastChange = 0
     // The edit that undoes each change, once the change has saved.
     @ObservationIgnored private var inverses: [EditChange: LibraryEdit] = [:]
-    // Typing that a change's Undo reaches while it is still on screen, such as text that did not
-    // save. Undo asks it to submit or to go back to the stored text first.
-    @ObservationIgnored private var typingUndo: [EditChange: (EditChange) -> Void] = [:]
+    // The field or checklist that made a change. Its Undo and Redo go to it first: it puts back
+    // the text at once and saves it in order, under the way back's number. When it is gone, or
+    // has nothing to put back, the stored inverse undoes the change instead.
+    @ObservationIgnored private var owners: [EditChange: UndoOwner] = [:]
     // The way back of an Undo that failed, and the change that Undo was for. The change still
     // holds, so its way back does nothing and hands the inverse on to the next Undo.
     @ObservationIgnored private var retries: [EditChange: EditChange] = [:]
@@ -202,14 +207,14 @@ final class EditQueue {
     // a message from it refuses the edit. A failure shows in the scope unless the edit is one
     // you did not ask for, such as removing a job left blank, or its submitter shows it. An
     // edit holds the screen while it saves, unless it is as quick and local as a tick. When the
-    // edit changes the screen before it saves, as a tick does, the Undo handler takes it back
-    // from the screen if the edit did not save.
+    // edit changes the screen before it saves, as a tick does, its Undo and Redo go to the owner
+    // first.
     @discardableResult
     func submit(
         _ edit: LibraryEdit, in scope: EditScope, undo actionName: String? = nil,
         undoManager: UndoManager? = nil, holdsScreen: Bool = true, reportsFailure: Bool = true,
         requires: EditCheck? = nil, then: ((EditResult) -> Void)? = nil,
-        onUndo: ((EditChange) -> Void)? = nil
+        owner: UndoOwner? = nil
     ) -> EditTicket {
         flushTyping()
         var change: EditChange?
@@ -219,7 +224,7 @@ final class EditQueue {
                 holdsScreen: holdsScreen)
             register(step, on: undoManager)
             change = step.change
-            typingUndo[step.change] = onUndo
+            owners[step.change] = owner
         }
         if reportsFailure { failures[scope] = nil }
         return enqueue(
@@ -229,22 +234,18 @@ final class EditQueue {
     }
 
     // Starts a burst of typing: one Undo step, registered now, whose edit comes once the typing
-    // pauses or focus leaves. The handler runs when Undo reaches the burst while its text is still
-    // on screen.
+    // pauses or focus leaves. Its Undo and Redo go to the owner first.
     func beginTyping(
         _ actionName: String, in scope: EditScope, undoManager: UndoManager?,
-        onUndo: @escaping (EditChange) -> Void
+        owner: @escaping UndoOwner
     ) -> EditChange? {
         guard let undoManager else { return nil }
         let step = EditUndoStep(
             change: makeChange(), actionName: actionName, scope: scope, holdsScreen: false)
         register(step, on: undoManager)
-        typingUndo[step.change] = onUndo
+        owners[step.change] = owner
         return step.change
     }
-
-    // The typing of a change has saved or gone, so Undo no longer needs to reach it.
-    func typingSettled(_ change: EditChange) { typingUndo[change] = nil }
 
     // Submits typing as the edit of its burst. Typing never holds the screen, and its failure
     // goes back to the field that submitted it.
@@ -328,7 +329,7 @@ final class EditQueue {
             }
         }
         inverses = [:]
-        typingUndo = [:]
+        owners = [:]
         retries = [:]
         failedUndos = [:]
     }
@@ -341,18 +342,21 @@ final class EditQueue {
         undoManager.setActionName(step.actionName)
     }
 
-    // Undo and Redo: the typing of the change, if it is still on screen, submits or goes first,
-    // then the rest of the typing, and then the inverse, which is read once the change itself
-    // has run. When the change did not save, there is no inverse, and its screen takes the
-    // change back then. The way back registers now, under a new change.
+    // Undo and Redo. The way back registers now, under a new change. The change's owner puts back
+    // its text at once and submits it under that number, so typing that follows builds on it.
+    // Without an owner, the rest of the typing submits, and then the inverse, which is read once
+    // the change itself has run.
     private func reverse(_ step: EditUndoStep, undoManager: UndoManager?) {
-        typingUndo[step.change]?(step.change)
-        flushTyping()
         let back = EditUndoStep(
             change: makeChange(), actionName: step.actionName, scope: step.scope,
             holdsScreen: step.holdsScreen)
         if let undoManager { register(back, on: undoManager) }
         failures[step.scope] = nil
+        if let owner = owners[step.change], owner(step.change, back.change) {
+            owners[back.change] = owner
+            return
+        }
+        flushTyping()
         enqueue(
             QueuedEdit(
                 work: .reverse(step.change), change: back.change, scope: step.scope,
@@ -433,12 +437,10 @@ final class EditQueue {
         case .reverse(let change):
             if let undone = retries.removeValue(forKey: change), let back = item.change {
                 inverses[back] = inverses.removeValue(forKey: undone)
+                failedUndos = failedUndos.filter { $0.value.back != change }
                 return .saved(EditApplied())
             }
-            guard let inverse = inverses[change] else {
-                typingUndo.removeValue(forKey: change)?(change)
-                return .saved(EditApplied())
-            }
+            guard let inverse = inverses[change] else { return .saved(EditApplied()) }
             edit = inverse
         }
         let editor = editor
@@ -458,13 +460,9 @@ final class EditQueue {
     private func finish(_ item: QueuedEdit, with result: EditResult) {
         switch result {
         case .saved(let applied):
-            if case .reverse(let undone) = item.work {
-                inverses[undone] = nil
-                typingUndo[undone] = nil
-            }
-            if let change = item.change {
-                typingUndo[change] = nil
-                if let inverse = applied.inverse { inverses[change] = inverse }
+            if case .reverse(let undone) = item.work { inverses[undone] = nil }
+            if let change = item.change, let inverse = applied.inverse {
+                inverses[change] = inverse
             }
             for change in applied.changes {
                 for listener in listeners { listener(change, item.isUndo) }

@@ -57,6 +57,11 @@ final class ChecklistEditor {
     @ObservationIgnored private var storedSteps: [ChecklistStep]
     // This checklist's changes still on their way to the library, in the order they went.
     @ObservationIgnored private var inFlight: [ChecklistSubmission] = []
+    // What each of this checklist's Undo and Redo steps does to the steps.
+    @ObservationIgnored private var undoOperations: [EditChange: [ChecklistOperation]] = [:]
+    // Changes taken back by Undo while they were still on their way. If one then fails, it is
+    // gone already.
+    @ObservationIgnored private var undoneChanges: Set<EditChange> = []
     @ObservationIgnored private var lastNumber = 0
     @ObservationIgnored private var textBeforeEditing: String?
     @ObservationIgnored private var isTracked = false
@@ -352,10 +357,11 @@ final class ChecklistEditor {
         _ operations: [ChecklistOperation], from base: [ChecklistStep], as change: EditChange?
     ) -> Int {
         lastNumber += 1
+        let undo = ChecklistOperation.applying(operations, to: base).inverse
         inFlight.append(
             ChecklistSubmission(
-                number: lastNumber, change: change, operations: operations,
-                undo: ChecklistOperation.applying(operations, to: base).inverse))
+                number: lastNumber, change: change, operations: operations, undo: undo))
+        if let change { undoOperations[change] = undo }
         isSaving = true
         savedSteps = expectedSteps()
         return lastNumber
@@ -367,9 +373,15 @@ final class ChecklistEditor {
         let entry = inFlight.remove(at: index)
         isSaving = !inFlight.isEmpty
         if case .failed(let error) = result {
-            ownError = error.localizedDescription
-            failed.append(entry)
-            failed.sort { $0.number < $1.number }
+            if let change = entry.change, undoneChanges.remove(change) != nil {
+                // Undo took it back already.
+            } else {
+                ownError = error.localizedDescription
+                failed.append(entry)
+                failed.sort { $0.number < $1.number }
+            }
+        } else if let change = entry.change {
+            undoneChanges.remove(change)
         }
         savedSteps = expectedSteps()
         if failed.isEmpty { ownError = nil }
@@ -386,11 +398,7 @@ final class ChecklistEditor {
         }
     }
 
-    private func settle() {
-        guard let unsavedChange else { return }
-        queue.typingSettled(unsavedChange)
-        self.unsavedChange = nil
-    }
+    private func settle() { unsavedChange = nil }
 
     // MARK: Changes other than typing
 
@@ -413,9 +421,12 @@ final class ChecklistEditor {
             .checklist(jobID, operations), in: scope, undo: actionName,
             undoManager: undoManager, holdsScreen: false, reportsFailure: false,
             then: { [weak self] result in self?.finished(number, result: result) },
-            onUndo: { [weak self] change in self?.undoReached(change) })
-        if let index = inFlight.firstIndex(where: { $0.number == number }) {
-            inFlight[index].change = ticket.change
+            owner: { [weak self] undone, back in self?.undo(undone, back: back) ?? false })
+        if let index = inFlight.firstIndex(where: { $0.number == number }),
+            let change = ticket.change
+        {
+            inFlight[index].change = change
+            undoOperations[change] = inFlight[index].undo
         }
         track()
     }
@@ -431,23 +442,51 @@ final class ChecklistEditor {
         guard unsavedChange == nil else { return }
         unsavedChange = queue.beginTyping(
             "Typing", in: scope, undoManager: undoManager
-        ) { [weak self] change in self?.undoReached(change) }
+        ) { [weak self] undone, back in self?.undo(undone, back: back) ?? false }
     }
 
-    // Undo reached a change while it was still on screen. Typing still going on submits first,
-    // so the Undo that follows takes it back from the library. A change that did not save goes
-    // from the screen, and the other changes stay.
-    private func undoReached(_ change: EditChange) {
+    // Undo or Redo of one of this checklist's changes takes it back on screen at once, step by
+    // step and property by property, and saves that after everything before it, under the way
+    // back's number. A change that never saved, such as typing still going on or a tick that
+    // failed, goes from the screen without a save, and Redo puts it back and saves it then.
+    private func undo(_ change: EditChange, back: EditChange) -> Bool {
+        let operations: [ChecklistOperation]
+        var saves = true
         if unsavedChange == change, typingID != nil {
-            submitTyping()
-            return
+            let base = base()
+            operations =
+                ChecklistOperation.applying(
+                    ChecklistOperation.changes(from: base, to: Self.kept(steps)), to: base
+                ).inverse
+            scheduledSave?.cancel()
+            scheduledSave = nil
+            typingID = nil
+            unsavedChange = nil
+            saves = false
+        } else if let index = failed.firstIndex(where: { $0.change == change }) {
+            operations = failed.remove(at: index).undo
+            undoOperations[change] = nil
+            saves = false
+        } else if let stored = undoOperations.removeValue(forKey: change) {
+            operations = stored
+            if inFlight.contains(where: { $0.change == change }) { undoneChanges.insert(change) }
+        } else {
+            return false
         }
-        guard let index = failed.firstIndex(where: { $0.change == change }) else { return }
-        let entry = failed.remove(at: index)
-        let undone = ChecklistOperation.applying(entry.undo, to: steps.filter { !$0.isBlank })
+        let base = base()
+        let undone = ChecklistOperation.applying(operations, to: steps.filter { !$0.isBlank })
         show(undone.steps)
+        if saves {
+            let number = send(operations, from: base, as: back)
+            queue.submitTyping(.checklist(jobID, operations), in: scope, as: back) {
+                [weak self] result in self?.finished(number, result: result)
+            }
+        } else {
+            undoOperations[back] = undone.inverse
+        }
         if failed.isEmpty { ownError = nil }
         track()
+        return true
     }
 
     // The queue asks the checklist to submit before other edits, and before quitting.

@@ -3,9 +3,10 @@ import Observation
 
 // One text field that saves as you type. The field only holds the typing: its text goes to the
 // library's edit queue as an edit after a pause in typing, when focus leaves, before any other
-// edit, and when the app asks every field to save. Each burst of typing is one Undo step, which
-// the queue keeps and undoes from the stored data. Esc puts back the text the field had when
-// focus entered it. A text the field does not accept, such as a blank title or a number it
+// edit, and when the app asks every field to save. Each burst of typing is one Undo step. Undo
+// and Redo put back the text at once and save it in order, as typing does. When the field is
+// gone, the queue undoes the change from the stored data. Esc puts back the text the field had
+// when focus entered it. A text the field does not accept, such as a blank title or a number it
 // cannot read, stays on screen but never saves, so the record keeps the last text it accepted.
 @Observable
 final class AutosaveField {
@@ -39,6 +40,8 @@ final class AutosaveField {
     @ObservationIgnored private var latest: EditTicket?
     // The number of the latest submission, so a failure can tell whether a later one followed.
     @ObservationIgnored private var submissions = 0
+    // The text each of this field's Undo and Redo steps puts back.
+    @ObservationIgnored private var undoTexts: [EditChange: String] = [:]
     @ObservationIgnored private var isTracked = false
 
     init(
@@ -96,9 +99,11 @@ final class AutosaveField {
         if !isTyping {
             isTyping = true
             if unsavedChange == nil {
+                let before = text
                 unsavedChange = queue.beginTyping(
                     actionName, in: scope, undoManager: undoManager
-                ) { [weak self] change in self?.undoReachedTyping(change) }
+                ) { [weak self] undone, back in self?.undo(undone, back: back) ?? false }
+                if let unsavedChange, accepts(before) { undoTexts[unsavedChange] = before }
             }
         }
         text = newText
@@ -162,7 +167,6 @@ final class AutosaveField {
         scheduledSubmit?.cancel()
         scheduledSubmit = nil
         isTyping = false
-        if let unsavedChange { queue.typingSettled(unsavedChange) }
         unsavedChange = nil
         text = savedText
         track()
@@ -177,7 +181,6 @@ final class AutosaveField {
         case .saved:
             storedText = value
             if isLatest { saveError = nil }
-            if let change { queue.typingSettled(change) }
             showSavedText()
         case .failed(let error):
             // Only the latest save's failure keeps its text on screen as not saved. An older one
@@ -186,8 +189,6 @@ final class AutosaveField {
                 saveError = error.localizedDescription
                 savedText = storedText
                 if unsavedChange == nil { unsavedChange = change }
-            } else if let change {
-                queue.typingSettled(change)
             }
         }
         track()
@@ -206,24 +207,27 @@ final class AutosaveField {
         storedText = shown
     }
 
-    // Undo reached this field's typing while it was still on screen. Text that can save submits
-    // first, so the Undo that follows takes it back from the library. Text that can't goes back
-    // to the stored text, as nothing of it saved.
-    private func undoReachedTyping(_ change: EditChange) {
-        guard unsavedChange == change else { return }
-        if isTyping, text != savedText, accepts(text), saveError == nil {
-            saveNow()
-            return
-        }
-        guard text != savedText else { return }
-        putBackSavedText()
+    // Undo or Redo of one of this field's changes puts back its text at once, and the text saves
+    // after everything before it, under the way back's number. The text it replaces is what Redo
+    // puts back, unless the field does not take it. Typing that never saved goes without a save.
+    private func undo(_ change: EditChange, back: EditChange) -> Bool {
+        guard let restored = undoTexts.removeValue(forKey: change) else { return false }
+        let current = text
+        scheduledSubmit?.cancel()
+        scheduledSubmit = nil
+        isTyping = false
+        saveError = nil
+        if accepts(current) { undoTexts[back] = current }
+        text = restored
+        unsavedChange = back
+        saveNow()
+        return true
     }
 
     private func putBackSavedText() {
         scheduledSubmit?.cancel()
         scheduledSubmit = nil
         isTyping = false
-        if let unsavedChange { queue.typingSettled(unsavedChange) }
         unsavedChange = nil
         saveError = nil
         text = savedText
@@ -235,11 +239,7 @@ final class AutosaveField {
         saveNow()
     }
 
-    private func settle() {
-        guard let unsavedChange else { return }
-        queue.typingSettled(unsavedChange)
-        self.unsavedChange = nil
-    }
+    private func settle() { unsavedChange = nil }
 
     private func scheduleSubmit() {
         scheduledSubmit?.cancel()
