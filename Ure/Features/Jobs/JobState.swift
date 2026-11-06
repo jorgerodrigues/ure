@@ -165,14 +165,18 @@ final class JobState {
 
     // Picking a watch that already has an open job opens that job, because a watch has one
     // open job at a time. The job being set up goes when nothing is in it yet. It goes after
-    // everything typed before, so a job with typing in it stays.
+    // everything typed before, so a job with typing in it stays, and so does a job whose fields
+    // show text that can't save, such as a cleared title.
     @discardableResult
     func openOpenJob(of watchID: UUID, discardingBlank blankID: UUID?) -> JobRecord? {
         guard !isSaving, let existing = openJob(for: watchID) else { return nil }
         if let blank = jobs.first(where: { $0.id == blankID }), blank.id != existing.id,
             blank.watchID == nil
         {
-            queue.submit(.job(.discardIfBlank(blank.id)), in: .jobs)
+            queue.flushTyping()
+            if facts[blank.id]?.hasUnsavedText != true {
+                queue.submit(.job(.discardIfBlank(blank.id)), in: .jobs)
+            }
         }
         open(existing)
         return existing

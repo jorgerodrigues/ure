@@ -418,6 +418,70 @@ struct EditRuleTests {
         try await coordinator.close()
     }
 
+    // Rule 5 also covers typing done while quitting or closing waits: it saves too, so the app
+    // goes ahead only once nothing that can save is left.
+    @Test(.timeLimit(.minutes(1)))
+    func savingEverythingSavesTypingDoneWhileItWaits() async throws {
+        let library = try await NotesLibrary.make(notes: "Saved", pause: PauseGate().pause)
+        let field = library.field
+        field.beginEditing()
+        let (hold, holding) = try await LibraryHold.start(on: library.coordinator)
+        library.queue.submit(
+            .caliber(.set(library.caliberID, .maker("Omega"))), in: .calibers)
+        let saving = Task { await library.queue.saveEverything() }
+        try await Task.sleep(for: .milliseconds(50))
+        field.change(to: "Typed while closing", undoManager: nil)
+        hold.release()
+        _ = try await holding.value
+        #expect(await saving.value == .saved)
+        #expect(try await library.stored() == "Typed while closing")
+        try await library.close()
+    }
+
+    // Rule 5 also covers changes the app makes on its own: a job being set up goes only when
+    // nothing is in it, and a title cleared on screen, which can't save, keeps the job.
+    @Test(.timeLimit(.minutes(1)))
+    func aJobWithTextThatCantSaveIsNotThrownAway() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let watch = try await WatchService(coordinator: coordinator).create(named: "Ventura")
+        let open = try await JobService(coordinator: coordinator).start(
+            for: watch.id, title: "Full service")
+        let editing = EditingFixture.make(coordinator, pause: PauseGate().pause)
+        let jobs = editing.jobs
+        let observations = [
+            Task { await jobs.observe() }, Task { await editing.watches.observe() },
+        ]
+        defer { observations.forEach { $0.cancel() } }
+        try await waitUntil { !jobs.isLoading && !editing.watches.isLoading }
+        func stored(_ id: UUID) async throws -> JobRecord? {
+            try await coordinator.read { try JobQueries.fetch(id, in: $0) }
+        }
+
+        // A job with a cleared title stays, with the title it had in the library.
+        #expect(await jobs.create().didSave)
+        let cleared = try #require(jobs.selectedID)
+        let title = try #require(jobs.facts(for: cleared)?.title)
+        title.beginEditing()
+        title.change(to: "", undoManager: nil)
+        #expect(jobs.openOpenJob(of: watch.id, discardingBlank: cleared)?.id == open.id)
+        await editing.queue.waitUntilIdle()
+        #expect(try await stored(cleared) != nil)
+        title.endEditing()
+
+        // A job with nothing in it goes.
+        #expect(await jobs.create().didSave)
+        let blank = try #require(jobs.selectedID)
+        #expect(jobs.openOpenJob(of: watch.id, discardingBlank: blank)?.id == open.id)
+        await editing.queue.waitUntilIdle()
+        #expect(try await stored(blank) == nil)
+        observations.forEach { $0.cancel() }
+        for observation in observations { await observation.value }
+        try await coordinator.close()
+    }
+
     // Rule 2 also holds when the field that made a change is gone by the time of ⇧⌘Z: typing
     // that had not submitted submits before its Undo, so the library has the step.
     @Test(.timeLimit(.minutes(1)))

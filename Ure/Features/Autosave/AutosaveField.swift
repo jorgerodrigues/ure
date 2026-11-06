@@ -164,7 +164,10 @@ final class AutosaveField {
     // An edit of this field saved, or it was dropped with every change that did not save. Then
     // the field shows what the library holds, and the typing on screen goes too.
     private func finished(_ value: String, result: EditResult) {
-        if latest?.isPending != true { isSaving = false }
+        if latest?.isPending != true {
+            isSaving = false
+            latest = nil
+        }
         if result.isSaved {
             storedText = value
             showSavedText()

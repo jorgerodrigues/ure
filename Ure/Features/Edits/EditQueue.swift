@@ -355,14 +355,16 @@ final class EditQueue {
     }
 
     // The one wait before quitting, closing the window, restoring and exporting a backup. Every
-    // field saves what it can, and the queue runs until nothing waits or an edit fails.
+    // field saves what it can, and the queue runs until nothing waits or an edit fails. Typing
+    // done during the wait saves too, so only text a field does not take is left.
     func saveEverything() async -> SaveOutcome {
-        repeat {
+        while true {
             isSubmittingTyping = true
             for source in sources() { source.saveAll() }
             isSubmittingTyping = false
+            guard failure == nil, !pending.isEmpty else { break }
             await waitUntilIdle()
-        } while !pending.isEmpty && failure == nil
+        }
         if failure != nil { return .stopped }
         return hasUnsavedTyping ? .textNotValid : .saved
     }
