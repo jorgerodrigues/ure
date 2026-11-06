@@ -15,12 +15,10 @@ final class PartState {
 
     private let service: PartService
     @ObservationIgnored private let pause: (Duration) async throws -> Void
-    @ObservationIgnored private let stages = ChangeUndo<PartStageSide>()
-    // Where a spare sits. Nil puts the spare on its job again, at the end of the job's parts.
-    @ObservationIgnored private let placements = ChangeUndo<PartPlacement?>()
-    // Whether a part is in the library. Undo of an added part removes it, and Undo of a
-    // removal puts it back.
-    @ObservationIgnored private let presence = ChangeUndo<Bool>()
+    // Every part change, such as an added part, a spare's use, a state click or a deletion,
+    // saves through this one queue, in the order you made them, also while a save waits. Undo of
+    // a change goes back to how things were before it, and Redo makes it again.
+    @ObservationIgnored private let changes = ChangeUndo<PartChangeSide>()
     @ObservationIgnored private var removed: [UUID: RemovedPart] = [:]
     @ObservationIgnored private var entries: [UUID: PartEntry] = [:]
     private(set) var parts: [PartRecord] = []
@@ -136,10 +134,9 @@ final class PartState {
         pendingWrites += 1
         defer { pendingWrites -= 1 }
         let target = PartUndoTarget()
-        registerPresence(of: target, setting: false, actionName: Self.addActionName, undoManager)
-        // Parts typed one after another save one at a time, in the order they were typed.
+        registerPresence(of: target, wasPresent: false, actionName: Self.addActionName, undoManager)
         var made: PartRecord?
-        _ = await presence.perform(true) { [weak self] _ in
+        _ = await changes.perform(.after) { [weak self] _ in
             made = await self?.make(named: typed, description: description, on: jobID)
             target.id = made?.id
             return made != nil
@@ -220,15 +217,16 @@ final class PartState {
         pendingWrites += 1
         defer { pendingWrites -= 1 }
         let target = PartUndoTarget()
-        let write: ChangeUndo<PartPlacement?>.Write = { [weak self] placement in
+        let drawer = PartPlacement(part: spare)
+        let write: ChangeUndo<PartChangeSide>.Write = { [weak self] side in
             guard let self, let id = target.id else { return true }
-            if let placement { return await self.restorePlacement(id, to: placement) }
+            if side == .before { return await self.restorePlacement(id, to: drawer) }
             return await self.placeSpare(id, on: jobID)
         }
-        placements.registerUndo(
-            setting: PartPlacement(part: spare), redoing: nil, actionName: Self.spareActionName,
+        changes.registerUndo(
+            setting: .before, redoing: .after, actionName: Self.spareActionName,
             undoManager: undoManager, write: write)
-        return await placements.perform(nil) { [weak self] _ in
+        return await changes.perform(.after) { [weak self] _ in
             guard let self, await self.placeSpare(id, on: jobID) else { return false }
             target.id = id
             return true
@@ -250,7 +248,7 @@ final class PartState {
         pendingWrites += 1
         defer { pendingWrites -= 1 }
         let undo = registerStageUndo(of: id, undoManager)
-        return await stages.perform(.after) { [weak self] _ in
+        return await changes.perform(.after) { [weak self] _ in
             await self?.changeStage(id, undo: undo) { try await $0.advance(id) } ?? false
         }
     }
@@ -273,15 +271,12 @@ final class PartState {
         pendingWrites += 1
         defer { pendingWrites -= 1 }
         let undo = registerStageUndo(of: id, undoManager)
-        return await stages.perform(.after) { [weak self] _ in
+        return await changes.perform(.after) { [weak self] _ in
             await self?.changeStage(id, undo: undo) {
                 try await $0.setStage(id, to: stage)
             } ?? false
         }
     }
-
-    // Waits for a state change that Undo or Redo started.
-    func waitForStageChanges() async { await stages.wait() }
 
     func removeCommand(_ id: UUID, undoManager: UndoManager?) {
         Task { await remove(id, undoManager: undoManager) }
@@ -295,19 +290,17 @@ final class PartState {
         pendingWrites += 1
         defer { pendingWrites -= 1 }
         let target = PartUndoTarget()
-        registerPresence(of: target, setting: true, actionName: Self.removeActionName, undoManager)
-        return await presence.perform(false) { [weak self] _ in
+        registerPresence(
+            of: target, wasPresent: true, actionName: Self.removeActionName, undoManager)
+        return await changes.perform(.after) { [weak self] _ in
             guard let self, await self.setPresence(of: id, to: false) else { return false }
             target.id = id
             return true
         }
     }
 
-    // Waits for an addition or a removal that Undo or Redo started.
-    func waitForPresenceChanges() async {
-        await presence.wait()
-        await placements.wait()
-    }
+    // Waits for a change that Undo or Redo started.
+    func waitForChanges() async { await changes.wait() }
 
     func openLink(_ link: PartLink) {
         openError = nil
@@ -335,9 +328,7 @@ final class PartState {
         for facts in facts.values {
             for editor in facts.editors { editor.discardUndo() }
         }
-        stages.discardUndo()
-        placements.discardUndo()
-        presence.discardUndo()
+        changes.discardUndo()
         removed = [:]
     }
 
@@ -366,12 +357,12 @@ final class PartState {
     // nothing.
     private func registerStageUndo(of id: UUID, _ undoManager: UndoManager?) -> PartStageUndo {
         let undo = PartStageUndo()
-        let write: ChangeUndo<PartStageSide>.Write = { [weak self] side in
+        let write: ChangeUndo<PartChangeSide>.Write = { [weak self] side in
             let value = side == .before ? undo.before : undo.after
             guard let self, let value else { return true }
             return await self.restoreStage(id, to: value)
         }
-        stages.registerUndo(
+        changes.registerUndo(
             setting: .before, redoing: .after, actionName: Self.stageActionName,
             undoManager: undoManager, write: write)
         return undo
@@ -436,16 +427,19 @@ final class PartState {
         }
     }
 
+    // Registers the Undo of an addition or a deletion. Undo of an added part removes it, and
+    // Undo of a deletion puts the part back. Redo makes the change again.
     private func registerPresence(
-        of target: PartUndoTarget, setting value: Bool, actionName: String,
+        of target: PartUndoTarget, wasPresent: Bool, actionName: String,
         _ undoManager: UndoManager?
     ) {
-        let write: ChangeUndo<Bool>.Write = { [weak self] present in
+        let write: ChangeUndo<PartChangeSide>.Write = { [weak self] side in
             guard let self, let id = target.id else { return true }
+            let present = side == .before ? wasPresent : !wasPresent
             return await self.setPresence(of: id, to: present)
         }
-        presence.registerUndo(
-            setting: value, redoing: !value, actionName: actionName, undoManager: undoManager,
+        changes.registerUndo(
+            setting: .before, redoing: .after, actionName: actionName, undoManager: undoManager,
             write: write)
     }
 
@@ -521,8 +515,8 @@ final class PartState {
     }
 }
 
-// The two sides of a state change's Undo: the state before it and the state it gave.
-nonisolated enum PartStageSide: Sendable {
+// The two sides of a part change's Undo: how things were before it, and the change itself.
+nonisolated enum PartChangeSide: Sendable {
     case before
     case after
 }
