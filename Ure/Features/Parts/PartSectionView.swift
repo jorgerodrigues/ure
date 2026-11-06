@@ -44,6 +44,7 @@ struct PartSectionView: View {
 
 private struct PartLines: View {
     @Environment(PartState.self) private var state
+    @Environment(WorkshopEditing.self) private var editing
     let jobID: UUID
     let lines: [PartRecord]
     let isEditable: Bool
@@ -52,7 +53,8 @@ private struct PartLines: View {
         VStack(alignment: .leading, spacing: 0) {
             Divider()
             ForEach(lines) { part in
-                PartLine(part: part, isEditable: isEditable)
+                // A part whose deletion waits or runs takes no edits, also on its job's page.
+                PartLine(part: part, isEditable: isEditable && editing.canWrite(part))
                 Divider()
             }
             if isEditable {

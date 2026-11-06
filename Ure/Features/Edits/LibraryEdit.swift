@@ -55,10 +55,14 @@ extension LibraryEdit {
         }
     }
 
-    // The spare this edit takes from the drawer. A second use of it would fail for good.
+    // The spare this edit takes from the drawer, also when Redo or Undo puts a part back on a
+    // job. A second use of it would fail for good.
     nonisolated var usedSpare: UUID? {
-        if case .part(.useSpare(let id, _)) = self { return id }
-        return nil
+        switch self {
+        case .part(.useSpare(let id, _)): return id
+        case .part(.place(let id, let placement)) where placement.jobID != nil: return id
+        default: return nil
+        }
     }
 }
 

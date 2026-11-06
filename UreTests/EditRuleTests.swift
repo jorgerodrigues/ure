@@ -641,6 +641,44 @@ struct EditRuleTests {
         try await coordinator.close()
     }
 
+    // Rule 6 also covers a spare that Redo puts back on a job: while that waits or runs, the
+    // spare is offered to no other line, so it is never used twice.
+    @Test(.timeLimit(.minutes(1)))
+    func aSpareThatRedoPutsBackOnAJobIsNotOfferedAgain() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        let spare = try await PartService(coordinator: coordinator).add(
+            named: "Spare crystal", to: nil)
+        let editing = EditingFixture.make(coordinator, pause: PauseGate().pause)
+        let parts = editing.parts
+        let observation = Task { await parts.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { !parts.isLoading }
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        grouped(undo) { parts.useSpare(spare.id, on: job.id, undoManager: undo) }
+        await editing.queue.waitUntilIdle()
+        undo.undo()
+        await editing.queue.waitUntilIdle()
+        #expect(parts.part(spare.id)?.jobID == nil)
+        #expect(parts.spares(matching: "Spare").map(\.id) == [spare.id])
+
+        let (hold, holding) = try await LibraryHold.start(on: coordinator)
+        undo.redo()
+        #expect(parts.spares(matching: "Spare").isEmpty)
+        #expect(parts.useSpare(spare.id, on: job.id) == nil)
+        hold.release()
+        _ = try await holding.value
+        await editing.queue.waitUntilIdle()
+        #expect(parts.part(spare.id)?.jobID == job.id && editing.queue.failure == nil)
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
     // Rule 2 also holds when the field that made a change is gone by the time of ⇧⌘Z: typing
     // that had not submitted submits before its Undo, so the library has the step.
     @Test(.timeLimit(.minutes(1)))
