@@ -242,7 +242,9 @@ final class AutosaveField {
         unsavedChange = canRedo ? back : nil
         failedChange = nil
         submit(always: true)
-        return .done(canRedo: canRedo)
+        var redo: LibraryEdit?
+        if canRedo { redo = try? edit(redone) }
+        return .done(redo: redo)
     }
 
     private func forget(_ change: EditChange) {

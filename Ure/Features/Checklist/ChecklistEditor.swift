@@ -81,8 +81,12 @@ final class ChecklistEditor {
 
     // Steps on screen that the library does not hold and no edit on its way will give it.
     private var hasUnsavedSteps: Bool { !unsubmitted().isEmpty }
-    // A save of this checklist failed, here or in an Undo of it.
-    var saveError: String? { ownError ?? queue.failure(in: .checklist(jobID)) }
+    // A save of this checklist failed, here or in an Undo of it. Its own failure shows only while
+    // the screen holds something that the library will not.
+    var saveError: String? {
+        if hasUnsavedSteps, let ownError { return ownError }
+        return queue.failure(in: scope)
+    }
 
     private var scope: EditScope { .checklist(jobID) }
 
@@ -345,7 +349,11 @@ final class ChecklistEditor {
         inFlight.removeAll { $0.number == number }
         isSaving = !inFlight.isEmpty
         savedSteps = expectedSteps()
-        if let error = result.error { ownError = error.localizedDescription }
+        if let error = result.error {
+            ownError = error.localizedDescription
+        } else if !hasUnsavedSteps {
+            ownError = nil
+        }
         track()
     }
 
@@ -430,7 +438,7 @@ final class ChecklistEditor {
         screenChanges[back] = recorded.reversed
         save(as: back)
         track()
-        return .done(canRedo: true)
+        return .done(redo: .checklist(jobID, recorded.forward))
     }
 
     // The queue asks the checklist to submit before other edits, and before quitting.

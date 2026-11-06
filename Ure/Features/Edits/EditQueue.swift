@@ -56,9 +56,10 @@ struct UndoOwner {
 enum UndoHandling {
     // It has nothing for the change, so the stored inverse undoes it.
     case notMine
-    // It put the change back. Redo can bring it again only when the owner kept something for
-    // it, which it does not for text the field does not take.
-    case done(canRedo: Bool)
+    // It put the change back. The edit that brings the change back again is the way back's
+    // inverse, so Redo works also when the owner is gone by then. Without one there is no Redo,
+    // as for text the field does not take.
+    case done(redo: LibraryEdit?)
 }
 
 // An edit the queue did not apply, because what it needs did not hold when its turn came, such
@@ -190,16 +191,30 @@ final class EditQueue {
     func failure(in scope: EditScope) -> String? { failures[scope] }
 
     // Says why a change could not be made, where its failures show.
-    func report(_ message: String, in scope: EditScope) { failures[scope] = message }
+    func report(_ message: String, in scope: EditScope) { setFailure(message, in: scope) }
 
-    func clearFailure(in scope: EditScope) { failures[scope] = nil }
+    func clearFailure(in scope: EditScope) { setFailure(nil, in: scope) }
+
+    // The latest failure in a scope. A failed Undo there can run again only while its failure
+    // shows, so a new failure, or a new edit there, ends it.
+    private func setFailure(_ message: String?, in scope: EditScope) {
+        failures[scope] = message
+        if let failed = failedUndos.removeValue(forKey: scope) { release(failed) }
+    }
+
+    // Lets go of what a failed Undo kept, unless its way back is still on the Redo list, where
+    // Redo hands the inverse on.
+    private func release(_ failed: FailedUndo) {
+        if let back = failed.back, retries[back] != nil { return }
+        inverses[failed.undone] = nil
+    }
 
     // Try Again for an Undo or Redo that failed in a scope runs it once more, after everything
     // submitted before. False when no Undo failed there.
     @discardableResult
     func retryUndo(in scope: EditScope) -> Bool {
         guard let failed = failedUndos.removeValue(forKey: scope) else { return false }
-        retries[failed.back] = nil
+        if let back = failed.back { retries[back] = nil }
         failures[scope] = nil
         flushTyping()
         enqueue(
@@ -243,7 +258,7 @@ final class EditQueue {
             register(step, on: undoManager)
             change = step.change
         }
-        if reportsFailure { failures[scope] = nil }
+        if reportsFailure { setFailure(nil, in: scope) }
         return enqueue(
             QueuedEdit(
                 work: .edit(edit), change: change, scope: scope, holdsScreen: true,
@@ -363,8 +378,15 @@ final class EditQueue {
     // A step the undo manager no longer holds needs nothing kept for it.
     private func forget(_ change: EditChange) {
         retire(change)
-        retries[change] = nil
         owners.removeValue(forKey: change)?.forget(change)
+        for (scope, failed) in failedUndos where failed.back == change {
+            failedUndos[scope]?.back = nil
+        }
+        if let undone = retries.removeValue(forKey: change),
+            !failedUndos.values.contains(where: { $0.undone == undone })
+        {
+            inverses[undone] = nil
+        }
     }
 
     // Keeps track of the Redo list as AppKit does: a step registered while undoing goes onto it,
@@ -398,15 +420,16 @@ final class EditQueue {
         let back = EditUndoStep(
             change: makeChange(), actionName: step.actionName, scope: step.scope,
             holdsScreen: step.holdsScreen)
-        failures[step.scope] = nil
+        setFailure(nil, in: step.scope)
         if let owner = owners[step.change],
-            case .done(let canRedo) = owner.undo(step.change, back.change)
+            case .done(let redo) = owner.undo(step.change, back.change)
         {
             retire(step.change)
             owners[step.change] = nil
-            if canRedo, let undoManager {
+            if let redo, let undoManager {
                 register(back, on: undoManager)
                 owners[back.change] = owner
+                inverses[back.change] = redo
             } else {
                 owner.forget(back.change)
             }
@@ -499,7 +522,6 @@ final class EditQueue {
         case .reverse(let change):
             if let undone = retries.removeValue(forKey: change), let back = item.change {
                 inverses[back] = inverses.removeValue(forKey: undone)
-                failedUndos = failedUndos.filter { $0.value.back != change }
                 return .saved(EditApplied())
             }
             guard let inverse = inverses[change] else { return .saved(EditApplied()) }
@@ -533,13 +555,15 @@ final class EditQueue {
                 for listener in listeners { listener(change, item.isUndo) }
             }
         case .failed(let error):
+            if item.reportsFailure, !(error is CancellationError) {
+                setFailure(error.localizedDescription, in: item.scope)
+            }
             if case .reverse(let undone) = item.work, let back = item.change {
                 retries[back] = undone
-                failedUndos[item.scope] = FailedUndo(
-                    undone: undone, back: back, holdsScreen: item.holdsScreen)
-            }
-            if item.reportsFailure, !(error is CancellationError) {
-                failures[item.scope] = error.localizedDescription
+                let failed = FailedUndo(undone: undone, back: back, holdsScreen: item.holdsScreen)
+                if let earlier = failedUndos.updateValue(failed, forKey: item.scope) {
+                    release(earlier)
+                }
             }
         }
         if let change = item.change, !pending.contains(where: { $0.change == change }) {
@@ -552,7 +576,8 @@ final class EditQueue {
 
 private nonisolated struct FailedUndo: Sendable {
     let undone: EditChange
-    let back: EditChange
+    // The way back, while the undo manager still holds it.
+    var back: EditChange?
     let holdsScreen: Bool
 }
 
