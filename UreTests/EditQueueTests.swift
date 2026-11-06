@@ -370,6 +370,85 @@ struct EditQueueTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
+    func undoOfTypingThatSavesAsNothingPutsBackTheStepAsItShowed() async throws {
+        let step = ChecklistStep(id: UUID(), text: "Clean")
+        let other = ChecklistStep(id: UUID(), text: "Oil")
+        let library = try await ChecklistLibrary.make(steps: [step, other])
+        let editor = library.editor
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        undo.beginUndoGrouping()
+        editor.toggleTick(other.id, undoManager: undo)
+        undo.endUndoGrouping()
+        await library.queue.waitUntilIdle()
+
+        // A space at the end saves as nothing, but ⌘Z still takes it off the screen.
+        editor.beginEditing(step.id)
+        undo.beginUndoGrouping()
+        editor.change(step.id, to: "Clean ", undoManager: undo)
+        undo.endUndoGrouping()
+        undo.undo()
+        #expect(editor.step(step.id)?.text == "Clean" && !undo.canRedo)
+        // The next ⌘Z reaches the tick before the typing.
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(editor.step(other.id)?.isTicked == false)
+        #expect(try await library.stored().map(\.isTicked) == [false, false])
+        editor.endEditing(step.id)
+
+        // A heading mark typed in the row that adds a step goes with ⌘Z.
+        let add = editor.addID
+        editor.beginEditing(add)
+        undo.beginUndoGrouping()
+        editor.change(add, to: "# ", undoManager: undo)
+        undo.endUndoGrouping()
+        #expect(editor.step(add)?.isHeading == true)
+        undo.undo()
+        #expect(editor.steps.map(\.id) == [step.id, other.id])
+        editor.endEditing(add)
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored().map(\.text) == ["Clean", "Oil"])
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func tryAgainKeepsTheTypingApartFromTheChangeThatFailed() async throws {
+        let step = ChecklistStep(id: UUID(), text: "Clean")
+        let library = try await ChecklistLibrary.make(steps: [step])
+        let editor = library.editor
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        try await JobTaskFixture.failWrites(library.coordinator, on: "checklistStep")
+        undo.beginUndoGrouping()
+        editor.toggleTick(step.id, undoManager: undo)
+        undo.endUndoGrouping()
+        await library.queue.waitUntilIdle()
+        #expect(editor.saveError != nil)
+        try await JobTaskFixture.allowWrites(library.coordinator, on: "checklistStep")
+        editor.beginEditing(step.id)
+        undo.beginUndoGrouping()
+        editor.change(step.id, to: "Clean all parts", undoManager: undo)
+        undo.endUndoGrouping()
+
+        // Try Again comes before the typing pause. Both save, each under its own Undo step.
+        editor.saveNow()
+        await library.queue.waitUntilIdle()
+        let typed = ChecklistStep(id: step.id, text: "Clean all parts", isTicked: true)
+        #expect(try await library.stored() == [typed])
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(
+            try await library.stored() == [
+                ChecklistStep(id: step.id, text: "Clean", isTicked: true)
+            ])
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored() == [step])
+        editor.endEditing(step.id)
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
     func aTickSavedWithTryAgainKeepsItsUndo() async throws {
         let step = ChecklistStep(id: UUID(), text: "Clean all parts")
         let library = try await ChecklistLibrary.make(steps: [step])
@@ -849,6 +928,33 @@ struct EditQueueTests {
         undo.endUndoGrouping()
         field.saveNow()
         await library.queue.waitUntilIdle()
+        #expect(!undo.canRedo && library.queue.keptUndoCount == 1)
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func savesThatFinishAfterTheirUndoStepWentKeepNothing() async throws {
+        let library = try await NotesLibrary.make(notes: "Saved", pause: PauseGate().pause)
+        let field = library.field
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        field.beginEditing()
+        let (hold, holding) = try await LibraryHold.start(on: library.coordinator)
+        undo.beginUndoGrouping()
+        field.change(to: "One", undoManager: undo)
+        undo.endUndoGrouping()
+        field.saveNow()
+
+        // ⌘Z uses up the step and new typing drops its Redo, both while their saves wait.
+        undo.undo()
+        undo.beginUndoGrouping()
+        field.change(to: "Two", undoManager: undo)
+        undo.endUndoGrouping()
+        field.saveNow()
+        hold.release()
+        _ = try await holding.value
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored() == "Two")
         #expect(!undo.canRedo && library.queue.keptUndoCount == 1)
         try await library.close()
     }

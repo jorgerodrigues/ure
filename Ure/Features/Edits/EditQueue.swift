@@ -161,6 +161,9 @@ final class EditQueue {
     // The ways back on each undo manager's Redo list. A new action clears that list, and then
     // the queue and the owners forget what they kept for them.
     @ObservationIgnored private var redoChanges: [ObjectIdentifier: Set<EditChange>] = [:]
+    // Steps that Undo used up or the undo manager dropped while their edit still waited. The
+    // queue keeps no inverse for them once the edit has run.
+    @ObservationIgnored private var retired: Set<EditChange> = []
     @ObservationIgnored private var isSubmittingTyping = false
     @ObservationIgnored private let undoManagers = NSHashTable<UndoManager>.weakObjects()
     @ObservationIgnored private var localTyping: [UUID: LocalTyping] = [:]
@@ -352,11 +355,18 @@ final class EditQueue {
         retries = [:]
         failedUndos = [:]
         redoChanges = [:]
+        retired = Set(pending.compactMap(\.change))
+    }
+
+    // Lets go of a step's inverse, also the one its waiting edit would give.
+    private func retire(_ change: EditChange) {
+        inverses[change] = nil
+        if pending.contains(where: { $0.change == change }) { retired.insert(change) }
     }
 
     // A step the undo manager no longer holds needs nothing kept for it.
     private func forget(_ change: EditChange) {
-        inverses[change] = nil
+        retire(change)
         retries[change] = nil
         owners.removeValue(forKey: change)?.forget(change)
     }
@@ -396,7 +406,7 @@ final class EditQueue {
         if let owner = owners[step.change],
             case .done(let canRedo) = owner.undo(step.change, back.change)
         {
-            inverses[step.change] = nil
+            retire(step.change)
             owners[step.change] = nil
             if canRedo, let undoManager {
                 register(back, on: undoManager)
@@ -520,7 +530,7 @@ final class EditQueue {
                 inverses[undone] = nil
                 owners.removeValue(forKey: undone)?.forget(undone)
             }
-            if let change = item.change, let inverse = applied.inverse {
+            if let change = item.change, !retired.contains(change), let inverse = applied.inverse {
                 inverses[change] = inverse
             }
             for change in applied.changes {
@@ -535,6 +545,9 @@ final class EditQueue {
             if item.reportsFailure, !(error is CancellationError) {
                 failures[item.scope] = error.localizedDescription
             }
+        }
+        if let change = item.change, !pending.contains(where: { $0.change == change }) {
+            retired.remove(change)
         }
         item.ticket.finish(result)
         item.then?(result)
