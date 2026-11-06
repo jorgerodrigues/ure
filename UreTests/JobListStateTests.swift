@@ -134,13 +134,6 @@ struct JobListStateTests {
 extension JobListFixture {
     @MainActor
     static func editing(_ coordinator: LibraryCoordinator) -> WorkshopEditing {
-        WorkshopEditing(
-            watches: WatchState(service: WatchService(coordinator: coordinator)),
-            calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
-            jobs: JobState(service: JobService(coordinator: coordinator)),
-            notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
-            material: MaterialState(service: MaterialService(coordinator: coordinator)),
-            checklist: ChecklistState(service: ChecklistService(coordinator: coordinator)),
-            parts: PartState(service: PartService(coordinator: coordinator)))
+        EditingFixture.make(coordinator)
     }
 }

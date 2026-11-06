@@ -7,7 +7,7 @@ import Observation
 // progress on a watch page.
 @Observable
 final class ChecklistState {
-    private let queue: EditQueue
+    let queue: EditQueue
     @ObservationIgnored private let pause: (Duration) async throws -> Void
     private(set) var records: [ChecklistStepRecord] = []
     private(set) var isLoading = true

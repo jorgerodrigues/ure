@@ -9,8 +9,8 @@ import Testing
 struct ChecklistEditorTests {
     @Test(.timeLimit(.minutes(1)))
     func aWholeChecklistIsTypedWithTheKeyboardAlone() async throws {
-        let saves = SavedChecklists()
-        let editor = ChecklistEditor(jobID: UUID(), steps: [], save: saves.save)
+        let library = try await ChecklistLibrary.make()
+        let editor = library.editor
         let undo = Self.undoManager()
         // The row that adds a step takes the cursor, and typing in it makes a step there.
         let clean = editor.addID
@@ -47,27 +47,29 @@ struct ChecklistEditorTests {
         #expect(editor.focusRequest == StepFocus(id: oil, cursor: .end))
         #expect(editor.steps.map(\.id) == [clean, heading, oil, fit])
         editor.endEditing(empty)
-        #expect(await editor.flush())
+        await library.queue.waitUntilIdle()
+        let saved = try await library.stored()
         #expect(
-            saves.last == [
+            saved == [
                 ChecklistStep(id: clean, text: "Clean all parts"),
                 ChecklistStep(id: heading, text: "Assembly", isHeading: true),
                 ChecklistStep(id: oil, text: "Oil the escapement", isTicked: true),
                 ChecklistStep(id: fit, text: "Fit the new mainspring"),
             ])
         // Progress counts ticked steps and ignores headings.
-        #expect(editor.progress == ChecklistProgress(saves.last ?? []))
+        #expect(editor.progress == ChecklistProgress(saved))
         #expect(editor.progress.summary == "1 of 3 done" && editor.progress.fraction == 1.0 / 3)
         #expect(!editor.hasUnsavedChanges)
+        try await library.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
     func undoPutsBackEachChangeInTurnAndRedoMakesItAgain() async throws {
-        let saves = SavedChecklists()
         let steps = ["Clean all parts", "Fit the new mainspring", "Regulate"].map {
             ChecklistStep(id: UUID(), text: $0)
         }
-        let editor = ChecklistEditor(jobID: UUID(), steps: steps, save: saves.save)
+        let library = try await ChecklistLibrary.make(steps: steps)
+        let editor = library.editor
         let undo = Self.undoManager()
         let ids = steps.map(\.id)
         editor.beginEditing(ids[1])
@@ -82,44 +84,47 @@ struct ChecklistEditorTests {
         for name in names {
             #expect(undo.undoActionName == name)
             undo.undo()
+            await library.queue.waitUntilIdle()
         }
         #expect(editor.steps == steps)
         #expect(!undo.canUndo)
         for name in names.reversed() {
             #expect(undo.redoActionName == name)
             undo.redo()
+            await library.queue.waitUntilIdle()
         }
         #expect(editor.steps.map(\.id) == [ids[0], ids[2]])
         #expect(editor.step(ids[0])?.isTicked == true && editor.step(ids[2])?.isHeading == true)
-        // Each Undo and Redo saves again, so the library ends where the page is.
-        #expect(await editor.flush())
-        #expect(saves.last == ChecklistEditor.kept(editor.steps))
+        // Each Undo and Redo saves, so the library ends where the page is.
+        #expect(try await library.stored() == ChecklistEditor.kept(editor.steps))
         undo.undo()
-        #expect(await editor.flush())
-        #expect(saves.last?.map(\.id) == [ids[1], ids[0], ids[2]])
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored().map(\.id) == [ids[1], ids[0], ids[2]])
+        try await library.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
     func typingSavesAfterAPauseAndEachBurstIsOneUndo() async throws {
-        let saves = SavedChecklists()
         let gate = PauseGate()
         let step = ChecklistStep(id: UUID(), text: "Clean")
-        let editor = ChecklistEditor(
-            jobID: UUID(), steps: [step], save: saves.save, pause: gate.pause)
+        let library = try await ChecklistLibrary.make(steps: [step], pause: gate.pause)
+        let editor = library.editor
         let undo = Self.undoManager()
         editor.beginEditing(step.id)
         type(" all parts", in: step.id, editor, undo)
-        #expect(saves.lists.isEmpty && editor.hasUnsavedChanges)
+        #expect(try await library.stored() == [step] && editor.hasUnsavedChanges)
         try await gate.elapse()
         try await waitUntil { !editor.hasUnsavedChanges }
-        #expect(saves.last == [ChecklistStep(id: step.id, text: "Clean all parts")])
+        #expect(try await library.stored() == [ChecklistStep(id: step.id, text: "Clean all parts")])
         // Typing after the pause is a burst of its own.
         type(" twice", in: step.id, editor, undo)
         try await gate.elapse()
         try await waitUntil { !editor.hasUnsavedChanges }
         undo.undo()
+        await library.queue.waitUntilIdle()
         #expect(editor.step(step.id)?.text == "Clean all parts")
         undo.undo()
+        await library.queue.waitUntilIdle()
         #expect(editor.step(step.id)?.text == "Clean")
         // Esc puts back the text from when the cursor came in, as a change you can undo.
         type(" nothing", in: step.id, editor, undo)
@@ -129,14 +134,15 @@ struct ChecklistEditorTests {
         act(undo) { editor.change(step.id, to: "  Clean the case  ", undoManager: undo) }
         editor.endEditing(step.id)
         try await waitUntil { !editor.hasUnsavedChanges }
-        #expect(saves.last == [ChecklistStep(id: step.id, text: "Clean the case")])
+        #expect(try await library.stored() == [ChecklistStep(id: step.id, text: "Clean the case")])
+        try await library.close()
     }
 
-    @Test
+    @Test(.timeLimit(.minutes(1)))
     func stepsWithoutTextStayOnlyWhileYouTypeInThem() async throws {
-        let saves = SavedChecklists()
         let step = ChecklistStep(id: UUID(), text: "Clean")
-        let editor = ChecklistEditor(jobID: UUID(), steps: [step], save: saves.save)
+        let library = try await ChecklistLibrary.make(steps: [step])
+        let editor = library.editor
         let undo = Self.undoManager()
         // Clearing a saved step's text saves the checklist without it. Leaving it removes it.
         editor.beginEditing(step.id)
@@ -145,10 +151,11 @@ struct ChecklistEditorTests {
         #expect(!editor.canTick(step.id) && !editor.canMove(step.id, by: 1))
         editor.endEditing(step.id)
         #expect(editor.steps.isEmpty)
-        #expect(await editor.flush())
-        #expect(saves.last == [])
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored() == [])
         // Undo brings back the text it had.
         undo.undo()
+        await library.queue.waitUntilIdle()
         #expect(editor.steps == [step])
         // Backspace in the empty row that adds a step goes to the end of the last step.
         #expect(editor.removeEmptyStep(editor.addID))
@@ -168,13 +175,14 @@ struct ChecklistEditorTests {
         #expect(editor.focusLine(nextTo: next, by: 1))
         #expect(editor.focusRequest == StepFocus(id: editor.addID, cursor: .start))
         #expect(!editor.focusLine(nextTo: editor.addID, by: 1))
+        try await library.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
     func aFailedSaveKeepsTheStepsAndTryAgainSavesThem() async throws {
-        let saves = SavedChecklists()
-        saves.failure = SavedChecklists.Failure()
-        let editor = ChecklistEditor(jobID: UUID(), steps: [], save: saves.save)
+        let library = try await ChecklistLibrary.make()
+        let editor = library.editor
+        try await JobTaskFixture.failWrites(library.coordinator, on: "checklistStep")
         let undo = Self.undoManager()
         let id = editor.addID
         editor.beginEditing(id)
@@ -185,12 +193,14 @@ struct ChecklistEditorTests {
         // Stored steps never replace what did not save.
         editor.refresh([])
         #expect(editor.steps.map(\.text) == ["Clean all parts"])
-        saves.failure = nil
+        try await JobTaskFixture.allowWrites(library.coordinator, on: "checklistStep")
         editor.saveNow()
         try await waitUntil { !editor.hasUnsavedChanges }
-        #expect(editor.saveError == nil && saves.last?.map(\.text) == ["Clean all parts"])
+        #expect(editor.saveError == nil)
+        #expect(try await library.stored().map(\.text) == ["Clean all parts"])
         editor.refresh([ChecklistStep(id: id, text: "Clean all parts", isTicked: true)])
         #expect(editor.step(id)?.isTicked == true)
+        try await library.close()
     }
 
     @Test
@@ -199,7 +209,10 @@ struct ChecklistEditorTests {
             ChecklistStep(id: UUID(), text: "Cleaning", isHeading: true),
             ChecklistStep(id: UUID(), text: "Clean all parts", isTicked: true),
         ]
-        let editor = ChecklistEditor(jobID: UUID(), steps: steps, save: { _ in })
+        let closed = LibraryCoordinator(
+            root: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString))
+        let editor = ChecklistEditor(
+            jobID: UUID(), steps: steps, queue: EditQueue(coordinator: closed))
         let heading = steps[0].id
         let step = steps[1].id
         #expect(editor.title(of: .tick, for: step) == "Untick Step")
@@ -247,18 +260,22 @@ struct ChecklistServiceTests {
                 ChecklistStep(id: ids[1], text: "Clean all parts", isTicked: true),
                 ChecklistStep(id: ids[2], text: "  "),
                 ChecklistStep(id: ids[3], text: "Regulate"),
-            ], for: job.id)
+            ], for: job.id
+        ).after
         #expect(saved.map(\.id) == [ids[0], ids[1], ids[3]] && saved.map(\.position) == [0, 1, 2])
         #expect(saved[0].text == "Cleaning" && saved[0].isHeading && !saved[0].isTicked)
         #expect(saved.allSatisfy { $0.createdAt == now && $0.updatedAt == now })
         // A move changes positions only. A step that did not change keeps its edit time.
         now = now.addingTimeInterval(60)
         clock.set(now)
-        let moved = try await service.save(
+        let revision = try await service.save(
             [
                 ChecklistStep(id: ids[3], text: "Regulate on the timegrapher"),
                 ChecklistStep(id: ids[1], text: "Clean all parts", isTicked: true),
             ], for: job.id)
+        let moved = revision.after
+        // The save gives back the steps the job had, so Undo can put them back.
+        #expect(revision.before == saved.map(ChecklistStep.init(record:)) && revision.changed)
         #expect(moved.map(\.id) == [ids[3], ids[1]] && moved.map(\.position) == [0, 1])
         #expect(moved[0].updatedAt == now && moved[1].updatedAt == saved[1].updatedAt)
         #expect(try await coordinator.read(ChecklistQueries.fetchAll) == moved)
@@ -293,7 +310,8 @@ struct ChecklistServiceTests {
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let state = ChecklistState(service: ChecklistService(coordinator: coordinator))
+        let queue = EditQueue(coordinator: coordinator)
+        let state = ChecklistState(queue: queue)
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { !state.isLoading }
@@ -307,8 +325,8 @@ struct ChecklistServiceTests {
         type("Clean all parts", in: id, editor, undo)
         #expect(state.focusedStep?.id == id)
         act(undo) { editor.perform(.tick, for: id, undoManager: undo) }
-        #expect(state.hasUnsavedChanges)
-        #expect(await state.saveAll())
+        #expect(!queue.isIdle)
+        #expect(await queue.saveEverything())
         editor.endEditing(id)
         #expect(state.focusedJobID == nil)
         try await waitUntil { state.records.count == 1 }
@@ -317,10 +335,10 @@ struct ChecklistServiceTests {
         // A failed save keeps the steps on the page and says so.
         try await JobTaskFixture.failWrites(coordinator, on: "checklistStep")
         act(undo) { editor.perform(.tick, for: id, undoManager: undo) }
-        #expect(await !state.saveAll())
+        #expect(await !queue.saveEverything())
         #expect(editor.saveError != nil && editor.step(id)?.isTicked == false)
         try await JobTaskFixture.allowWrites(coordinator, on: "checklistStep")
-        #expect(await state.saveAll())
+        #expect(await queue.saveEverything())
         try await waitUntil { state.records.first?.isTicked == false }
         observation.cancel()
         await observation.value
@@ -328,17 +346,59 @@ struct ChecklistServiceTests {
     }
 }
 
-// Every list of steps a checklist saved.
-final class SavedChecklists {
-    nonisolated struct Failure: Error {}
+// A library with one job, whose checklist an editor types on the library's queue.
+final class ChecklistLibrary {
+    let fixture: WatchFixture
+    let coordinator: LibraryCoordinator
+    let queue: EditQueue
+    let state: ChecklistState
+    let jobID: UUID
+    private let observation: Task<Void, Never>
 
-    private(set) var lists: [[ChecklistStep]] = []
-    var failure: (any Error)?
-    var last: [ChecklistStep]? { lists.last }
+    private init(
+        fixture: WatchFixture, coordinator: LibraryCoordinator, jobID: UUID,
+        pause: @escaping (Duration) async throws -> Void
+    ) {
+        self.fixture = fixture
+        self.coordinator = coordinator
+        self.jobID = jobID
+        queue = EditQueue(coordinator: coordinator)
+        let state = ChecklistState(queue: queue, pause: pause)
+        self.state = state
+        observation = Task { await state.observe() }
+    }
 
-    func save(_ steps: [ChecklistStep]) async throws {
-        if let failure { throw failure }
-        lists.append(steps)
+    static func make(
+        steps: [ChecklistStep] = [],
+        pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    ) async throws -> ChecklistLibrary {
+        let fixture = WatchFixture()
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        try await ChecklistService(coordinator: coordinator).save(steps, for: job.id)
+        let library = ChecklistLibrary(
+            fixture: fixture, coordinator: coordinator, jobID: job.id, pause: pause)
+        try await waitUntil {
+            !library.state.isLoading && library.state.records.count == steps.count
+        }
+        return library
+    }
+
+    var editor: ChecklistEditor { state.editor(for: jobID) }
+
+    // The job's steps as the library holds them.
+    func stored() async throws -> [ChecklistStep] {
+        let jobID = jobID
+        return try await coordinator.read { try ChecklistQueries.ordered(for: jobID, in: $0) }
+            .map(ChecklistStep.init(record:))
+    }
+
+    func close() async throws {
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+        fixture.remove()
     }
 }
 

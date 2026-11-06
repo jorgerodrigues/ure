@@ -17,7 +17,7 @@ final class PartState {
         "A field on this part did not save. Try it again before you delete the part."
 
     private let service: PartService
-    private let queue: EditQueue
+    let queue: EditQueue
     @ObservationIgnored private let pause: (Duration) async throws -> Void
     @ObservationIgnored private var entries: [UUID: PartEntry] = [:]
     private(set) var parts: [PartRecord] = []
@@ -272,10 +272,7 @@ final class PartState {
     func remove(_ id: UUID, undoManager: UndoManager? = nil) -> EditTicket? {
         guard part(id) != nil else { return nil }
         queue.flushTyping()
-        if facts[id]?.hasFailedText == true {
-            queue.report(Self.failedFields, in: .parts)
-            return nil
-        }
+        facts[id]?.saveFailedText()
         return queue.submit(
             .part(.remove(id)), in: .parts, undo: Self.removeActionName,
             undoManager: undoManager,

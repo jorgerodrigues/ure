@@ -69,6 +69,14 @@ final class AutosaveField {
     // Text the field does not take, such as a blank name. It never saves.
     var isRefused: Bool { text != savedText && !accepts(text) }
 
+    // Text whose save failed. Try Again, or a change that needs the record saved, tries it once
+    // more.
+    var hasFailedText: Bool { text != savedText && saveError != nil }
+
+    func saveFailedText() {
+        if hasFailedText { saveNow() }
+    }
+
     func beginEditing() {
         isEditing = true
         textBeforeEditing = text

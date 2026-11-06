@@ -37,8 +37,8 @@ nonisolated struct CaliberServiceTests {
 
         let cleared = created.addingTimeInterval(120)
         clock.withLock { $0 = cleared }
-        #expect(try await service.update(caliber.id, .beatRate(18_000)) == saved)
-        let withoutMaker = try await service.update(caliber.id, .maker("  "))
+        #expect(try await service.update(caliber.id, .beatRate(18_000)).after == saved)
+        let withoutMaker = try await service.update(caliber.id, .maker("  ")).after
         #expect(withoutMaker.manufacturer == nil && withoutMaker.updatedAt == cleared)
         _ = try await service.update(caliber.id, .winding(nil))
         try await coordinator.close()
@@ -71,8 +71,8 @@ nonisolated struct CaliberServiceTests {
                 try await service.update(caliber.id, fact)
             }
         }
-        #expect(try await service.update(caliber.id, .jewels(0)).jewelCount == 0)
-        #expect(try await service.update(caliber.id, .powerReserve(0)).powerReserve == 0)
+        #expect(try await service.update(caliber.id, .jewels(0)).after.jewelCount == 0)
+        #expect(try await service.update(caliber.id, .powerReserve(0)).after.powerReserve == 0)
         await #expect(throws: CaliberValidationError.self) {
             try await service.create(named: "  ")
         }
@@ -95,7 +95,7 @@ nonisolated struct CaliberServiceTests {
         let watches = WatchService(coordinator: coordinator)
         let first = try await watches.make("First watch", caliberID: caliber.id)
         let second = try await watches.make("Second watch", caliberID: caliber.id)
-        let renamed = try await service.update(caliber.id, .name("Corrected designation"))
+        let renamed = try await service.update(caliber.id, .name("Corrected designation")).after
         #expect(
             try await coordinator.read(WatchQueries.fetchAll).allSatisfy {
                 $0.caliberID == renamed.id

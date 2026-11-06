@@ -11,6 +11,13 @@ struct JobFacts {
     var editors: [AutosaveField] { [title.editor, waitingFor.editor, problem] }
     // A field holds text that has not saved, such as a blank title.
     var hasUnsavedText: Bool { editors.contains(where: \.hasUnsavedText) }
+    // A field holds text it does not take, such as a blank title.
+    var hasRefusedText: Bool { editors.contains(where: \.isRefused) }
+
+    // Tries text whose save failed once more.
+    func saveFailedText() {
+        for editor in editors { editor.saveFailedText() }
+    }
 
     init(
         job: JobRecord, queue: EditQueue,

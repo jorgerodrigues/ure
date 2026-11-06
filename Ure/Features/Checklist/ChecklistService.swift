@@ -89,6 +89,7 @@ nonisolated struct ChecklistService: Sendable {
     // Makes the job's saved checklist the steps given, in their order. Steps without text are
     // left out. A step that did not change keeps its edit time. The job can be Done, but not
     // archived.
+    @discardableResult
     func save(_ steps: [ChecklistStep], for jobID: UUID) async throws -> ChecklistRevision {
         try await coordinator.mutate { db, _, dependencies in
             _ = try JobService.requireJob(jobID, in: db)

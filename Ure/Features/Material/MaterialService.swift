@@ -91,6 +91,7 @@ nonisolated struct MaterialService: Sendable {
     }
 
     // A blank title keeps the saved one, so clearing the field never leaves material untitled.
+    @discardableResult
     func rename(_ id: UUID, to title: String, for owner: LibraryItemOwner) async throws
         -> Revision<LibraryItem>
     {
@@ -138,6 +139,7 @@ nonisolated struct MaterialService: Sendable {
 
     // Puts removed material back with its file, and makes it the cover again where no other
     // cover was chosen since.
+    @discardableResult
     func restore(_ removed: RemovedMaterial) async throws -> MaterialRecord {
         try await coordinator.mutate { db, _, _ in
             guard let owner = removed.item.owner else { throw MaterialError.missingMaterial }

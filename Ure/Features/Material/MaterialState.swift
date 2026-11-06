@@ -16,7 +16,7 @@ nonisolated struct MaterialPresentation: Equatable, Sendable {
 final class MaterialState {
     var reader: ReferenceReader { ReferenceReader(coordinator: service.coordinator) }
     private let service: MaterialService
-    private let queue: EditQueue
+    let queue: EditQueue
     @ObservationIgnored private let pause: (Duration) async throws -> Void
     private(set) var records: [MaterialRecord] = []
     private(set) var isLoading = true

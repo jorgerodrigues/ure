@@ -33,6 +33,13 @@ struct WatchFacts {
     }
     // A fact holds text that has not saved, such as text the fact does not take.
     var hasUnsavedText: Bool { all.contains(where: \.hasUnsavedText) }
+    // A fact holds text it does not take, such as a diameter it cannot read.
+    var hasRefusedText: Bool { all.contains { $0.editor.isRefused } }
+
+    // Tries text whose save failed once more.
+    func saveFailedText() {
+        for field in all { field.editor.saveFailedText() }
+    }
 
     init(
         watch: WatchRecord, queue: EditQueue, locale: Locale,

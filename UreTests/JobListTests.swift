@@ -165,7 +165,7 @@ struct JobListTests {
         let step = try #require(
             try await ChecklistService(coordinator: coordinator).save(
                 [ChecklistStep(id: UUID(), text: "Clean all parts")], for: older.id
-            ).first)
+            ).after.first)
         let first = try await JobListFixture.done(coordinator, at: try Self.daysAgo(10))
         let second = try await JobListFixture.done(coordinator, at: try Self.daysAgo(2))
         try await coordinator.mutate { db, _, _ in

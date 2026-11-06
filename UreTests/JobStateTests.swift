@@ -15,7 +15,7 @@ struct JobStateTests {
         let watch = try await makeWatch(coordinator)
         let (state, observation) = try await makeState(coordinator)
         defer { observation.cancel() }
-        #expect(await state.start(for: watch.id))
+        #expect(await state.start(for: watch.id).didSave)
         let job = try #require(state.selectedJob)
         #expect(job.title == "New Job" && job.stage == .inProgress)
         #expect(state.watchID == watch.id && state.titleToFocus == job.id)
@@ -24,7 +24,7 @@ struct JobStateTests {
         #expect(state.titleToFocus == nil)
         state.close()
         #expect(state.selectedJob == nil && state.watchID == nil)
-        #expect(await state.start(for: watch.id))
+        #expect(state.start(for: watch.id) == nil)
         #expect(state.selectedJob == job && state.titleToFocus == nil)
         try await waitUntil { state.jobs == [job] }
         #expect(try await coordinator.read(JobQueries.fetchAll) == [job])
@@ -32,7 +32,7 @@ struct JobStateTests {
         let archived = try await makeWatch(coordinator)
         _ = try await ArchiveService(coordinator: coordinator).setWatch(archived.id, archived: true)
         state.close()
-        #expect(await !state.start(for: archived.id))
+        #expect(await !state.start(for: archived.id).didSave)
         #expect(state.saveError != nil && state.selectedJob == nil)
         observation.cancel()
         await observation.value
@@ -54,7 +54,7 @@ struct JobStateTests {
         let facts = try #require(state.facts(for: job.id))
         facts.title.beginEditing()
         facts.title.change(to: "Full service", undoManager: nil)
-        #expect(state.hasUnsavedFacts)
+        #expect(state.queue.hasUnsavedTyping)
         facts.title.endEditing()
         try await waitUntil { !facts.title.hasUnsavedChanges }
         let problem = "Loses about two minutes a day.\nThe crown feels gritty."
@@ -65,7 +65,7 @@ struct JobStateTests {
         var saved = try #require(try await coordinator.read(JobQueries.fetchAll).first)
         #expect(saved.title == "Full service" && saved.problem == problem)
 
-        #expect(await state.setStage(.waiting))
+        #expect(await state.setStage(.waiting).didSave)
         #expect(state.waitingToFocus == job.id && state.selectedJob?.stage == .waiting)
         state.waitingFocused()
         facts.waitingFor.beginEditing()
@@ -112,12 +112,12 @@ struct JobStateTests {
 
         clock.withLock { $0 = doneDay.addingTimeInterval(86_400) }
         undo.undo()
-        await state.waitForStageChanges()
+        await state.queue.waitUntilIdle()
         var saved = try #require(try await stored(job.id, coordinator))
         #expect(saved.stage == .inProgress && saved.doneAt == nil && saved.createdAt == opened)
         #expect(undo.redoMenuItemTitle == "Redo Change State")
         undo.redo()
-        await state.waitForStageChanges()
+        await state.queue.waitUntilIdle()
         saved = try #require(try await stored(job.id, coordinator))
         #expect(saved.stage == .done && saved.doneAt == doneDay)
 
@@ -129,15 +129,15 @@ struct JobStateTests {
         saved = try #require(try await stored(job.id, coordinator))
         #expect(saved.stage == .inProgress && saved.waitingFor == nil && saved.doneAt == nil)
         undo.undo()
-        await state.waitForStageChanges()
+        await state.queue.waitUntilIdle()
         saved = try #require(try await stored(job.id, coordinator))
         #expect(saved.stage == .waiting && saved.waitingFor == "the owner's answer")
         try await waitUntil { facts.waitingFor.text == "the owner's answer" }
         undo.undo()
-        await state.waitForStageChanges()
+        await state.queue.waitUntilIdle()
         saved = try #require(try await stored(job.id, coordinator))
         #expect(saved.stage == .done && saved.doneAt == doneDay && saved.waitingFor == nil)
-        state.discardUndo()
+        state.queue.discardUndo()
         #expect(!undo.canUndo)
         observation.cancel()
         await observation.value
@@ -174,19 +174,19 @@ struct JobStateTests {
         // Both steps run before either save reaches the library.
         undo.undo()
         undo.undo()
-        await state.waitForStageChanges()
+        await state.queue.waitUntilIdle()
         try await waitUntil { !field.hasUnsavedChanges && !state.isSaving }
         var saved = try #require(try await stored(job.id, coordinator))
         #expect(saved.stage == .waiting && saved.waitingFor == "a crystal")
         #expect(field.saveError == nil && state.saveError == nil)
         undo.redo()
         undo.redo()
-        await state.waitForStageChanges()
+        await state.queue.waitUntilIdle()
         try await waitUntil { !field.hasUnsavedChanges && !state.isSaving }
         saved = try #require(try await stored(job.id, coordinator))
         #expect(saved.stage == .done && saved.waitingFor == nil)
         #expect(field.saveError == nil && state.saveError == nil)
-        #expect(await state.setStage(.inProgress, undoManager: nil))
+        #expect(await state.setStage(.inProgress, undoManager: nil).didSave)
         observation.cancel()
         await observation.value
         try await coordinator.close()
@@ -207,7 +207,7 @@ struct JobStateTests {
         let facts = try #require(state.facts(for: job.id))
         facts.problem.beginEditing()
         facts.problem.change(to: "Stops overnight.", undoManager: nil)
-        #expect(await state.setStage(.done))
+        #expect(await state.setStage(.done).didSave)
         var saved = try #require(try await stored(job.id, coordinator))
         #expect(saved.stage == .done && saved.problem == "Stops overnight.")
         facts.problem.endEditing()
@@ -215,13 +215,13 @@ struct JobStateTests {
         facts.title.beginEditing()
         facts.title.change(to: "", undoManager: nil)
         facts.title.endEditing()
-        #expect(await !state.setStage(.inProgress))
+        #expect(await !state.setStage(.inProgress).didSave)
         #expect(state.saveError != nil && !state.isSaving)
         saved = try #require(try await stored(job.id, coordinator))
         #expect(saved.stage == .done && saved.title == "New Job")
         facts.title.beginEditing()
         facts.title.change(to: "Crystal", undoManager: nil)
-        #expect(await state.setStage(.inProgress))
+        #expect(await state.setStage(.inProgress).didSave)
         saved = try #require(try await stored(job.id, coordinator))
         #expect(saved.stage == .inProgress && saved.title == "Crystal" && state.saveError == nil)
         observation.cancel()
@@ -245,7 +245,7 @@ struct JobStateTests {
         try await waitUntil { state.jobs.count == 2 }
         state.open(done)
         let undo = UndoManager()
-        #expect(await !state.setStage(.inProgress, undoManager: undo))
+        #expect(await !state.setStage(.inProgress, undoManager: undo).didSave)
         #expect(
             state.saveError
                 == "This watch already has an open job. Open that job to continue its repair.")
@@ -262,10 +262,10 @@ struct JobStateTests {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
-        let state = JobState(service: JobService(coordinator: coordinator))
+        let state = JobState(queue: EditQueue(coordinator: coordinator))
         await state.observe()
         #expect(!state.isLoading && state.loadError != nil)
-        #expect(await !state.start(for: UUID()))
+        #expect(await !state.start(for: UUID()).didSave)
         _ = try await coordinator.open()
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
@@ -276,13 +276,12 @@ struct JobStateTests {
         try await coordinator.close()
     }
 
-    // The test host groups Undo by hand, and a state change registers its Undo after it saves,
-    // so the group stays open across the change.
+    // The test host groups Undo by hand. A state change registers its Undo when it is asked for.
     private func change(_ state: JobState, to stage: JobStage, undo: UndoManager) async throws {
         undo.beginUndoGrouping()
-        let changed = await state.setStage(stage, undoManager: undo)
+        let changed = state.setStage(stage, undoManager: undo)
         undo.endUndoGrouping()
-        #expect(changed)
+        #expect(await changed.didSave)
         try await waitUntil { state.selectedJob?.stage == stage }
     }
 
@@ -294,7 +293,7 @@ struct JobStateTests {
         _ coordinator: LibraryCoordinator,
         pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) async throws -> (JobState, Task<Void, Never>) {
-        let state = JobState(service: JobService(coordinator: coordinator), pause: pause)
+        let state = JobState(queue: EditQueue(coordinator: coordinator), pause: pause)
         let observation = Task { await state.observe() }
         do {
             try await waitUntil { !state.isLoading }

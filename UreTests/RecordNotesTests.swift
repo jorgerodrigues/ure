@@ -170,41 +170,38 @@ struct AutosaveFieldTests {
     @Test(.timeLimit(.minutes(1)))
     func typingSavesHalfASecondAfterTheLastChange() async throws {
         let gate = PauseGate()
-        let store = SavedTexts()
-        let field = AutosaveField(
-            text: "", actionName: "Notes", save: store.save, pause: gate.pause)
+        let library = try await NotesLibrary.make(pause: gate.pause)
+        let field = library.field
         field.beginEditing()
         field.change(to: "M", undoManager: nil)
         field.change(to: "Ma", undoManager: nil)
         field.change(to: "Mainspring", undoManager: nil)
         try await waitUntil { gate.requests.count == 3 && gate.waiting == 1 }
         #expect(gate.requests.allSatisfy { $0 == .milliseconds(500) })
-        #expect(store.texts.isEmpty && field.hasUnsavedChanges)
+        #expect(try await library.stored().isEmpty && field.hasUnsavedChanges)
         try await gate.elapse()
-        try await waitUntil { field.savedText == "Mainspring" }
-        #expect(store.texts == ["Mainspring"] && !field.hasUnsavedChanges && field.isEditing)
+        try await waitUntil { !field.hasUnsavedChanges }
+        #expect(try await library.stored() == "Mainspring" && field.isEditing)
+        try await library.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
     func leavingTheFieldSavesAtOnce() async throws {
-        let gate = PauseGate()
-        let store = SavedTexts()
-        let field = AutosaveField(
-            text: "", actionName: "Notes", save: store.save, pause: gate.pause)
+        let library = try await NotesLibrary.make(pause: PauseGate().pause)
+        let field = library.field
         field.beginEditing()
         field.change(to: "Bench note", undoManager: nil)
         field.endEditing()
-        try await waitUntil { field.savedText == "Bench note" }
-        #expect(await field.flush())
-        #expect(store.texts == ["Bench note"] && !field.isEditing)
+        try await waitUntil { !field.hasUnsavedChanges }
+        #expect(try await library.stored() == "Bench note" && !field.isEditing)
+        try await library.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
     func undoAndRedoChangeTheSavedText() async throws {
         let gate = PauseGate()
-        let store = SavedTexts()
-        let field = AutosaveField(
-            text: "", actionName: "Notes", save: store.save, pause: gate.pause)
+        let library = try await NotesLibrary.make(pause: gate.pause)
+        let field = library.field
         let undo = UndoManager()
         undo.groupsByEvent = false
         field.beginEditing()
@@ -213,64 +210,72 @@ struct AutosaveFieldTests {
         field.change(to: "First line", undoManager: undo)
         undo.endUndoGrouping()
         try await gate.elapse()
-        try await waitUntil { field.savedText == "First line" }
+        try await waitUntil { !field.hasUnsavedChanges }
         undo.beginUndoGrouping()
         field.change(to: "First line\nSecond", undoManager: undo)
         undo.endUndoGrouping()
         try await gate.elapse()
-        try await waitUntil { field.savedText == "First line\nSecond" }
+        try await waitUntil { !field.hasUnsavedChanges }
+        #expect(try await library.stored() == "First line\nSecond")
         #expect(undo.undoActionName == "Notes")
+        // Undo and Redo put back what the library held, also while the field has the cursor.
         undo.undo()
+        await library.queue.waitUntilIdle()
         #expect(field.text == "First line")
-        try await waitUntil { field.savedText == "First line" }
+        #expect(try await library.stored() == "First line")
         undo.undo()
+        await library.queue.waitUntilIdle()
         #expect(field.text == "" && !undo.canUndo)
-        try await waitUntil { field.savedText.isEmpty }
+        #expect(try await library.stored() == "")
         undo.redo()
+        await library.queue.waitUntilIdle()
         #expect(field.text == "First line" && undo.canRedo)
-        try await waitUntil { field.savedText == "First line" }
-        #expect(
-            store.texts == ["First line", "First line\nSecond", "First line", "", "First line"])
+        #expect(try await library.stored() == "First line")
+        try await library.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
     func escapePutsBackTheTextFromWhenEditingBeganEvenAfterASave() async throws {
         let gate = PauseGate()
-        let store = SavedTexts()
-        let field = AutosaveField(
-            text: "Saved", actionName: "Notes", save: store.save, pause: gate.pause)
+        let library = try await NotesLibrary.make(notes: "Saved", pause: gate.pause)
+        let field = library.field
         field.revert(undoManager: nil)
         #expect(field.text == "Saved")
         field.beginEditing()
         field.change(to: "Saved and typed", undoManager: nil)
         try await gate.elapse()
-        try await waitUntil { field.savedText == "Saved and typed" }
+        try await waitUntil { !field.hasUnsavedChanges }
+        #expect(try await library.stored() == "Saved and typed")
         field.revert(undoManager: nil)
         #expect(field.text == "Saved")
-        try await waitUntil { field.savedText == "Saved" }
-        #expect(store.texts == ["Saved and typed", "Saved"])
+        try await waitUntil { !field.hasUnsavedChanges }
+        #expect(try await library.stored() == "Saved")
+        try await library.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
     func failedSaveKeepsTheTextAndSavesOnRetry() async throws {
-        let gate = PauseGate()
-        let store = SavedTexts()
-        store.failure = ArchiveError.archived
-        let field = AutosaveField(
-            text: "", actionName: "Notes", save: store.save, pause: gate.pause)
+        let library = try await NotesLibrary.make(pause: PauseGate().pause)
+        let field = library.field
+        let archive = ArchiveService(coordinator: library.coordinator)
+        _ = try await archive.setCaliber(library.caliberID, archived: true)
         field.beginEditing()
         field.change(to: "Keep me", undoManager: nil)
         field.endEditing()
         try await waitUntil { field.saveError != nil }
         #expect(field.text == "Keep me" && field.savedText.isEmpty && field.hasUnsavedChanges)
         #expect(field.saveError == ArchiveError.archived.localizedDescription)
-        #expect(await !field.flush())
+        field.saveNow()
+        await library.queue.waitUntilIdle()
+        #expect(field.saveError != nil && field.hasUnsavedText)
         field.refresh("Stored elsewhere")
         #expect(field.text == "Keep me")
-        store.failure = nil
-        #expect(await field.flush())
-        #expect(
-            field.saveError == nil && field.savedText == "Keep me" && store.texts == ["Keep me"])
+        _ = try await archive.setCaliber(library.caliberID, archived: false)
+        field.saveNow()
+        await library.queue.waitUntilIdle()
+        #expect(field.saveError == nil && field.savedText == "Keep me")
+        #expect(try await library.stored() == "Keep me")
+        try await library.close()
     }
 }
 
@@ -284,30 +289,24 @@ struct RecordNotesStateTests {
         let owners = try await NoteFixture.owners(coordinator)
         let gate = PauseGate()
         let service = RecordNotesService(coordinator: coordinator)
-        let notes = RecordNotesState(service: service, pause: gate.pause)
+        let editing = EditingFixture.make(coordinator, pause: gate.pause)
+        let notes = editing.notes
         await notes.load(owners[0])
         let watchNotes = try #require(notes.field(for: owners[0]))
-        #expect(watchNotes.text.isEmpty && !notes.hasUnsavedChanges)
+        #expect(watchNotes.text.isEmpty && !editing.hasUnsavedFields)
         watchNotes.beginEditing()
         watchNotes.change(to: "Typed before quitting", undoManager: nil)
-        #expect(notes.hasUnsavedChanges && notes.isEditing)
-        #expect(await notes.saveAll())
+        #expect(editing.hasUnsavedFields && notes.isEditing)
+        #expect(await editing.saveAllFields())
         #expect(try await service.text(for: owners[0]) == "Typed before quitting")
-        #expect(!notes.hasUnsavedChanges)
-        let editing = WorkshopEditing(
-            watches: WatchState(service: WatchService(coordinator: coordinator)),
-            calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
-            jobs: JobState(service: JobService(coordinator: coordinator)), notes: notes,
-            material: MaterialState(service: MaterialService(coordinator: coordinator)),
-            checklist: ChecklistState(service: ChecklistService(coordinator: coordinator)),
-            parts: PartState(service: PartService(coordinator: coordinator)))
+        #expect(!editing.hasUnsavedFields)
         await notes.load(owners[1])
         let jobNotes = try #require(notes.field(for: owners[1]))
         jobNotes.change(to: "Typed before leaving", undoManager: nil)
         var navigated = false
         editing.requestNavigation { navigated = true }
         #expect(navigated)
-        try await waitUntil { !notes.hasUnsavedChanges }
+        try await waitUntil { !editing.hasUnsavedFields && editing.queue.isIdle }
         #expect(try await service.text(for: owners[1]) == "Typed before leaving")
         try await coordinator.close()
     }
@@ -321,25 +320,75 @@ struct RecordNotesStateTests {
         let owners = try await NoteFixture.owners(coordinator)
         guard case .caliber(let caliberID) = owners[2] else { throw NoteFixtureError() }
         let service = RecordNotesService(coordinator: coordinator)
-        let notes = RecordNotesState(service: service, pause: PauseGate().pause)
+        let queue = EditQueue(coordinator: coordinator)
+        let notes = RecordNotesState(queue: queue, pause: PauseGate().pause)
         await notes.load(owners[2])
         let field = try #require(notes.field(for: owners[2]))
         field.beginEditing()
         field.change(to: "Lift angle 52°", undoManager: nil)
         let archive = ArchiveService(coordinator: coordinator)
         _ = try await archive.setCaliber(caliberID, archived: true)
-        #expect(await !notes.saveAll())
-        #expect(field.text == "Lift angle 52°" && notes.hasUnsavedChanges)
+        #expect(await !queue.saveEverything())
+        #expect(field.text == "Lift angle 52°" && queue.hasUnsavedTyping)
         #expect(field.saveError == ArchiveError.archived.localizedDescription)
         await notes.load(owners[2])
         #expect(notes.field(for: owners[2])?.text == "Lift angle 52°")
         _ = try await archive.setCaliber(caliberID, archived: false)
-        #expect(await notes.saveAll())
-        #expect(field.saveError == nil && !notes.hasUnsavedChanges)
+        #expect(await queue.saveEverything())
+        #expect(field.saveError == nil && !queue.hasUnsavedTyping)
         #expect(try await service.text(for: owners[2]) == "Lift angle 52°")
         await notes.load(.watch(UUID()))
         #expect(notes.loadErrors.count == 1)
         try await coordinator.close()
+    }
+}
+
+// A library whose caliber's notes one field types, through the library's queue.
+final class NotesLibrary {
+    let fixture: WatchFixture
+    let coordinator: LibraryCoordinator
+    let queue: EditQueue
+    let notes: RecordNotesState
+    let caliberID: UUID
+    let field: AutosaveField
+
+    private init(
+        fixture: WatchFixture, coordinator: LibraryCoordinator, queue: EditQueue,
+        notes: RecordNotesState, caliberID: UUID, field: AutosaveField
+    ) {
+        self.fixture = fixture
+        self.coordinator = coordinator
+        self.queue = queue
+        self.notes = notes
+        self.caliberID = caliberID
+        self.field = field
+    }
+
+    static func make(
+        notes text: String = "", pause: @escaping (Duration) async throws -> Void
+    ) async throws -> NotesLibrary {
+        let fixture = WatchFixture()
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let owners = try await NoteFixture.owners(coordinator)
+        guard case .caliber(let caliberID) = owners[2] else { throw NoteFixtureError() }
+        try await RecordNotesService(coordinator: coordinator).save(text, for: owners[2])
+        let queue = EditQueue(coordinator: coordinator)
+        let notes = RecordNotesState(queue: queue, pause: pause)
+        await notes.load(owners[2])
+        let field = try #require(notes.field(for: owners[2]))
+        return NotesLibrary(
+            fixture: fixture, coordinator: coordinator, queue: queue, notes: notes,
+            caliberID: caliberID, field: field)
+    }
+
+    func stored() async throws -> String {
+        try await RecordNotesService(coordinator: coordinator).text(for: .caliber(caliberID))
+    }
+
+    func close() async throws {
+        try await coordinator.close()
+        fixture.remove()
     }
 }
 
@@ -380,16 +429,6 @@ final class PauseGate {
 
     private func cancel(_ id: UUID) {
         waiters.removeValue(forKey: id)?.resume(throwing: CancellationError())
-    }
-}
-
-final class SavedTexts {
-    private(set) var texts: [String] = []
-    var failure: (any Error)?
-
-    func save(_ text: String) async throws {
-        if let failure { throw failure }
-        texts.append(text)
     }
 }
 

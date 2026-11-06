@@ -15,60 +15,64 @@ struct PartStateTests {
         let coordinator = fixture.coordinator(dependencies: LibraryDependencies(now: clock.now))
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let parts = PartState(service: PartService(coordinator: coordinator))
+        let parts = PartState(
+            service: PartService(coordinator: coordinator),
+            queue: EditQueue(coordinator: coordinator))
         let observation = Task { await parts.observe() }
         defer { observation.cancel() }
         try await waitUntil { !parts.isLoading }
         let undoManager = UndoManager()
         undoManager.groupsByEvent = false
 
-        let part = try #require(await parts.add(named: "Mainspring", to: job.id))
+        let part = try #require(await parts.add(named: "Mainspring", to: job.id)?.part)
         clock.set(1_000)
         undoManager.beginUndoGrouping()
-        #expect(await parts.advance(part.id, undoManager: undoManager))
+        let click = parts.advance(part.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
+        #expect(await click.didSave)
         #expect(parts.part(part.id)?.stage == .ordered)
         #expect(parts.part(part.id)?.orderedAt == clock.date(1_000))
         #expect(undoManager.undoActionName == PartState.stageActionName)
 
         clock.set(2_000)
         undoManager.undo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         var saved = try await stored(part.id, coordinator)
         #expect(saved.stage == .needed && saved.orderedAt == nil)
         #expect(parts.part(part.id)?.stage == .needed)
         // Redo gives back the state with the day it was given, not the day of the Redo.
         undoManager.redo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         saved = try await stored(part.id, coordinator)
         #expect(saved.stage == .ordered && saved.orderedAt == clock.date(1_000))
 
         // Two quick choices from the pop-up end at the last one, even when it is the state the
         // part had before the first saved.
-        _ = await parts.setStage(.needed, of: part.id)
-        let toOrdered = Task { await parts.setStage(.ordered, of: part.id) }
-        let backToNeeded = Task { await parts.setStage(.needed, of: part.id) }
-        _ = await (toOrdered.value, backToNeeded.value)
+        #expect(await parts.setStage(.needed, of: part.id).didSave)
+        parts.setStage(.ordered, of: part.id)
+        parts.setStage(.needed, of: part.id)
+        await parts.queue.waitUntilIdle()
         #expect(try await stored(part.id, coordinator).stage == .needed)
-        _ = await parts.setStage(.ordered, of: part.id)
+        #expect(await parts.setStage(.ordered, of: part.id).didSave)
 
-        // Two quick clicks move the part on twice, each with its own Undo step.
-        async let firstClick = parts.advance(part.id, undoManager: nil)
-        async let secondClick = parts.advance(part.id, undoManager: nil)
-        _ = await (firstClick, secondClick)
+        // Two quick clicks move the part on twice.
+        parts.advance(part.id, undoManager: nil)
+        parts.advance(part.id, undoManager: nil)
+        await parts.queue.waitUntilIdle()
         #expect(try await stored(part.id, coordinator).stage == .fitted)
-        _ = await parts.setStage(.ordered, of: part.id)
+        #expect(await parts.setStage(.ordered, of: part.id).didSave)
 
         // Each click is its own Undo step, and a fitted part stays fitted.
         for _ in 0..<2 {
             undoManager.beginUndoGrouping()
-            _ = await parts.advance(part.id, undoManager: undoManager)
+            let click = parts.advance(part.id, undoManager: undoManager)
             undoManager.endUndoGrouping()
+            #expect(await click.didSave)
         }
         #expect(parts.part(part.id)?.stage == .fitted)
-        #expect(!(await parts.advance(part.id, undoManager: undoManager)))
+        #expect(parts.advance(part.id, undoManager: undoManager) == nil)
         undoManager.undo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         #expect(try await stored(part.id, coordinator).stage == .inHand)
         observation.cancel()
         await observation.value
@@ -82,26 +86,28 @@ struct PartStateTests {
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let parts = PartState(service: PartService(coordinator: coordinator))
+        let parts = PartState(
+            service: PartService(coordinator: coordinator),
+            queue: EditQueue(coordinator: coordinator))
         let observation = Task { await parts.observe() }
         defer { observation.cancel() }
         try await waitUntil { !parts.isLoading }
         let undoManager = UndoManager()
         undoManager.groupsByEvent = false
 
-        #expect(await parts.add(named: "  ", to: job.id) == nil)
+        #expect(parts.add(named: "  ", to: job.id) == nil)
         undoManager.beginUndoGrouping()
-        let mainspring = try #require(
-            await parts.add(named: "Mainspring", to: job.id, undoManager: undoManager))
+        let adding = parts.add(named: "Mainspring", to: job.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
-        let crystal = try #require(await parts.add(named: "Crystal", to: job.id))
+        let mainspring = try #require(await adding?.part)
+        let crystal = try #require(await parts.add(named: "Crystal", to: job.id)?.part)
         #expect(parts.parts(on: job.id).map(\.name) == ["Mainspring", "Crystal"])
         #expect(undoManager.undoActionName == PartState.addActionName)
         undoManager.undo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         #expect(parts.parts(on: job.id).map(\.id) == [crystal.id])
         undoManager.redo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         try await waitUntil { parts.parts(on: job.id).count == 2 }
         #expect(parts.parts(on: job.id).map(\.id) == [mainspring.id, crystal.id])
 
@@ -114,13 +120,14 @@ struct PartStateTests {
         try await waitUntil { parts.links(of: crystal.id).count == 1 }
         parts.select(crystal.id)
         undoManager.beginUndoGrouping()
-        #expect(await parts.remove(crystal.id, undoManager: undoManager))
+        let removing = parts.remove(crystal.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
+        #expect(await removing.didSave)
         #expect(parts.selectedID == nil && parts.part(crystal.id) == nil)
         #expect(undoManager.undoActionName == PartState.removeActionName)
         #expect(try await coordinator.read { try PartQueries.fetch(crystal.id, in: $0) } == nil)
         undoManager.undo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         try await waitUntil {
             parts.part(crystal.id) != nil && parts.links(of: crystal.id).count == 1
         }
@@ -132,15 +139,16 @@ struct PartStateTests {
         facts.quantity.beginEditing()
         facts.quantity.change(to: "0", undoManager: nil)
         facts.quantity.endEditing()
-        #expect(parts.hasUnsavedFacts)
+        #expect(parts.queue.hasUnsavedTyping)
         undoManager.beginUndoGrouping()
-        #expect(await parts.remove(crystal.id, undoManager: undoManager))
+        let removingAgain = parts.remove(crystal.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
-        #expect(!parts.hasUnsavedFacts && parts.facts(for: crystal.id) == nil)
+        #expect(await removingAgain.didSave)
+        #expect(!parts.queue.hasUnsavedTyping && parts.facts(for: crystal.id) == nil)
         undoManager.undo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         try await waitUntil { parts.facts(for: crystal.id) != nil }
-        #expect(parts.facts(for: crystal.id)?.quantity.text == "1" && !parts.hasUnsavedFacts)
+        #expect(parts.facts(for: crystal.id)?.quantity.text == "1" && !parts.queue.hasUnsavedTyping)
         observation.cancel()
         await observation.value
         try await coordinator.close()
@@ -153,7 +161,9 @@ struct PartStateTests {
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let parts = PartState(service: PartService(coordinator: coordinator))
+        let parts = PartState(
+            service: PartService(coordinator: coordinator),
+            queue: EditQueue(coordinator: coordinator))
         let observation = Task { await parts.observe() }
         defer { observation.cancel() }
         try await waitUntil { !parts.isLoading }
@@ -163,38 +173,41 @@ struct PartStateTests {
         // The test keeps no field of its own, so only the parts keep them alive, as on screen
         // once the part's line has gone.
         undoManager.beginUndoGrouping()
-        let part = try #require(
-            await parts.add(named: "Mainspring", to: job.id, undoManager: undoManager))
+        let adding = parts.add(named: "Mainspring", to: job.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
+        let part = try #require(await adding?.part)
         try rename(part.id, to: "Mainspring 1.10", in: parts, undoManager)
         try await waitUntilStored(part.id, named: "Mainspring 1.10", coordinator)
         undoManager.beginUndoGrouping()
-        #expect(await parts.remove(part.id, undoManager: undoManager))
+        let removing = parts.remove(part.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
+        #expect(await removing.didSave)
 
         // ⌘Z brings the part back, then undoes the rename made before it was deleted, then the
         // addition.
         undoManager.undo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         try await waitUntil { parts.facts(for: part.id) != nil }
         #expect(undoManager.undoActionName == "Part Name")
         undoManager.undo()
+        await parts.queue.waitUntilIdle()
         #expect(parts.facts(for: part.id)?.name.text == "Mainspring")
         try await waitUntilStored(part.id, named: "Mainspring", coordinator)
         undoManager.undo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         #expect(parts.part(part.id) == nil)
 
         // Shift-⌘Z adds the part again, then renames it again, then deletes it again.
         undoManager.redo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         try await waitUntil { parts.facts(for: part.id) != nil }
         undoManager.redo()
+        await parts.queue.waitUntilIdle()
         #expect(parts.facts(for: part.id)?.name.text == "Mainspring 1.10")
         try await waitUntilStored(part.id, named: "Mainspring 1.10", coordinator)
         undoManager.redo()
-        await parts.waitForChanges()
-        #expect(parts.part(part.id) == nil && !parts.hasUnsavedFacts)
+        await parts.queue.waitUntilIdle()
+        #expect(parts.part(part.id) == nil && !parts.queue.hasUnsavedTyping)
         observation.cancel()
         await observation.value
         try await coordinator.close()
@@ -230,7 +243,9 @@ struct PartStateTests {
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let parts = PartState(service: PartService(coordinator: coordinator))
+        let parts = PartState(
+            service: PartService(coordinator: coordinator),
+            queue: EditQueue(coordinator: coordinator))
         let observation = Task { await parts.observe() }
         defer { observation.cancel() }
         try await waitUntil { !parts.isLoading }
@@ -247,21 +262,21 @@ struct PartStateTests {
         try await JobTaskFixture.failWrites(coordinator, on: "part")
         entry.change(to: "Crys")
         let crystal = PartEntryText(name: "Crystal", description: "Sapphire 30.0 mm")
-        #expect(!(await parts.submit(crystal, spare: nil, on: entry)))
-        #expect(entry.unsaved == [crystal] && entry.text == "Crys" && parts.hasUnsavedFacts)
-        #expect(!(await parts.submit(PartEntryText(name: "Gasket"), spare: nil, on: entry)))
-        #expect(!(await parts.retryUnsaved(entry)))
+        #expect(await !parts.submit(crystal, spare: nil, on: entry).didSave)
+        #expect(entry.unsaved == [crystal] && entry.text == "Crys" && parts.queue.hasUnsavedTyping)
+        #expect(await !parts.submit(PartEntryText(name: "Gasket"), spare: nil, on: entry).didSave)
+        for ticket in parts.retryUnsaved(entry) { #expect(await !ticket.saved) }
         #expect(entry.unsaved.map(\.name) == ["Crystal", "Gasket"])
         // Quitting tries them again and says that they did not save.
-        #expect(!(await parts.saveAllFacts()))
+        #expect(await !parts.queue.saveEverything())
         #expect(entry.unsaved.map(\.name) == ["Crystal", "Gasket"])
         try await JobTaskFixture.allowWrites(coordinator, on: "part")
         // Two Try Agains at once add each name once.
-        async let first = parts.retryUnsaved(entry)
-        async let second = parts.retryUnsaved(entry)
-        _ = await (first, second)
-        #expect(entry.unsaved.isEmpty && !parts.hasUnsavedFacts)
-        #expect(await parts.saveAllFacts())
+        parts.retryUnsaved(entry)
+        parts.retryUnsaved(entry)
+        await parts.queue.waitUntilIdle()
+        #expect(entry.unsaved.isEmpty && !parts.queue.hasUnsavedTyping)
+        #expect(await parts.queue.saveEverything())
         #expect(parts.parts(on: job.id).map(\.name) == ["Mainspring", "Crystal", "Gasket"])
         #expect(parts.parts(on: job.id).map(\.description) == [nil, "Sapphire 30.0 mm", nil])
         entry.endEditing()
@@ -277,7 +292,9 @@ struct PartStateTests {
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let parts = PartState(service: PartService(coordinator: coordinator))
+        let parts = PartState(
+            service: PartService(coordinator: coordinator),
+            queue: EditQueue(coordinator: coordinator))
         let observation = Task { await parts.observe() }
         defer { observation.cancel() }
         try await waitUntil { !parts.isLoading }
@@ -294,8 +311,9 @@ struct PartStateTests {
         undoManager.beginUndoGrouping()
         let typed = PartEntryText(name: entry.text)
         entry.clear()
-        #expect(await parts.submit(typed, spare: nil, on: entry, undoManager: undoManager))
+        let adding = parts.submit(typed, spare: nil, on: entry, undoManager: undoManager)
         undoManager.endUndoGrouping()
+        #expect(await adding.didSave)
         #expect(undoManager.undoActionName == PartState.addActionName)
 
         // ⌘Z undoes the typing of the next part first, and only then the part added before it.
@@ -310,7 +328,7 @@ struct PartStateTests {
         #expect(entry.text == "Cry" && entry.description == "30.0 mm")
         undoManager.undo()
         undoManager.undo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         #expect(parts.parts(on: job.id).isEmpty)
         entry.endEditing()
         observation.cancel()
@@ -327,7 +345,9 @@ struct PartStateTests {
         let job = try await JobTaskFixture.job(coordinator)
         let spare = try await PartService(coordinator: coordinator).add(
             named: "Crystal 30.0 mm", to: nil)
-        let parts = PartState(service: PartService(coordinator: coordinator))
+        let parts = PartState(
+            service: PartService(coordinator: coordinator),
+            queue: EditQueue(coordinator: coordinator))
         let observation = Task { await parts.observe() }
         defer { observation.cancel() }
         try await waitUntil { parts.parts.count == 1 }
@@ -346,20 +366,13 @@ struct PartStateTests {
         }
         try await waitUntil { hold.hasStarted }
         undoManager.beginUndoGrouping()
-        let adding = Task {
-            await parts.add(named: "Mainspring", to: job.id, undoManager: undoManager)
-        }
-        for _ in 0..<5 { await Task.yield() }
+        let adding = parts.add(named: "Mainspring", to: job.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
         undoManager.beginUndoGrouping()
-        let addingNext = Task {
-            await parts.add(named: "Hairspring", to: job.id, undoManager: undoManager)
-        }
-        for _ in 0..<5 { await Task.yield() }
+        let addingNext = parts.add(named: "Hairspring", to: job.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
         undoManager.beginUndoGrouping()
-        let using = Task { await parts.useSpare(spare.id, on: job.id, undoManager: undoManager) }
-        for _ in 0..<5 { await Task.yield() }
+        let using = parts.useSpare(spare.id, on: job.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
         #expect(parts.parts(on: job.id).isEmpty)
         undoManager.beginUndoGrouping()
@@ -367,10 +380,9 @@ struct PartStateTests {
         undoManager.endUndoGrouping()
         hold.release()
         _ = try await holdLibrary.value
-        let added = await adding.value
-        let addedNext = await addingNext.value
-        let used = await using.value
-        #expect(added != nil && addedNext != nil && used)
+        #expect(await adding.didSave)
+        #expect(await addingNext.didSave)
+        #expect(await using.didSave)
         // The job's parts are in the order they were submitted.
         let submitted = ["Mainspring", "Hairspring", "Crystal 30.0 mm"]
         #expect(parts.parts(on: job.id).map(\.name) == submitted)
@@ -385,17 +397,17 @@ struct PartStateTests {
         undoManager.undo()
         #expect(entry.text.isEmpty && parts.parts(on: job.id).count == 3)
         undoManager.undo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         #expect(try await stored(spare.id, coordinator).isSpare)
         undoManager.undo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         #expect(parts.parts(on: job.id).map(\.name) == ["Mainspring"])
         undoManager.undo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         #expect(parts.parts(on: job.id).isEmpty)
         for _ in 0..<3 {
             undoManager.redo()
-            await parts.waitForChanges()
+            await parts.queue.waitUntilIdle()
         }
         #expect(try await stored(spare.id, coordinator).jobID == job.id)
         #expect(parts.parts(on: job.id).map(\.name) == submitted)
@@ -413,11 +425,12 @@ struct PartStateTests {
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
         let parts = PartState(
-            service: PartService(coordinator: coordinator), pause: PauseGate().pause)
+            service: PartService(coordinator: coordinator),
+            queue: EditQueue(coordinator: coordinator), pause: PauseGate().pause)
         let observation = Task { await parts.observe() }
         defer { observation.cancel() }
         try await waitUntil { !parts.isLoading }
-        let part = try #require(await parts.add(named: "Mainspring", to: job.id))
+        let part = try #require(await parts.add(named: "Mainspring", to: job.id)?.part)
         let facts = try #require(parts.facts(for: part.id))
         let undoManager = UndoManager()
         undoManager.groupsByEvent = false
@@ -431,8 +444,7 @@ struct PartStateTests {
         }
         try await waitUntil { hold.hasStarted }
         undoManager.beginUndoGrouping()
-        let clicking = Task { await parts.advance(part.id, undoManager: undoManager) }
-        for _ in 0..<5 { await Task.yield() }
+        let clicking = parts.advance(part.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
         facts.name.beginEditing()
         undoManager.beginUndoGrouping()
@@ -440,16 +452,17 @@ struct PartStateTests {
         undoManager.endUndoGrouping()
         hold.release()
         _ = try await holdLibrary.value
-        #expect(await clicking.value)
+        #expect(await clicking.didSave)
         #expect(parts.part(part.id)?.stage == .ordered)
 
         // ⌘Z undoes the typing, then the click, in the order they were done.
         #expect(undoManager.undoActionName == "Part Name")
         undoManager.undo()
+        await parts.queue.waitUntilIdle()
         #expect(facts.name.text == "Mainspring" && parts.part(part.id)?.stage == .ordered)
         #expect(undoManager.undoActionName == PartState.stageActionName)
         undoManager.undo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         #expect(try await stored(part.id, coordinator).stage == .needed)
         facts.name.endEditing()
 
@@ -462,23 +475,22 @@ struct PartStateTests {
         }
         try await waitUntil { secondHold.hasStarted }
         undoManager.beginUndoGrouping()
-        let clickingAgain = Task { await parts.advance(part.id, undoManager: undoManager) }
-        for _ in 0..<5 { await Task.yield() }
+        let clickingAgain = parts.advance(part.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
         undoManager.undo()
         secondHold.release()
         _ = try await holdAgain.value
-        #expect(await clickingAgain.value)
-        await parts.waitForChanges()
+        #expect(await clickingAgain.didSave)
+        await parts.queue.waitUntilIdle()
         #expect(try await stored(part.id, coordinator).stage == .needed)
         undoManager.redo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         #expect(try await stored(part.id, coordinator).stage == .ordered)
 
         // Choosing the state the part has adds no Undo step.
         undoManager.removeAllActions()
         undoManager.beginUndoGrouping()
-        #expect(await parts.setStage(.ordered, of: part.id, undoManager: undoManager))
+        #expect(parts.setStage(.ordered, of: part.id, undoManager: undoManager) == nil)
         undoManager.endUndoGrouping()
         #expect(undoManager.undoActionName.isEmpty)
         observation.cancel()
@@ -493,45 +505,32 @@ struct PartStateTests {
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let parts = PartState(service: PartService(coordinator: coordinator))
+        let parts = PartState(
+            service: PartService(coordinator: coordinator),
+            queue: EditQueue(coordinator: coordinator))
         let observation = Task { await parts.observe() }
         defer { observation.cancel() }
         try await waitUntil { !parts.isLoading }
-        let part = try #require(await parts.add(named: "Mainspring", to: job.id))
+        let part = try #require(await parts.add(named: "Mainspring", to: job.id)?.part)
 
-        // Two holds on the library, as two slow writes. A click waits behind the first and an
-        // added part behind the second, so the click saves while the part still waits. All of
-        // them run at one priority, so the library takes them in the order they came.
-        let firstHold = LibraryHold()
-        let secondHold = LibraryHold()
-        defer {
-            firstHold.release()
-            secondHold.release()
-        }
-        let holdingFirst = Task.detached(priority: .medium) {
-            try await coordinator.mutate { _, _, _ in firstHold.hold() }
-        }
-        try await waitUntil { firstHold.hasStarted }
-        let clicking = Task(priority: .medium) { await parts.advance(part.id) }
+        // A slow write holds the library. A click and then an added part wait behind it, and
+        // quitting is asked for while both wait.
+        let hold = LibraryHold()
+        defer { hold.release() }
+        let holding = Task.detached { try await coordinator.mutate { _, _, _ in hold.hold() } }
+        try await waitUntil { hold.hasStarted }
+        let clicking = parts.advance(part.id)
+        let adding = parts.add(named: "Crystal", to: job.id)
+        let quitting = Task { await parts.queue.saveEverything() }
         try await Task.sleep(for: .milliseconds(100))
-        let holdingSecond = Task.detached(priority: .medium) {
-            try await coordinator.mutate { _, _, _ in secondHold.hold() }
-        }
-        try await Task.sleep(for: .milliseconds(100))
-        let adding = Task(priority: .medium) { await parts.add(named: "Crystal", to: job.id) }
-        try await Task.sleep(for: .milliseconds(100))
-        #expect(parts.isSaving)
-
-        firstHold.release()
-        _ = try await holdingFirst.value
-        try await waitUntil { parts.part(part.id)?.stage == .ordered }
-        try await waitUntil { secondHold.hasStarted }
-        // The part waits to save, so quitting still waits.
-        #expect(parts.isSaving && parts.parts(on: job.id).count == 1)
-        secondHold.release()
-        _ = try await holdingSecond.value
-        #expect(await clicking.value)
-        #expect(await adding.value != nil)
+        #expect(parts.isSaving && !parts.queue.isIdle)
+        hold.release()
+        _ = try await holding.value
+        // Quitting goes ahead only once the click and the part have both saved.
+        #expect(await quitting.value)
+        #expect(clicking?.isPending == false && adding?.isPending == false)
+        #expect(await clicking.didSave)
+        #expect(await adding.didSave)
         #expect(!parts.isSaving && parts.parts(on: job.id).count == 2)
         observation.cancel()
         await observation.value
@@ -546,27 +545,29 @@ struct PartStateTests {
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
         let parts = PartState(
-            service: PartService(coordinator: coordinator), pause: PauseGate().pause)
+            service: PartService(coordinator: coordinator),
+            queue: EditQueue(coordinator: coordinator), pause: PauseGate().pause)
         let observation = Task { await parts.observe() }
         defer { observation.cancel() }
         try await waitUntil { !parts.isLoading }
-        let part = try #require(await parts.add(named: "Mainspring", to: job.id))
+        let part = try #require(await parts.add(named: "Mainspring", to: job.id)?.part)
         let facts = try #require(parts.facts(for: part.id))
         facts.name.beginEditing()
         facts.name.change(to: "Mainspring 1.10", undoManager: nil)
 
         try await JobTaskFixture.failWrites(coordinator, on: "part")
-        #expect(!(await parts.remove(part.id)))
-        #expect(parts.part(part.id) != nil && parts.saveError != nil)
+        #expect(await !parts.remove(part.id).didSave)
+        #expect(parts.part(part.id) != nil && parts.saveError == PartState.failedFields)
         #expect(facts.name.text == "Mainspring 1.10" && facts.name.saveError != nil)
         try await JobTaskFixture.allowWrites(coordinator, on: "part")
         let undoManager = UndoManager()
         undoManager.groupsByEvent = false
         undoManager.beginUndoGrouping()
-        #expect(await parts.remove(part.id, undoManager: undoManager))
+        let removing = parts.remove(part.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
+        #expect(await removing.didSave)
         undoManager.undo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         // The typing saved before the part went, so Undo brings it back with the new name.
         #expect(try await stored(part.id, coordinator).name == "Mainspring 1.10")
         observation.cancel()
@@ -592,7 +593,7 @@ struct PartStateTests {
         let onJob = try await service.add(named: "Crystal for the job", to: job.id)
         _ = try await service.setStage(onJob.id, to: .inHand)
         let crown = try await service.add(named: "Crown Ø 5.3", to: nil)
-        let parts = PartState(service: service)
+        let parts = PartState(service: service, queue: EditQueue(coordinator: coordinator))
         let observation = Task { await parts.observe() }
         defer { observation.cancel() }
         try await waitUntil { parts.parts.count == 6 }
@@ -641,7 +642,7 @@ struct PartStateTests {
         let service = PartService(coordinator: coordinator)
         _ = try await service.add(named: "Mainspring", to: job.id)
         let spare = try await service.add(named: "Crystal 30.0 mm", to: nil)
-        let parts = PartState(service: service)
+        let parts = PartState(service: service, queue: EditQueue(coordinator: coordinator))
         let observation = Task { await parts.observe() }
         defer { observation.cancel() }
         try await waitUntil { parts.parts.count == 2 }
@@ -649,8 +650,9 @@ struct PartStateTests {
         undoManager.groupsByEvent = false
 
         undoManager.beginUndoGrouping()
-        #expect(await parts.useSpare(spare.id, on: job.id, undoManager: undoManager))
+        let using = parts.useSpare(spare.id, on: job.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
+        #expect(await using.didSave)
         #expect(parts.parts(on: job.id).map(\.name) == ["Mainspring", "Crystal 30.0 mm"])
         #expect(parts.spares(matching: "crystal").isEmpty)
         #expect(undoManager.undoActionName == PartState.spareActionName)
@@ -658,14 +660,14 @@ struct PartStateTests {
         let used = try await stored(spare.id, coordinator)
         #expect(used.stage == .inHand && used.inHandAt == spare.inHandAt)
         undoManager.undo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         #expect(try await stored(spare.id, coordinator).isSpare)
         #expect(parts.spares(matching: "crystal").map(\.id) == [spare.id])
         undoManager.redo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         #expect(try await stored(spare.id, coordinator).jobID == job.id)
         // A part that is no longer a spare can't be used again.
-        #expect(!(await parts.useSpare(spare.id, on: job.id)))
+        #expect(parts.useSpare(spare.id, on: job.id) == nil)
         observation.cancel()
         await observation.value
         try await coordinator.close()
@@ -677,12 +679,14 @@ struct PartStateTests {
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
-        let parts = PartState(service: PartService(coordinator: coordinator))
-        #expect(await parts.makeSpare() == nil)
+        let parts = PartState(
+            service: PartService(coordinator: coordinator),
+            queue: EditQueue(coordinator: coordinator))
+        #expect(parts.makeSpare() == nil)
         let observation = Task { await parts.observe() }
         defer { observation.cancel() }
         try await waitUntil { !parts.isLoading }
-        let spare = try #require(await parts.makeSpare())
+        let spare = try #require(await parts.makeSpare()?.part)
         #expect(spare.isSpare && spare.name == "New Part" && spare.stage == .inHand)
         #expect(parts.selectedID == spare.id && parts.nameToFocus == spare.id)
         parts.nameFocused()
@@ -700,13 +704,16 @@ struct PartStateTests {
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
         let steps = try await ChecklistService(coordinator: coordinator).save(
-            [ChecklistStep(id: UUID(), text: "Fit the mainspring")], for: job.id)
-        let parts = PartState(service: PartService(coordinator: coordinator))
+            [ChecklistStep(id: UUID(), text: "Fit the mainspring")], for: job.id
+        ).after
+        let parts = PartState(
+            service: PartService(coordinator: coordinator),
+            queue: EditQueue(coordinator: coordinator))
         let observation = Task { await parts.observe() }
         defer { observation.cancel() }
         try await waitUntil { !parts.isLoading }
-        let part = try #require(await parts.add(named: "Mainspring", to: job.id))
-        for _ in 0..<3 { _ = await parts.advance(part.id) }
+        let part = try #require(await parts.add(named: "Mainspring", to: job.id)?.part)
+        for _ in 0..<3 { #expect(await parts.advance(part.id).didSave) }
         #expect(try await stored(part.id, coordinator).stage == .fitted)
         // A fitted part ticks no step.
         #expect(
@@ -731,18 +738,3 @@ private func waitUntil(_ condition: () -> Bool) async throws {
 }
 
 nonisolated private struct PartTimeout: Error {}
-
-// A write that holds the library until the test lets it go, as a slow write does.
-nonisolated private final class LibraryHold: Sendable {
-    private let started = Mutex(false)
-    private let gate = DispatchSemaphore(value: 0)
-
-    var hasStarted: Bool { started.withLock { $0 } }
-
-    func hold() {
-        started.withLock { $0 = true }
-        gate.wait()
-    }
-
-    func release() { gate.signal() }
-}

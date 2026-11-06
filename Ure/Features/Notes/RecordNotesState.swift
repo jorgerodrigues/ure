@@ -6,7 +6,7 @@ import Observation
 @Observable
 final class RecordNotesState {
     private let service: RecordNotesService
-    private let queue: EditQueue
+    let queue: EditQueue
     @ObservationIgnored private let pause: (Duration) async throws -> Void
     private(set) var fields: [LibraryItemOwner: AutosaveField] = [:]
     private(set) var loadErrors: [LibraryItemOwner: String] = [:]

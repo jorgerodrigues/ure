@@ -84,7 +84,8 @@ nonisolated struct PartServiceTests {
 
         // Undo puts back a state exactly, with its days.
         let restored = try await service.restoreStage(
-            part.id, to: PartStageValue(part: fitted.part))
+            part.id, to: PartStageValue(part: fitted.part)
+        ).part
         #expect(PartStageValue(part: restored) == PartStageValue(part: fitted.part))
 
         // The library refuses a day that the state has not reached.
@@ -114,14 +115,14 @@ nonisolated struct PartServiceTests {
         #expect(spare.isSpare && spare.name == PartService.newName)
         #expect(spare.stage == .inHand && spare.inHandAt == clock.date(7_000))
 
-        let used = try await service.useSpare(spare.id, on: job.id)
+        let used = try await service.useSpare(spare.id, on: job.id).after
         #expect(used.jobID == job.id && used.position == 1 && used.stage == .inHand)
         #expect(used.inHandAt == clock.date(7_000))
         await #expect(throws: PartError.spareTaken) {
             try await service.useSpare(spare.id, on: job.id)
         }
         // Undo puts the spare back in the drawer.
-        let back = try await service.place(spare.id, at: PartPlacement(part: spare))
+        let back = try await service.place(spare.id, at: PartPlacement(part: spare)).after
         #expect(back.isSpare && back.position == spare.position)
 
         // A spare still to buy can't go on a job yet.
@@ -144,26 +145,27 @@ nonisolated struct PartServiceTests {
         let part = try await service.add(named: "Crystal", to: job.id)
 
         #expect(
-            try await service.update(part.id, .name(" Crystal 30.0 mm ")).name == "Crystal 30.0 mm")
+            try await service.update(part.id, .name(" Crystal 30.0 mm ")).after.name
+                == "Crystal 30.0 mm")
         await #expect(throws: PartValidationError.self) {
             try await service.update(part.id, .name("  "))
         }
         #expect(
-            try await service.update(part.id, .description(" Domed sapphire ")).description
+            try await service.update(part.id, .description(" Domed sapphire ")).after.description
                 == "Domed sapphire")
-        #expect(try await service.update(part.id, .description(" ")).description == nil)
-        #expect(try await service.update(part.id, .quantity(" 2 ")).quantity == 2)
-        #expect(try await service.update(part.id, .quantity("٣")).quantity == 3)
+        #expect(try await service.update(part.id, .description(" ")).after.description == nil)
+        #expect(try await service.update(part.id, .quantity(" 2 ")).after.quantity == 2)
+        #expect(try await service.update(part.id, .quantity("٣")).after.quantity == 3)
         for text in ["0", "-1", "1.5", "two", "", "½"] {
             await #expect(throws: PartError.invalidQuantity, "\(text)") {
                 try await service.update(part.id, .quantity(text))
             }
         }
         let notes = "From Cousins, 3 November.\n  Keep the old one.  "
-        let noted = try await service.update(part.id, .notes(notes))
+        let noted = try await service.update(part.id, .notes(notes)).after
         #expect(noted.notes == notes && noted.quantity == 3 && noted.name == "Crystal 30.0 mm")
         // A value already saved changes nothing, not even the edit time.
-        #expect(try await service.update(part.id, .notes(notes)) == noted)
+        #expect(try await service.update(part.id, .notes(notes)).after == noted)
         // Search finds the part by what its notes say.
         #expect(
             try await coordinator.read { try SearchQueries.fetch("keep the old one", in: $0) }.map(
@@ -180,7 +182,8 @@ nonisolated struct PartServiceTests {
         let job = try await JobTaskFixture.job(coordinator)
         let service = PartService(coordinator: coordinator)
         let part = try await service.update(
-            try await service.add(named: "Mainspring", to: job.id).id, .notes("Keep this"))
+            try await service.add(named: "Mainspring", to: job.id).id, .notes("Keep this")
+        ).after
         let link = PartLink(
             id: UUID(), partID: part.id, position: 0, url: "https://example.org/gr3800",
             createdAt: Date(timeIntervalSince1970: 30), updatedAt: Date(timeIntervalSince1970: 31))

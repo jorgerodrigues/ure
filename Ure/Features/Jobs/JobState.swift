@@ -12,7 +12,7 @@ final class JobState {
     static let watchActionName = "Choose Watch"
     static let unsavedFields = "A field on this job did not save. Correct it or undo it first."
 
-    private let queue: EditQueue
+    let queue: EditQueue
     @ObservationIgnored private let pause: (Duration) async throws -> Void
     private(set) var jobs: [JobRecord] = []
     private(set) var selectedID: UUID?
@@ -193,8 +193,16 @@ final class JobState {
         guard !isSaving, let job = selectedJob, job.stage != stage else { return nil }
         let id = job.id
         queue.flushTyping()
-        if facts[id]?.hasUnsavedText == true {
+        facts[id]?.saveFailedText()
+        if facts[id]?.hasRefusedText == true {
             queue.report(Self.unsavedFields, in: .jobs)
+            return nil
+        }
+        // A job leaves Done only while its watch has no other open job.
+        if !job.stage.isOpen, stage.isOpen, let watchID = job.watchID,
+            let open = openJob(for: watchID), open.id != id
+        {
+            queue.report(JobError.openJobExists(open).localizedDescription, in: .jobs)
             return nil
         }
         return queue.submit(

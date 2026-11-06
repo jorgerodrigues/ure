@@ -16,12 +16,13 @@ nonisolated struct ArchiveServiceTests {
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
         let steps = try await ChecklistService(coordinator: coordinator).save(
-            [ChecklistStep(id: UUID(), text: "Clean all parts")], for: job.id)
+            [ChecklistStep(id: UUID(), text: "Clean all parts")], for: job.id
+        ).after
         let watchID = try #require(job.watchID)
         let prior = try #require(
             try await coordinator.read { try WatchQueries.fetch(watchID, in: $0) })
         let service = ArchiveService(coordinator: coordinator)
-        let archived = try await service.setWatch(watchID, archived: true)
+        let archived = try await service.setWatch(watchID, archived: true).after
         #expect(archived.archivedAt == clock)
         #expect(archived.updatedAt == prior.updatedAt)
         #expect(
@@ -34,15 +35,15 @@ nonisolated struct ArchiveServiceTests {
             try await coordinator.read { try JobListQueries.fetch($0, doneSince: .distantPast) }
                 .map(\.id) == [job.id])
         let jobs = JobService(coordinator: coordinator)
-        let renamed = try await jobs.update(job.id, .title("Service while archived"))
-        try await RecordNotesService(coordinator: coordinator).save(
+        let renamed = try await jobs.update(job.id, .title("Service while archived")).after
+        _ = try await RecordNotesService(coordinator: coordinator).save(
             "Still on the bench", for: .job(job.id))
         await #expect(throws: ArchiveError.archived) {
             try await WatchService(coordinator: coordinator).update(archived.id, .brand("Omega"))
         }
         let done = try await jobs.setStage(job.id, to: .done).job
         #expect(try await jobs.setStage(job.id, to: .inProgress).job.stage == .inProgress)
-        let closed = try await jobs.restoreStage(job.id, to: JobStageValue(job: done))
+        let closed = try await jobs.restoreStage(job.id, to: JobStageValue(job: done)).job
         await #expect(throws: ArchiveError.archived) {
             try await jobs.start(for: archived.id)
         }
@@ -52,7 +53,8 @@ nonisolated struct ArchiveServiceTests {
         _ = try await reopened.open()
         #expect(try await reopened.read { try WatchQueries.fetch(prior.id, in: $0) } == archived)
         let restored = try await ArchiveService(coordinator: reopened).setWatch(
-            prior.id, archived: false)
+            prior.id, archived: false
+        ).after
         #expect(restored == prior)
         #expect(try await reopened.read { try JobQueries.fetch(closed.id, in: $0) } == closed)
         #expect(closed.title == renamed.title && closed.stage == .done)
@@ -72,7 +74,7 @@ nonisolated struct ArchiveServiceTests {
         let watch = try #require(try await coordinator.read(WatchQueries.fetchAll).first)
         let job = try #require(try await coordinator.read(JobQueries.fetchAll).first)
         let service = ArchiveService(coordinator: coordinator)
-        let archived = try await service.setCaliber(caliber.id, archived: true)
+        let archived = try await service.setCaliber(caliber.id, archived: true).after
         #expect(
             try await coordinator.read { try WatchQueries.fetch(watch.id, in: $0)?.caliberID }
                 == caliber.id)
@@ -97,7 +99,7 @@ nonisolated struct ArchiveServiceTests {
         }
         #expect(try await coordinator.read { try JobQueries.fetch(job.id, in: $0) } == job)
         let restored = try await service.setCaliber(caliber.id, archived: false)
-        #expect(restored == caliber)
+        #expect(restored.after == caliber && restored.before == archived)
         try await coordinator.close()
     }
 
@@ -122,8 +124,9 @@ nonisolated struct ArchiveServiceTests {
         #expect(
             try await coordinator.read { try SearchQueries.fetch(watch.name, in: $0) }.count == 1)
         try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failArchive") }
-        let archived = try await service.setWatch(watch.id, archived: true)
-        #expect(try await service.setWatch(watch.id, archived: true) == archived)
+        let archived = try await service.setWatch(watch.id, archived: true).after
+        let again = try await service.setWatch(watch.id, archived: true)
+        #expect(again.after == archived && !again.changed)
         try await coordinator.close()
     }
 }

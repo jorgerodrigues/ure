@@ -13,6 +13,7 @@ nonisolated struct RecordNotesService: Sendable {
     }
 
     // Saves the notes and gives back what they were before.
+    @discardableResult
     func save(_ text: String, for owner: LibraryItemOwner) async throws -> Revision<String> {
         try await coordinator.mutate { db, _, dependencies in
             try RecordAccess.requireOwner(owner, in: db)

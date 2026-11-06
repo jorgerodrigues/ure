@@ -86,7 +86,7 @@ struct SearchStateTests {
         let pdf = try DocumentFixture.source(in: fixture)
         var records: [(String, SearchKind, UUID, LibraryItemOwner)] = []
         for (index, owner) in owners.enumerated() {
-            try await RecordNotesService(coordinator: coordinator).save(
+            _ = try await RecordNotesService(coordinator: coordinator).save(
                 "Notes needle \(index)", for: owner)
             switch owner {
             case .watch(let id): records.append(("notes needle \(index)", .watch, id, owner))
@@ -274,16 +274,7 @@ struct SearchStateTests {
 
 enum SearchEditingFixture {
     static func make(_ coordinator: LibraryCoordinator) -> WorkshopEditing {
-        WorkshopEditing(
-            watches: WatchState(service: WatchService(coordinator: coordinator)),
-            calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
-            jobs: JobState(service: JobService(coordinator: coordinator)),
-            notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
-            material: MaterialState(
-                service: MaterialService(coordinator: coordinator, openBrowser: { _ in false })),
-            checklist: ChecklistState(service: ChecklistService(coordinator: coordinator)),
-            parts: PartState(
-                service: PartService(coordinator: coordinator, openBrowser: { _ in false })))
+        EditingFixture.make(coordinator)
     }
     static func observe(_ editing: WorkshopEditing) -> [Task<Void, Never>] {
         [

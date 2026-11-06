@@ -7,7 +7,7 @@ import Observation
 // brings it back. Every change goes through the library's edit queue.
 @Observable
 final class WatchState {
-    private let queue: EditQueue
+    let queue: EditQueue
     @ObservationIgnored private let locale: Locale
     @ObservationIgnored private let pause: (Duration) async throws -> Void
     private(set) var watches: [WatchRecord] = []
@@ -113,7 +113,8 @@ final class WatchState {
         let id = record.id
         let archived = record.archivedAt == nil
         queue.flushTyping()
-        if archived, facts[id]?.hasUnsavedText == true {
+        facts[id]?.saveFailedText()
+        if archived, facts[id]?.hasRefusedText == true {
             queue.report(CaliberState.unsavedFacts, in: .watches)
             return nil
         }

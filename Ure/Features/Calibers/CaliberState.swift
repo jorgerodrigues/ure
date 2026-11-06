@@ -9,7 +9,7 @@ import Observation
 final class CaliberState {
     static let unsavedFacts = "A fact on this page did not save. Correct it or undo it first."
 
-    private let queue: EditQueue
+    let queue: EditQueue
     @ObservationIgnored private let locale: Locale
     @ObservationIgnored private let pause: (Duration) async throws -> Void
     private(set) var calibers: [CaliberRecord] = []
@@ -142,7 +142,8 @@ final class CaliberState {
         let id = record.id
         let archived = record.archivedAt == nil
         queue.flushTyping()
-        if archived, facts[id]?.hasUnsavedText == true {
+        facts[id]?.saveFailedText()
+        if archived, facts[id]?.hasRefusedText == true {
             queue.report(Self.unsavedFacts, in: .calibers)
             return nil
         }

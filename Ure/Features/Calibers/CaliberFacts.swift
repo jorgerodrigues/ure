@@ -30,6 +30,13 @@ struct CaliberFacts {
     var all: [FactField] { [name, maker, winding, beatRate, jewels, powerReserve, liftAngle] }
     // A fact holds text that has not saved, such as text the fact does not take.
     var hasUnsavedText: Bool { all.contains(where: \.hasUnsavedText) }
+    // A fact holds text it does not take, such as a beat rate it cannot read.
+    var hasRefusedText: Bool { all.contains { $0.editor.isRefused } }
+
+    // Tries text whose save failed once more.
+    func saveFailedText() {
+        for field in all { field.editor.saveFailedText() }
+    }
 
     init(
         caliber: CaliberRecord, queue: EditQueue, locale: Locale,
