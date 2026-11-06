@@ -61,12 +61,14 @@ private struct PartLines: View {
                 if entry.isTyping {
                     PartKeyHints().padding(.top, PartLineLayout.hintsTop)
                 }
-                PartWaitingNames(entry: entry)
             } else if lines.isEmpty {
                 Text("No parts")
                     .foregroundStyle(.secondary)
                     .frame(height: PartLineLayout.entryHeight)
             }
+            // The names that wait show also while the page takes no edits, which is when a
+            // failed save holds them.
+            PartWaitingNames(entry: state.entry(for: jobID))
             if let error = state.refusal {
                 Label(error, systemImage: "exclamationmark.circle.fill")
                     .font(.system(size: NotesLayout.failureSize))
