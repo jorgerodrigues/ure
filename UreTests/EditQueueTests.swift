@@ -412,6 +412,60 @@ struct EditQueueTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
+    func undoOfTypingThatSavedAsNothingWorksAfterThePause() async throws {
+        let gate = PauseGate()
+        let step = ChecklistStep(id: UUID(), text: "Clean")
+        let library = try await ChecklistLibrary.make(steps: [step], pause: gate.pause)
+        let editor = library.editor
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        editor.beginEditing(step.id)
+        undo.beginUndoGrouping()
+        editor.change(step.id, to: "Clean ", undoManager: undo)
+        undo.endUndoGrouping()
+        try await gate.elapse()
+        try await Task.sleep(for: .milliseconds(100))
+        await library.queue.waitUntilIdle()
+        undo.undo()
+        #expect(editor.step(step.id)?.text == "Clean" && !undo.canRedo)
+        editor.endEditing(step.id)
+
+        let add = editor.addID
+        editor.beginEditing(add)
+        undo.beginUndoGrouping()
+        editor.change(add, to: "# ", undoManager: undo)
+        undo.endUndoGrouping()
+        try await gate.elapse()
+        try await Task.sleep(for: .milliseconds(100))
+        undo.undo()
+        #expect(editor.steps.map(\.id) == [step.id])
+        editor.endEditing(add)
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored() == [step])
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func tryAgainLeavesAFailedTickThatALaterUntickTookOver() async throws {
+        let step = ChecklistStep(id: UUID(), text: "Clean all parts")
+        let library = try await ChecklistLibrary.make(steps: [step])
+        let editor = library.editor
+        try await JobTaskFixture.failWrites(library.coordinator, on: "checklistStep")
+        editor.toggleTick(step.id, undoManager: nil)
+        await library.queue.waitUntilIdle()
+        #expect(editor.saveError != nil)
+        try await JobTaskFixture.allowWrites(library.coordinator, on: "checklistStep")
+        editor.toggleTick(step.id, undoManager: nil)
+        await library.queue.waitUntilIdle()
+        editor.saveNow()
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored() == [step])
+        #expect(editor.steps.map(\.isTicked) == [false])
+        #expect(editor.saveError == nil && !editor.hasUnsavedChanges)
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
     func tryAgainKeepsTheTypingApartFromTheChangeThatFailed() async throws {
         let step = ChecklistStep(id: UUID(), text: "Clean")
         let library = try await ChecklistLibrary.make(steps: [step])
