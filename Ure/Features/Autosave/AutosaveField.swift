@@ -35,6 +35,9 @@ final class AutosaveField {
     @ObservationIgnored private var isTyping = false
     // The Undo step that the text on screen belongs to while it has not saved.
     @ObservationIgnored private var unsavedChange: EditChange?
+    // The Undo step of the text whose save failed. Try Again saves the text under it, while new
+    // typing is a step of its own.
+    @ObservationIgnored private var failedChange: EditChange?
     // What the library holds, as far as this field knows.
     @ObservationIgnored private var storedText: String
     @ObservationIgnored private var latest: EditTicket?
@@ -101,8 +104,12 @@ final class AutosaveField {
             if unsavedChange == nil {
                 let before = text
                 unsavedChange = queue.beginTyping(
-                    actionName, in: scope, undoManager: undoManager
-                ) { [weak self] undone, back in self?.undo(undone, back: back) ?? false }
+                    actionName, in: scope, undoManager: undoManager,
+                    owner: UndoOwner(
+                        undo: { [weak self] undone, back in
+                            self?.undo(undone, back: back) ?? .notMine
+                        },
+                        forget: { [weak self] change in self?.undoTexts[change] = nil }))
                 if let unsavedChange, accepts(before) { undoTexts[unsavedChange] = before }
             }
         }
@@ -151,8 +158,9 @@ final class AutosaveField {
             saveError = error.localizedDescription
             return
         }
-        let change = unsavedChange
+        let change = unsavedChange ?? failedChange
         unsavedChange = nil
+        failedChange = nil
         savedText = value
         isSaving = true
         submissions += 1
@@ -168,10 +176,12 @@ final class AutosaveField {
         scheduledSubmit = nil
         isTyping = false
         unsavedChange = nil
+        failedChange = nil
         text = savedText
         track()
     }
 
+    // A failed save keeps its text on screen with Try Again. Typing after it is a new Undo step.
     private func finished(
         _ value: String, number: Int, change: EditChange?, result: EditResult
     ) {
@@ -188,7 +198,7 @@ final class AutosaveField {
             if isLatest {
                 saveError = error.localizedDescription
                 savedText = storedText
-                if unsavedChange == nil { unsavedChange = change }
+                failedChange = change
             }
         }
         track()
@@ -210,18 +220,20 @@ final class AutosaveField {
     // Undo or Redo of one of this field's changes puts back its text at once, and the text saves
     // after everything before it, under the way back's number. The text it replaces is what Redo
     // puts back, unless the field does not take it. Typing that never saved goes without a save.
-    private func undo(_ change: EditChange, back: EditChange) -> Bool {
-        guard let restored = undoTexts.removeValue(forKey: change) else { return false }
+    private func undo(_ change: EditChange, back: EditChange) -> UndoHandling {
+        guard let restored = undoTexts.removeValue(forKey: change) else { return .notMine }
         let current = text
         scheduledSubmit?.cancel()
         scheduledSubmit = nil
         isTyping = false
         saveError = nil
-        if accepts(current) { undoTexts[back] = current }
+        let canRedo = accepts(current)
+        if canRedo { undoTexts[back] = current }
         text = restored
-        unsavedChange = back
+        unsavedChange = canRedo ? back : nil
+        failedChange = nil
         saveNow()
-        return true
+        return .done(canRedo: canRedo)
     }
 
     private func putBackSavedText() {
@@ -229,6 +241,7 @@ final class AutosaveField {
         scheduledSubmit = nil
         isTyping = false
         unsavedChange = nil
+        failedChange = nil
         saveError = nil
         text = savedText
         track()
@@ -239,7 +252,10 @@ final class AutosaveField {
         saveNow()
     }
 
-    private func settle() { unsavedChange = nil }
+    private func settle() {
+        unsavedChange = nil
+        failedChange = nil
+    }
 
     private func scheduleSubmit() {
         scheduledSubmit?.cancel()

@@ -715,6 +715,122 @@ struct EditQueueTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
+    func typingAfterAFailedSaveIsAnUndoStepOfItsOwn() async throws {
+        let library = try await NotesLibrary.make(notes: "Saved", pause: PauseGate().pause)
+        let field = library.field
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        try await JobTaskFixture.failWrites(library.coordinator, on: "caliber")
+        field.beginEditing()
+        undo.beginUndoGrouping()
+        field.change(to: "Failed", undoManager: undo)
+        undo.endUndoGrouping()
+        field.saveNow()
+        await library.queue.waitUntilIdle()
+        #expect(field.saveError != nil)
+        try await JobTaskFixture.allowWrites(library.coordinator, on: "caliber")
+
+        // The typing after the failure saves the text with it, and ⌘Z takes back only that typing.
+        undo.beginUndoGrouping()
+        field.change(to: "Failed and more", undoManager: undo)
+        undo.endUndoGrouping()
+        field.saveNow()
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored() == "Failed and more")
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(field.text == "Failed")
+        #expect(try await library.stored() == "Failed")
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(field.text == "Saved" && !undo.canUndo)
+        #expect(try await library.stored() == "Saved")
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func tryAgainSavesTheFailedTextUnderItsOwnUndoStep() async throws {
+        let library = try await FieldLibrary.make()
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        try await JobTaskFixture.failWrites(library.coordinator, on: "caliber")
+        do {
+            let maker = library.field(
+                "Maker", text: "", fact: CaliberFact.maker, shown: { $0.manufacturer ?? "" })
+            maker.beginEditing()
+            undo.beginUndoGrouping()
+            maker.change(to: "Omega", undoManager: undo)
+            undo.endUndoGrouping()
+            maker.endEditing()
+            await library.queue.waitUntilIdle()
+            #expect(maker.saveError != nil)
+            try await JobTaskFixture.allowWrites(library.coordinator, on: "caliber")
+            maker.saveNow()
+            await library.queue.waitUntilIdle()
+            #expect(maker.saveError == nil)
+        }
+        #expect(try await library.stored().manufacturer == "Omega")
+
+        // The field is gone, so ⌘Z takes back the saved text from the stored data.
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored().manufacturer == nil)
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func stepsThatANewActionTakesOffTheRedoListKeepNothing() async throws {
+        let library = try await NotesLibrary.make(notes: "Saved", pause: PauseGate().pause)
+        let field = library.field
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        field.beginEditing()
+        for text in ["One", "Two"] {
+            undo.beginUndoGrouping()
+            field.change(to: text, undoManager: undo)
+            undo.endUndoGrouping()
+            field.saveNow()
+        }
+        await library.queue.waitUntilIdle()
+        #expect(library.queue.keptUndoCount == 2)
+
+        // An Undo uses up its step, and what Redo needs takes its place.
+        undo.undo()
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(field.text == "Saved" && library.queue.keptUndoCount == 2)
+
+        // New typing clears the Redo list, and the queue lets go of what it kept for it.
+        undo.beginUndoGrouping()
+        field.change(to: "Three", undoManager: undo)
+        undo.endUndoGrouping()
+        field.saveNow()
+        await library.queue.waitUntilIdle()
+        #expect(!undo.canRedo && library.queue.keptUndoCount == 1)
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func undoOfTextTheFieldDoesNotTakeOffersNoRedo() async throws {
+        let library = try await FieldLibrary.make()
+        let name = library.field(
+            "Name", text: "552", rule: .required("Enter a name."), fact: CaliberFact.name,
+            shown: \.designation)
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        name.beginEditing()
+        undo.beginUndoGrouping()
+        name.change(to: "  ", undoManager: undo)
+        undo.endUndoGrouping()
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(name.text == "552" && !undo.canRedo)
+        #expect(try await library.stored().designation == "552")
+        name.endEditing()
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
     func aTitleThatDidNotSaveGoesWithItsMaterial() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }

@@ -44,9 +44,22 @@ enum EditResult {
     }
 }
 
-// The field or checklist that made a change, asked when Undo or Redo reaches it. It gets the
-// change and the way back's number, and says whether it put the change back itself.
-typealias UndoOwner = (_ undone: EditChange, _ back: EditChange) -> Bool
+// The field or checklist that made a change. Undo and Redo go to it first.
+struct UndoOwner {
+    // Puts the change back itself, at once, and saves it under the way back's number.
+    let undo: (_ undone: EditChange, _ back: EditChange) -> UndoHandling
+    // Forgets what it kept for a step the undo manager no longer holds.
+    let forget: (EditChange) -> Void
+}
+
+// What the owner of a change did when Undo or Redo reached it.
+enum UndoHandling {
+    // It has nothing for the change, so the stored inverse undoes it.
+    case notMine
+    // It put the change back. Redo can bring it again only when the owner kept something for
+    // it, which it does not for text the field does not take.
+    case done(canRedo: Bool)
+}
 
 // An edit the queue did not apply, because what it needs did not hold when its turn came, such
 // as a field on the record that did not save.
@@ -145,6 +158,9 @@ final class EditQueue {
     // The latest Undo or Redo that failed in each scope: the change it was for and its way back.
     // Try Again there runs it once more.
     @ObservationIgnored private var failedUndos: [EditScope: FailedUndo] = [:]
+    // The ways back on each undo manager's Redo list. A new action clears that list, and then
+    // the queue and the owners forget what they kept for them.
+    @ObservationIgnored private var redoChanges: [ObjectIdentifier: Set<EditChange>] = [:]
     @ObservationIgnored private var isSubmittingTyping = false
     @ObservationIgnored private let undoManagers = NSHashTable<UndoManager>.weakObjects()
     @ObservationIgnored private var localTyping: [UUID: LocalTyping] = [:]
@@ -190,6 +206,9 @@ final class EditQueue {
                 requires: nil, then: nil))
         return true
     }
+
+    // How many Undo and Redo steps the queue keeps an inverse or an owner for.
+    var keptUndoCount: Int { Set(inverses.keys).union(owners.keys).count }
 
     // Text on screen that has not saved: typing that has not reached the queue, text the field
     // does not take yet, and text whose save failed.
@@ -237,7 +256,7 @@ final class EditQueue {
     // pauses or focus leaves. Its Undo and Redo go to the owner first.
     func beginTyping(
         _ actionName: String, in scope: EditScope, undoManager: UndoManager?,
-        owner: @escaping UndoOwner
+        owner: UndoOwner
     ) -> EditChange? {
         guard let undoManager else { return nil }
         let step = EditUndoStep(
@@ -332,9 +351,29 @@ final class EditQueue {
         owners = [:]
         retries = [:]
         failedUndos = [:]
+        redoChanges = [:]
+    }
+
+    // A step the undo manager no longer holds needs nothing kept for it.
+    private func forget(_ change: EditChange) {
+        inverses[change] = nil
+        retries[change] = nil
+        owners.removeValue(forKey: change)?.forget(change)
+    }
+
+    // Keeps track of the Redo list as AppKit does: a step registered while undoing goes onto it,
+    // and a step registered for a new action clears it.
+    private func noteRegistration(_ change: EditChange, on undoManager: UndoManager) {
+        let key = ObjectIdentifier(undoManager)
+        if undoManager.isUndoing {
+            redoChanges[key, default: []].insert(change)
+        } else if !undoManager.isRedoing {
+            for dropped in redoChanges.removeValue(forKey: key) ?? [] { forget(dropped) }
+        }
     }
 
     private func register(_ step: EditUndoStep, on undoManager: UndoManager) {
+        noteRegistration(step.change, on: undoManager)
         undoManagers.add(undoManager)
         undoManager.registerUndo(withTarget: self) { [weak undoManager] queue in
             MainActor.assumeIsolated { queue.reverse(step, undoManager: undoManager) }
@@ -347,15 +386,27 @@ final class EditQueue {
     // Without an owner, the rest of the typing submits, and then the inverse, which is read once
     // the change itself has run.
     private func reverse(_ step: EditUndoStep, undoManager: UndoManager?) {
+        if let undoManager, undoManager.isRedoing {
+            redoChanges[ObjectIdentifier(undoManager)]?.remove(step.change)
+        }
         let back = EditUndoStep(
             change: makeChange(), actionName: step.actionName, scope: step.scope,
             holdsScreen: step.holdsScreen)
-        if let undoManager { register(back, on: undoManager) }
         failures[step.scope] = nil
-        if let owner = owners[step.change], owner(step.change, back.change) {
-            owners[back.change] = owner
+        if let owner = owners[step.change],
+            case .done(let canRedo) = owner.undo(step.change, back.change)
+        {
+            inverses[step.change] = nil
+            owners[step.change] = nil
+            if canRedo, let undoManager {
+                register(back, on: undoManager)
+                owners[back.change] = owner
+            } else {
+                owner.forget(back.change)
+            }
             return
         }
+        if let undoManager { register(back, on: undoManager) }
         flushTyping()
         enqueue(
             QueuedEdit(
@@ -377,6 +428,11 @@ final class EditQueue {
         let target = localTyping[key] ?? LocalTyping()
         localTyping[key] = target
         target.restore = restore
+        if !undoManager.isUndoing, !undoManager.isRedoing {
+            for dropped in redoChanges.removeValue(forKey: ObjectIdentifier(undoManager)) ?? [] {
+                forget(dropped)
+            }
+        }
         undoManagers.add(undoManager)
         Self.registerLocal(texts, actionName: actionName, on: target, undoManager)
     }
@@ -460,7 +516,10 @@ final class EditQueue {
     private func finish(_ item: QueuedEdit, with result: EditResult) {
         switch result {
         case .saved(let applied):
-            if case .reverse(let undone) = item.work { inverses[undone] = nil }
+            if case .reverse(let undone) = item.work {
+                inverses[undone] = nil
+                owners.removeValue(forKey: undone)?.forget(undone)
+            }
             if let change = item.change, let inverse = applied.inverse {
                 inverses[change] = inverse
             }

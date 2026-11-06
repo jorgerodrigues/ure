@@ -421,7 +421,7 @@ final class ChecklistEditor {
             .checklist(jobID, operations), in: scope, undo: actionName,
             undoManager: undoManager, holdsScreen: false, reportsFailure: false,
             then: { [weak self] result in self?.finished(number, result: result) },
-            owner: { [weak self] undone, back in self?.undo(undone, back: back) ?? false })
+            owner: undoOwner)
         if let index = inFlight.firstIndex(where: { $0.number == number }),
             let change = ticket.change
         {
@@ -441,15 +441,20 @@ final class ChecklistEditor {
         typingID = id
         guard unsavedChange == nil else { return }
         unsavedChange = queue.beginTyping(
-            "Typing", in: scope, undoManager: undoManager
-        ) { [weak self] undone, back in self?.undo(undone, back: back) ?? false }
+            "Typing", in: scope, undoManager: undoManager, owner: undoOwner)
+    }
+
+    private var undoOwner: UndoOwner {
+        UndoOwner(
+            undo: { [weak self] undone, back in self?.undo(undone, back: back) ?? .notMine },
+            forget: { [weak self] change in self?.undoOperations[change] = nil })
     }
 
     // Undo or Redo of one of this checklist's changes takes it back on screen at once, step by
     // step and property by property, and saves that after everything before it, under the way
     // back's number. A change that never saved, such as typing still going on or a tick that
     // failed, goes from the screen without a save, and Redo puts it back and saves it then.
-    private func undo(_ change: EditChange, back: EditChange) -> Bool {
+    private func undo(_ change: EditChange, back: EditChange) -> UndoHandling {
         let operations: [ChecklistOperation]
         var saves = true
         if unsavedChange == change, typingID != nil {
@@ -471,7 +476,7 @@ final class ChecklistEditor {
             operations = stored
             if inFlight.contains(where: { $0.change == change }) { undoneChanges.insert(change) }
         } else {
-            return false
+            return .notMine
         }
         let base = base()
         let undone = ChecklistOperation.applying(operations, to: steps.filter { !$0.isBlank })
@@ -486,7 +491,7 @@ final class ChecklistEditor {
         }
         if failed.isEmpty { ownError = nil }
         track()
-        return true
+        return .done(canRedo: true)
     }
 
     // The queue asks the checklist to submit before other edits, and before quitting.
