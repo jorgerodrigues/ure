@@ -327,6 +327,49 @@ struct EditQueueTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
+    func undoOfAFailedTickThatALaterUndoSavedSavesToo() async throws {
+        let step = ChecklistStep(id: UUID(), text: "Clean all parts")
+        let library = try await ChecklistLibrary.make(steps: [step])
+        let editor = library.editor
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        try await JobTaskFixture.failWrites(library.coordinator, on: "checklistStep")
+        undo.beginUndoGrouping()
+        editor.toggleTick(step.id, undoManager: undo)
+        undo.endUndoGrouping()
+        await library.queue.waitUntilIdle()
+        #expect(editor.saveError != nil)
+        try await JobTaskFixture.allowWrites(library.coordinator, on: "checklistStep")
+        undo.beginUndoGrouping()
+        editor.toggleTick(step.id, undoManager: undo)
+        undo.endUndoGrouping()
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored().map(\.isTicked) == [false])
+
+        // Undo of the untick saves the tick, so Undo of the failed tick has to save as well.
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(editor.steps.map(\.isTicked) == [true])
+        #expect(try await library.stored().map(\.isTicked) == [true])
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(editor.steps.map(\.isTicked) == [false])
+        #expect(try await library.stored().map(\.isTicked) == [false])
+        #expect(editor.saveError == nil && !editor.hasUnsavedChanges)
+
+        // Redo brings back the tick and then the untick, on screen and in the library.
+        undo.redo()
+        await library.queue.waitUntilIdle()
+        #expect(editor.steps.map(\.isTicked) == [true])
+        #expect(try await library.stored().map(\.isTicked) == [true])
+        undo.redo()
+        await library.queue.waitUntilIdle()
+        #expect(editor.steps.map(\.isTicked) == [false])
+        #expect(try await library.stored().map(\.isTicked) == [false])
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
     func aTickSavedWithTryAgainKeepsItsUndo() async throws {
         let step = ChecklistStep(id: UUID(), text: "Clean all parts")
         let library = try await ChecklistLibrary.make(steps: [step])

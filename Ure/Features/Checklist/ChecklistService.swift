@@ -221,7 +221,8 @@ nonisolated enum ChecklistOperation: Equatable, Sendable {
         }
     }
 
-    private var stepID: UUID {
+    // The step the change is about.
+    var stepID: UUID {
         switch self {
         case .insert(let step, _): step.id
         case .move(let id, _), .delete(let id): id

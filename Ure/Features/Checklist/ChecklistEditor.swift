@@ -353,11 +353,14 @@ final class ChecklistEditor {
         steps = shown
     }
 
+    // Records a change on its way. What takes it back comes from the steps it changes, or is
+    // given, as for an Undo.
     private func send(
-        _ operations: [ChecklistOperation], from base: [ChecklistStep], as change: EditChange?
+        _ operations: [ChecklistOperation], from base: [ChecklistStep], as change: EditChange?,
+        undo given: [ChecklistOperation]? = nil
     ) -> Int {
         lastNumber += 1
-        let undo = ChecklistOperation.applying(operations, to: base).inverse
+        let undo = given ?? ChecklistOperation.applying(operations, to: base).inverse
         inFlight.append(
             ChecklistSubmission(
                 number: lastNumber, change: change, operations: operations, undo: undo))
@@ -453,7 +456,8 @@ final class ChecklistEditor {
     // Undo or Redo of one of this checklist's changes takes it back on screen at once, step by
     // step and property by property, and saves that after everything before it, under the way
     // back's number. A change that never saved, such as typing still going on or a tick that
-    // failed, goes from the screen without a save, and Redo puts it back and saves it then.
+    // failed, goes from the screen and saves only what the library then needs, such as when a
+    // later Undo saved the failed tick after all. Redo puts the change back and saves it then.
     private func undo(_ change: EditChange, back: EditChange) -> UndoHandling {
         let operations: [ChecklistOperation]
         var saves = true
@@ -481,13 +485,18 @@ final class ChecklistEditor {
         let base = base()
         let undone = ChecklistOperation.applying(operations, to: steps.filter { !$0.isBlank })
         show(undone.steps)
-        if saves {
-            let number = send(operations, from: base, as: back)
-            queue.submitTyping(.checklist(jobID, operations), in: scope, as: back) {
+        var saved = operations
+        if !saves {
+            let ids = Set(operations.map(\.stepID))
+            saved = unsubmitted().filter { ids.contains($0.stepID) }
+        }
+        if saved.isEmpty {
+            undoOperations[back] = undone.inverse
+        } else {
+            let number = send(saved, from: base, as: back, undo: undone.inverse)
+            queue.submitTyping(.checklist(jobID, saved), in: scope, as: back) {
                 [weak self] result in self?.finished(number, result: result)
             }
-        } else {
-            undoOperations[back] = undone.inverse
         }
         if failed.isEmpty { ownError = nil }
         track()
