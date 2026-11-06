@@ -20,6 +20,9 @@ final class PartState {
     // a change goes back to how things were before it, and Redo makes it again.
     @ObservationIgnored private let changes = ChangeUndo<PartChangeSide>()
     @ObservationIgnored private var removed: [UUID: RemovedPart] = [:]
+    // The fields of parts that left, kept until they come back, because the window's undo
+    // manager does not keep a field alive and an Undo of typing needs its field.
+    @ObservationIgnored private var leftFacts: [UUID: PartFacts] = [:]
     @ObservationIgnored private var entries: [UUID: PartEntry] = [:]
     private(set) var parts: [PartRecord] = []
     private(set) var links: [UUID: [PartLink]] = [:]
@@ -325,11 +328,12 @@ final class PartState {
     }
 
     func discardUndo() {
-        for facts in facts.values {
+        for facts in Array(facts.values) + Array(leftFacts.values) {
             for editor in facts.editors { editor.discardUndo() }
         }
         changes.discardUndo()
         removed = [:]
+        leftFacts = [:]
     }
 
     private var unsavedEditors: [AutosaveField] {
@@ -478,8 +482,21 @@ final class PartState {
     private func discard(_ id: UUID) {
         parts.removeAll { $0.id == id }
         links[id] = nil
-        facts[id] = nil
+        setFactsAside(of: id)
         if selectedID == id { selectedID = nil }
+    }
+
+    // A part that leaves keeps its fields until it comes back, so ⌘Z can still undo typing
+    // in them once the part is back. A field with a text it never took, such as a quantity of
+    // 0, goes with its part, so that text never counts as unsaved, and so do the Undo steps of
+    // the part's fields.
+    private func setFactsAside(of id: UUID) {
+        guard let gone = facts.removeValue(forKey: id) else { return }
+        if gone.hasUnsavedChanges {
+            for editor in gone.editors { editor.discardUndo() }
+        } else {
+            leftFacts[id] = gone
+        }
     }
 
     private func adopt(_ record: PartRecord) {
@@ -495,13 +512,14 @@ final class PartState {
     private func apply(_ library: PartLibrary) {
         parts = library.parts
         links = library.links
-        // A part that went takes its fields with it, so a text it could no longer save never
-        // counts as unsaved. A part that comes back gets new fields.
         let kept = Set(library.parts.map(\.id))
-        facts = facts.filter { kept.contains($0.key) }
+        for id in facts.keys where !kept.contains(id) { setFactsAside(of: id) }
         for part in library.parts {
             if let existing = facts[part.id] {
                 existing.refresh(part)
+            } else if let returning = leftFacts.removeValue(forKey: part.id) {
+                returning.refresh(part)
+                facts[part.id] = returning
             } else {
                 facts[part.id] = PartFacts(part: part, service: service, pause: pause)
             }

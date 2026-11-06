@@ -147,6 +147,83 @@ struct PartStateTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
+    func undoReachesTypingOnAPartAfterItComesBack() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        let parts = PartState(service: PartService(coordinator: coordinator))
+        let observation = Task { await parts.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { !parts.isLoading }
+        let undoManager = UndoManager()
+        undoManager.groupsByEvent = false
+
+        // The test keeps no field of its own, so only the parts keep them alive, as on screen
+        // once the part's line has gone.
+        undoManager.beginUndoGrouping()
+        let part = try #require(
+            await parts.add(named: "Mainspring", to: job.id, undoManager: undoManager))
+        undoManager.endUndoGrouping()
+        try rename(part.id, to: "Mainspring 1.10", in: parts, undoManager)
+        try await waitUntilStored(part.id, named: "Mainspring 1.10", coordinator)
+        undoManager.beginUndoGrouping()
+        #expect(await parts.remove(part.id, undoManager: undoManager))
+        undoManager.endUndoGrouping()
+
+        // ⌘Z brings the part back, then undoes the rename made before it was deleted, then the
+        // addition.
+        undoManager.undo()
+        await parts.waitForChanges()
+        try await waitUntil { parts.facts(for: part.id) != nil }
+        #expect(undoManager.undoActionName == "Part Name")
+        undoManager.undo()
+        #expect(parts.facts(for: part.id)?.name.text == "Mainspring")
+        try await waitUntilStored(part.id, named: "Mainspring", coordinator)
+        undoManager.undo()
+        await parts.waitForChanges()
+        #expect(parts.part(part.id) == nil)
+
+        // Shift-⌘Z adds the part again, then renames it again, then deletes it again.
+        undoManager.redo()
+        await parts.waitForChanges()
+        try await waitUntil { parts.facts(for: part.id) != nil }
+        undoManager.redo()
+        #expect(parts.facts(for: part.id)?.name.text == "Mainspring 1.10")
+        try await waitUntilStored(part.id, named: "Mainspring 1.10", coordinator)
+        undoManager.redo()
+        await parts.waitForChanges()
+        #expect(parts.part(part.id) == nil && !parts.hasUnsavedFacts)
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
+    private func rename(
+        _ id: UUID, to name: String, in parts: PartState, _ undoManager: UndoManager
+    ) throws {
+        let field = try #require(parts.facts(for: id)?.name)
+        field.beginEditing()
+        undoManager.beginUndoGrouping()
+        field.change(to: name, undoManager: undoManager)
+        undoManager.endUndoGrouping()
+        field.endEditing()
+    }
+
+    private func waitUntilStored(
+        _ id: UUID, named name: String, _ coordinator: LibraryCoordinator
+    ) async throws {
+        for _ in 0..<500 {
+            if try await coordinator.read({ try PartQueries.fetch(id, in: $0) })?.name == name {
+                return
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        throw PartTimeout()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
     func aNameThatDidNotSaveStaysWithTryAgainWhileTheNextIsTyped() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
