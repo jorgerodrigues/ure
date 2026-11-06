@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import GRDB
+import Synchronization
 import Testing
 
 @testable import Ure
@@ -258,12 +259,15 @@ struct PartStateTests {
         let entry = parts.entry(for: job.id)
         entry.beginEditing()
 
-        // A slow write holds the library, as a backup export does, so each save waits. The
-        // part and the spare are submitted, and the next name is typed while both wait.
+        // A slow write holds the library, as a backup export does, so each save waits until the
+        // test lets it go. The part and the spare are submitted, and the next name is typed
+        // while both wait.
+        let hold = LibraryHold()
+        defer { hold.release() }
         let holdLibrary = Task.detached {
-            try await coordinator.mutate { _, _, _ in Thread.sleep(forTimeInterval: 0.6) }
+            try await coordinator.mutate { _, _, _ in hold.hold() }
         }
-        try await Task.sleep(for: .milliseconds(100))
+        try await waitUntil { hold.hasStarted }
         undoManager.beginUndoGrouping()
         let adding = Task {
             await parts.add(named: "Mainspring", to: job.id, undoManager: undoManager)
@@ -278,6 +282,7 @@ struct PartStateTests {
         undoManager.beginUndoGrouping()
         entry.change(to: "Gasket", undoManager: undoManager)
         undoManager.endUndoGrouping()
+        hold.release()
         _ = try await holdLibrary.value
         let added = await adding.value
         let used = await using.value
@@ -302,6 +307,139 @@ struct PartStateTests {
         #expect(try await stored(spare.id, coordinator).jobID == job.id)
         #expect(parts.parts(on: job.id).map(\.name) == ["Mainspring", "Crystal 30.0 mm"])
         entry.endEditing()
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func typingWhileAStateChangeWaitsToSaveUndoesFirst() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        let parts = PartState(
+            service: PartService(coordinator: coordinator), pause: PauseGate().pause)
+        let observation = Task { await parts.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { !parts.isLoading }
+        let part = try #require(await parts.add(named: "Mainspring", to: job.id))
+        let facts = try #require(parts.facts(for: part.id))
+        let undoManager = UndoManager()
+        undoManager.groupsByEvent = false
+
+        // A slow write holds the library until the test lets it go, so the click waits to save.
+        // The part's name is typed while it waits.
+        let hold = LibraryHold()
+        defer { hold.release() }
+        let holdLibrary = Task.detached {
+            try await coordinator.mutate { _, _, _ in hold.hold() }
+        }
+        try await waitUntil { hold.hasStarted }
+        undoManager.beginUndoGrouping()
+        let clicking = Task { await parts.advance(part.id, undoManager: undoManager) }
+        for _ in 0..<5 { await Task.yield() }
+        undoManager.endUndoGrouping()
+        facts.name.beginEditing()
+        undoManager.beginUndoGrouping()
+        facts.name.change(to: "Mainspring 1.10", undoManager: undoManager)
+        undoManager.endUndoGrouping()
+        hold.release()
+        _ = try await holdLibrary.value
+        #expect(await clicking.value)
+        #expect(parts.part(part.id)?.stage == .ordered)
+
+        // ⌘Z undoes the typing, then the click, in the order they were done.
+        #expect(undoManager.undoActionName == "Part Name")
+        undoManager.undo()
+        #expect(facts.name.text == "Mainspring" && parts.part(part.id)?.stage == .ordered)
+        #expect(undoManager.undoActionName == PartState.stageActionName)
+        undoManager.undo()
+        await parts.waitForStageChanges()
+        #expect(try await stored(part.id, coordinator).stage == .needed)
+        facts.name.endEditing()
+
+        // ⌘Z pressed while the click still waits to save undoes that click once it has saved,
+        // and Shift-⌘Z gives it back.
+        let secondHold = LibraryHold()
+        defer { secondHold.release() }
+        let holdAgain = Task.detached {
+            try await coordinator.mutate { _, _, _ in secondHold.hold() }
+        }
+        try await waitUntil { secondHold.hasStarted }
+        undoManager.beginUndoGrouping()
+        let clickingAgain = Task { await parts.advance(part.id, undoManager: undoManager) }
+        for _ in 0..<5 { await Task.yield() }
+        undoManager.endUndoGrouping()
+        undoManager.undo()
+        secondHold.release()
+        _ = try await holdAgain.value
+        #expect(await clickingAgain.value)
+        await parts.waitForStageChanges()
+        #expect(try await stored(part.id, coordinator).stage == .needed)
+        undoManager.redo()
+        await parts.waitForStageChanges()
+        #expect(try await stored(part.id, coordinator).stage == .ordered)
+
+        // Choosing the state the part has adds no Undo step.
+        undoManager.removeAllActions()
+        undoManager.beginUndoGrouping()
+        #expect(await parts.setStage(.ordered, of: part.id, undoManager: undoManager))
+        undoManager.endUndoGrouping()
+        #expect(undoManager.undoActionName.isEmpty)
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func quittingWaitsUntilEveryPartChangeHasSaved() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        let parts = PartState(service: PartService(coordinator: coordinator))
+        let observation = Task { await parts.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { !parts.isLoading }
+        let part = try #require(await parts.add(named: "Mainspring", to: job.id))
+
+        // Two holds on the library, as two slow writes. A click waits behind the first and an
+        // added part behind the second, so the click saves while the part still waits. All of
+        // them run at one priority, so the library takes them in the order they came.
+        let firstHold = LibraryHold()
+        let secondHold = LibraryHold()
+        defer {
+            firstHold.release()
+            secondHold.release()
+        }
+        let holdingFirst = Task.detached(priority: .medium) {
+            try await coordinator.mutate { _, _, _ in firstHold.hold() }
+        }
+        try await waitUntil { firstHold.hasStarted }
+        let clicking = Task(priority: .medium) { await parts.advance(part.id) }
+        try await Task.sleep(for: .milliseconds(100))
+        let holdingSecond = Task.detached(priority: .medium) {
+            try await coordinator.mutate { _, _, _ in secondHold.hold() }
+        }
+        try await Task.sleep(for: .milliseconds(100))
+        let adding = Task(priority: .medium) { await parts.add(named: "Crystal", to: job.id) }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(parts.isSaving)
+
+        firstHold.release()
+        _ = try await holdingFirst.value
+        try await waitUntil { parts.part(part.id)?.stage == .ordered }
+        try await waitUntil { secondHold.hasStarted }
+        // The part waits to save, so quitting still waits.
+        #expect(parts.isSaving && parts.parts(on: job.id).count == 1)
+        secondHold.release()
+        _ = try await holdingSecond.value
+        #expect(await clicking.value)
+        #expect(await adding.value != nil)
+        #expect(!parts.isSaving && parts.parts(on: job.id).count == 2)
         observation.cancel()
         await observation.value
         try await coordinator.close()
@@ -500,3 +638,18 @@ private func waitUntil(_ condition: () -> Bool) async throws {
 }
 
 nonisolated private struct PartTimeout: Error {}
+
+// A write that holds the library until the test lets it go, as a slow write does.
+nonisolated private final class LibraryHold: Sendable {
+    private let started = Mutex(false)
+    private let gate = DispatchSemaphore(value: 0)
+
+    var hasStarted: Bool { started.withLock { $0 } }
+
+    func hold() {
+        started.withLock { $0 = true }
+        gate.wait()
+    }
+
+    func release() { gate.signal() }
+}
