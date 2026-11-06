@@ -62,6 +62,14 @@ struct PartOptionFacts {
         note.refresh(option.note, force: force)
     }
 
+    // The price and the shipping are read in the option's currency. When that changes, a text
+    // the fields refused, such as "£10" on an option in euros, can be a good amount, so it saves
+    // without being typed again.
+    func saveAmountsNow() {
+        price.saveNow()
+        shipping.saveNow()
+    }
+
     // The option goes, and text it never took goes with it.
     func discard() {
         for editor in editors { editor.discard() }

@@ -338,6 +338,9 @@ final class PartState {
         }
         if code == fields.money.currency, !isSaving { return nil }
         fields.money.choose(code)
+        // A price typed with this currency's mark, refused until now, saves first, under the
+        // Undo step of its typing.
+        fields.saveAmountsNow()
         return queue.submit(
             .part(.setOption(id, .currency(code))), in: .parts, undo: Self.currencyActionName,
             undoManager: undoManager
@@ -377,7 +380,10 @@ final class PartState {
     // The home currency changed in Settings, so each option's fields read amounts in the new
     // one while the option has no currency of its own.
     func homeCurrencyChanged() {
-        for option in options.values.flatMap({ $0 }) { showStored(option.id) }
+        for option in options.values.flatMap({ $0 }) {
+            showStored(option.id)
+            if option.currency == nil { optionFacts[option.id]?.saveAmountsNow() }
+        }
     }
 
     func openLink(_ url: String) {

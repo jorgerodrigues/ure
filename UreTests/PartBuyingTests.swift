@@ -443,6 +443,24 @@ struct PartBuyingTests {
         #expect(parts.option(option.id)?.price == decimal("12.9"))
         #expect(facts.price.text == "£12.90")
 
+        // A price refused for its mark saves once you choose that currency, as the field asks,
+        // so Mark as Bought offers it.
+        let typedFirst = try await service.addOption(
+            try #require(URL(string: "https://cousinsuk.com/gr3808x")), to: part.id)
+        try await waitUntil { parts.facts(forOption: typedFirst.id) != nil }
+        let typedFacts = try #require(parts.facts(forOption: typedFirst.id))
+        typedFacts.price.beginEditing()
+        typedFacts.price.change(to: "£10", undoManager: nil)
+        typedFacts.price.endEditing()
+        #expect(typedFacts.price.problem != nil)
+        #expect(await parts.chooseCurrency("GBP", of: typedFirst.id).didSave)
+        await parts.queue.waitUntilIdle()
+        let corrected = try #require(
+            try await coordinator.read { try PartQueries.option(typedFirst.id, in: $0) })
+        #expect(corrected.price == decimal("10") && corrected.currency == "GBP")
+        #expect(typedFacts.price.problem == nil && typedFacts.price.text == "£10.00")
+        #expect(await parts.savedOptions(of: part.id)?.contains(corrected) == true)
+
         // A first choice of currency undoes to none, which is the home currency.
         let fresh = try await service.addOption(
             try #require(URL(string: "https://ebay.co.uk/itm/1")), to: part.id)
@@ -603,10 +621,15 @@ struct PartBuyingTests {
         facts.price.change(to: "12.50", undoManager: nil)
         facts.price.endEditing()
         #expect(facts.price.problem != nil)
-        // Once the home currency is the euro, the same text is a price.
+        // Once the home currency is the euro, the same text is a price, and it saves without
+        // being typed again.
+        try await MoneyService(coordinator: coordinator).setHomeCurrency("EUR")
         session.code = "EUR"
         parts.homeCurrencyChanged()
         #expect(facts.price.problem == nil)
+        await parts.queue.waitUntilIdle()
+        let saved = try await coordinator.read { try PartQueries.option(option.id, in: $0) }
+        #expect(saved?.price == decimal("12.5") && saved?.currency == "EUR")
         try await coordinator.close()
     }
 
