@@ -169,7 +169,7 @@ struct RestoreStateTests {
         try await waitUntil { money.settings.homeCurrency == "GBP" }
         #expect(money.rates.rates == ["USD": Self.amount("0.79")])
         // Settings follows the restored library from now on, so a later change shows too.
-        #expect(await money.setHomeCurrency("SEK"))
+        #expect(await money.setHomeCurrency("SEK").saved)
         try await waitUntil { money.home == "SEK" }
         #expect(money.rates.rates.isEmpty)
         observation.cancel()
@@ -200,7 +200,7 @@ struct RestoreStateTests {
         // Afterwards Settings edits the restored library, and what you set there is kept.
         let restored = try #require(state.settingsMoney)
         #expect(restored !== replaced)
-        #expect(await restored.setHomeCurrency("SEK"))
+        #expect(await restored.setHomeCurrency("SEK").saved)
         #expect(try await library.coordinator.read { try MoneyQueries.homeCurrency($0) } == "SEK")
         try await library.coordinator.close()
     }
@@ -212,10 +212,10 @@ struct RestoreStateTests {
         let money = MoneyService(
             coordinator: coordinator, region: "DKK", locale: Locale(identifier: "en_US_POSIX"))
         try await money.setHomeCurrency("GBP")
-        try await money.setRate("0.79", for: "USD")
+        _ = try await money.setRate(amount("0.79"), for: "USD", home: "GBP")
         _ = try await coordinator.exportBackup(to: package, applicationVersion: "fixture")
         try await money.setHomeCurrency("CHF")
-        try await money.setRate("0.88", for: "USD")
+        _ = try await money.setRate(amount("0.88"), for: "USD", home: "CHF")
     }
 
     private static func amount(_ text: String) -> Decimal {

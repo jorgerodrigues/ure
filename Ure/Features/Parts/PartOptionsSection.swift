@@ -39,8 +39,10 @@ struct PartOptionsSection: View {
     }
 }
 
-// The option cards, in the order they were added.
+// The option cards, in the order they were added. An option whose deletion is saving takes no
+// edits.
 struct PartOptionCards: View {
+    @Environment(PartState.self) private var parts
     let options: [PartOption]
     let lowestID: UUID?
     let isEditable: Bool
@@ -49,7 +51,8 @@ struct PartOptionCards: View {
         VStack(alignment: .leading, spacing: PartOptionLayout.cardSpacing) {
             ForEach(options) { option in
                 PartOptionCard(
-                    option: option, isLowest: option.id == lowestID, isEditable: isEditable)
+                    option: option, isLowest: option.id == lowestID,
+                    isEditable: isEditable && parts.canEdit(option))
             }
         }
     }
@@ -172,7 +175,7 @@ private struct PartOptionFields: View {
                     identifier: "optionShipping-\(option.id.uuidString)", showsHint: false
                 )
                 .frame(width: PartOptionLayout.amountWidth, alignment: .leading)
-                OptionCurrencyPopUp(option: option, field: facts.currency, isEditable: isEditable)
+                OptionCurrencyPopUp(option: option, isEditable: isEditable)
             }
             .padding(.leading, -InPlaceLayout.inset)
             FactRow(
@@ -193,7 +196,7 @@ private struct PartOptionFields: View {
                     .accessibilityIdentifier("deleteOption-\(option.id.uuidString)")
             }
             .font(.system(size: PageLayout.detailSize))
-            if let error = parts.openError ?? facts.currency.saveError {
+            if let error = parts.openError {
                 Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
             }
         }
@@ -210,7 +213,6 @@ private struct OptionCurrencyPopUp: View {
     @Environment(MoneyState.self) private var money
     @Environment(\.undoManager) private var undoManager
     let option: PartOption
-    let field: FactField
     let isEditable: Bool
 
     var body: some View {
@@ -237,14 +239,8 @@ private struct OptionCurrencyPopUp: View {
 
     private var shown: String { option.currency ?? money.home }
 
-    // A currency that can't take the price or the shipping, such as the yen for 12.90, is not
-    // chosen, and the page says why.
     private func choose(_ code: String) {
-        guard PartOptionRules.fits([option.price, option.shipping], in: code) else {
-            parts.showOptionProblem(PartOptionRules.tooPrecise(for: code))
-            return
-        }
-        field.choose(code, undoManager: undoManager)
+        parts.chooseCurrencyCommand(code, of: option.id, undoManager: undoManager)
     }
 }
 

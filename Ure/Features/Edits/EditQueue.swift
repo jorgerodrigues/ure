@@ -11,6 +11,8 @@ nonisolated enum EditScope: Hashable, Sendable {
     case notes(LibraryItemOwner)
     case checklist(UUID)
     case material(LibraryItemOwner)
+    // The home currency and the exchange rates in Settings.
+    case money
 
     var isMaterial: Bool {
         if case .material = self { return true }
@@ -24,7 +26,7 @@ nonisolated enum EditScope: Hashable, Sendable {
         case .notes(.watch): .watches
         case .notes(.caliber): .calibers
         case .notes(.job), .checklist: .jobs
-        case .calibers, .watches, .jobs, .parts, .material: self
+        case .calibers, .watches, .jobs, .parts, .material, .money: self
         }
     }
 }

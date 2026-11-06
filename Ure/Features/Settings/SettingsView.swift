@@ -6,6 +6,19 @@ struct SettingsView: View {
     @Environment(RestoreState.self) private var restore
 
     var body: some View {
+        VStack(spacing: 0) {
+            // A save that failed shows here too, with Try Again, because a rate typed in
+            // Settings waits behind it like any change.
+            SaveFailureBar().environment(restore.session.editing)
+            form
+        }
+        .task(loadSummary)
+        // Settings follows the home currency and the rates on its own, also while the main
+        // window is closed and after a restore.
+        .task(observeMoneyEffect)
+    }
+
+    private var form: some View {
         Form {
             Section("Library") {
                 LabeledContent("Library folder") {
@@ -73,10 +86,6 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 520, height: 620)
         .scenePadding()
-        .task(loadSummary)
-        // Settings follows the home currency and the rates on its own, also while the main
-        // window is closed and after a restore.
-        .task(observeMoneyEffect)
     }
 
     private func observeMoneyEffect() async { await restore.observeSettingsMoney() }

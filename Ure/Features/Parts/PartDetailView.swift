@@ -58,7 +58,8 @@ struct PartDetailView: View {
 }
 
 // The page you write a part on: its state, its name, its job and watch, its description and
-// quantity, its saved links and its notes. Everything saves as you type.
+// quantity, its buying options or what was bought, and its notes. Everything saves as you
+// type.
 private struct PartPage: View {
     @Environment(PartState.self) private var parts
     @Environment(WorkshopEditing.self) private var editing

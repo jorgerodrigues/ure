@@ -22,6 +22,7 @@ nonisolated enum LibraryEdit: Equatable, Sendable {
     case checklist(UUID, [ChecklistOperation])
     case notes(LibraryItemOwner, String)
     case material(MaterialEdit)
+    case money(MoneyEdit)
 }
 
 // A record that an edit deletes or archives.
@@ -30,6 +31,7 @@ nonisolated enum EndedRecord: Hashable, Sendable {
     case caliber(UUID)
     case job(UUID)
     case part(UUID)
+    case option(UUID)
     case material(UUID)
 
     init(_ owner: LibraryItemOwner) {
@@ -50,6 +52,7 @@ extension LibraryEdit {
         case .caliber(.archive(let id, true)): .caliber(id)
         case .job(.discardIfBlank(let id)): .job(id)
         case .part(.remove(let id)): .part(id)
+        case .part(.removeOption(let id)): .option(id)
         case .material(.remove(let id, _)): .material(id)
         default: nil
         }
@@ -102,6 +105,21 @@ nonisolated enum PartEdit: Equatable, Sendable {
     case place(UUID, PartPlacement)
     case remove(UUID)
     case restore(RemovedPart)
+    // Adds a buying option for a link, after the part's other options.
+    case addOption(UUID, URL)
+    case setOption(UUID, PartOptionFact)
+    case removeOption(UUID)
+    case restoreOption(PartOption)
+    // Records what was bought, and moves a part to buy on to Ordered.
+    case markBought(UUID, PartPurchase)
+}
+
+// The home currency and the exchange rates in Settings.
+nonisolated enum MoneyEdit: Equatable, Sendable {
+    // Chooses the home currency, or nil to follow the Mac's region again.
+    case setHomeCurrency(String?)
+    // The rate of one unit of a currency in a home currency, or nil for no rate.
+    case setRate(currency: String, home: String, rate: Decimal?)
 }
 
 nonisolated enum MaterialEdit: Equatable, Sendable {
@@ -121,6 +139,8 @@ nonisolated enum LibraryChange: Sendable {
     case jobRemoved(UUID)
     case part(PartRecord)
     case partRemoved(UUID)
+    case partOption(PartOption)
+    case partOptionRemoved(UUID)
     case checklist(UUID, [ChecklistStepRecord])
     case notes(LibraryItemOwner, String)
     case material(MaterialRecord)
@@ -147,6 +167,7 @@ nonisolated struct LibraryEditor: Sendable {
     let notes: RecordNotesService
     let material: MaterialService
     let archive: ArchiveService
+    let money: MoneyService
 
     init(coordinator: LibraryCoordinator) {
         calibers = CaliberService(coordinator: coordinator)
@@ -157,6 +178,7 @@ nonisolated struct LibraryEditor: Sendable {
         notes = RecordNotesService(coordinator: coordinator)
         material = MaterialService(coordinator: coordinator)
         archive = ArchiveService(coordinator: coordinator)
+        money = MoneyService(coordinator: coordinator)
     }
 
     func apply(_ edit: LibraryEdit) async throws -> EditApplied {
@@ -170,6 +192,7 @@ nonisolated struct LibraryEditor: Sendable {
         case .notes(let owner, let text):
             try await saveNotes(text, for: owner)
         case .material(let edit): try await apply(edit)
+        case .money(let edit): try await apply(edit)
         }
     }
 
@@ -270,7 +293,45 @@ nonisolated struct LibraryEditor: Sendable {
             return EditApplied(changes: [.partRemoved(id)], inverse: .part(.restore(removed)))
         case .restore(let removed):
             let part = try await parts.restore(removed)
-            return EditApplied(changes: [.part(part)], inverse: .part(.remove(part.id)))
+            return EditApplied(
+                changes: [.part(part)] + removed.options.map(LibraryChange.partOption),
+                inverse: .part(.remove(part.id)))
+        case .addOption(let partID, let url):
+            let option = try await parts.addOption(url, to: partID)
+            return EditApplied(
+                changes: [.partOption(option)], inverse: .part(.removeOption(option.id)))
+        case .setOption(let id, let fact):
+            let revision = try await parts.updateOption(id, fact)
+            return EditApplied(
+                changes: [.partOption(revision.after)],
+                inverse: revision.changed
+                    ? .part(.setOption(id, fact.stored(in: revision.before))) : nil)
+        case .removeOption(let id):
+            let option = try await parts.removeOption(id)
+            return EditApplied(
+                changes: [.partOptionRemoved(id)], inverse: .part(.restoreOption(option)))
+        case .restoreOption(let option):
+            let restored = try await parts.restoreOption(option)
+            return EditApplied(
+                changes: [.partOption(restored)], inverse: .part(.removeOption(restored.id)))
+        case .markBought(let id, let purchase):
+            return Self.applied(try await parts.markBought(id, purchase), id)
+        }
+    }
+
+    // The home currency has no Undo, so its edit keeps no inverse. Settings follows both from
+    // the library.
+    private func apply(_ edit: MoneyEdit) async throws -> EditApplied {
+        switch edit {
+        case .setHomeCurrency(let code):
+            try await money.setHomeCurrency(code)
+            return EditApplied()
+        case .setRate(let currency, let home, let rate):
+            let revision = try await money.setRate(rate, for: currency, home: home)
+            return EditApplied(
+                inverse: revision.changed
+                    ? .money(.setRate(currency: currency, home: home, rate: revision.before))
+                    : nil)
         }
     }
 
@@ -387,6 +448,19 @@ extension PartFact {
         case .description: .description(record.description ?? "")
         case .quantity: .quantity(String(record.quantity))
         case .notes: .notes(record.notes)
+        }
+    }
+}
+
+// A price, the shipping and the currency share one currency, and a first amount sets it, so
+// their Undo puts back all three as they were stored.
+extension PartOptionFact {
+    nonisolated func stored(in option: PartOption) -> PartOptionFact {
+        switch self {
+        case .supplier: .supplier(option.supplier)
+        case .note: .note(option.note)
+        case .price, .shipping, .currency, .money:
+            .money(price: option.price, shipping: option.shipping, currency: option.currency)
         }
     }
 }

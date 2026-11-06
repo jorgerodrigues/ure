@@ -62,7 +62,8 @@ nonisolated struct BuyingMigrationTests {
         let service = PartService(coordinator: coordinator, region: "EUR")
         let first = try #require(stored.options.first)
         _ = try await service.updateOption(first.id, .currency("GBP"))
-        let priced = try await service.updateOption(first.id, .price("£12.90"))
+        let priced = try await service.updateOption(first.id, .price(Decimal(string: "12.9")))
+            .after
         #expect(priced.price == Decimal(string: "12.9") && priced.currency == "GBP")
         try await coordinator.close()
     }

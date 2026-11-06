@@ -9,11 +9,11 @@ import Observation
 @Observable
 final class MoneyState {
     private let service: MoneyService
+    let queue: EditQueue
     @ObservationIgnored private let pause: (Duration) async throws -> Void
     private(set) var settings = MoneySettings()
     private(set) var isLoading = true
     private(set) var loadError: String?
-    private(set) var saveError: String?
     // Currencies you added in Settings that have no rate yet, so their row shows.
     private(set) var addedCurrencies: Set<String> = []
     @ObservationIgnored private var rateFields: [RateKey: FactField] = [:]
@@ -21,10 +21,11 @@ final class MoneyState {
     @ObservationIgnored var homeChanged: () -> Void = {}
 
     init(
-        service: MoneyService,
+        service: MoneyService, queue: EditQueue,
         pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.service = service
+        self.queue = queue
         self.pause = pause
     }
 
@@ -32,6 +33,8 @@ final class MoneyState {
     var home: String { settings.home(region: region) }
     var rates: ExchangeRates { settings.exchangeRates(region: region) }
     var isHomeFromRegion: Bool { settings.homeCurrency == nil }
+    // A rule that a change in Settings broke, such as a currency the app does not know.
+    var refusal: String? { queue.refusal(in: .money) }
 
     // The currencies Settings shows a rate for: those the library's prices are in, those with a
     // rate for the home currency and those you added, in order of code.
@@ -42,38 +45,24 @@ final class MoneyState {
     }
 
     // The field where you type a currency's rate in the home currency, made the first time it
-    // is asked for.
+    // is asked for. Its edit keeps the home currency it was made for, so a later save or its
+    // Undo never reaches another home currency's rate.
     func rateField(for currency: String) -> FactField {
         let key = RateKey(home: home, currency: currency)
         if let field = rateFields[key] { return field }
-        let service = service
+        let locale = service.locale
         let field = FactField(
-            label: "\(CurrencyRules.symbol(of: currency, locale: service.locale))1 =",
+            label: "\(CurrencyRules.symbol(of: currency, locale: locale))1 =",
             prompt: "No rate",
             actionName: "Exchange Rate", text: rateText(for: currency),
-            rule: Self.rateRule(locale: service.locale),
-            save: { text in try await service.setRate(text, for: currency, home: key.home) },
-            pause: pause)
+            rule: Self.rateRule(locale: locale), queue: queue, scope: .money,
+            edit: { text in
+                .money(
+                    .setRate(
+                        currency: currency, home: key.home, rate: try Self.rate(text, locale)))
+            }, pause: pause)
         rateFields[key] = field
         return field
-    }
-
-    var hasUnsavedFacts: Bool { rateFields.values.contains { $0.hasUnsavedChanges } }
-
-    func saveFactsNow() {
-        for field in rateFields.values where field.hasUnsavedChanges { field.saveNow() }
-    }
-
-    func saveAllFacts() async -> Bool {
-        var succeeded = true
-        for field in rateFields.values where field.hasUnsavedChanges {
-            if await !field.flush() { succeeded = false }
-        }
-        return succeeded
-    }
-
-    func discardUndo() {
-        for field in rateFields.values { field.discardUndo() }
     }
 
     func observe() async {
@@ -97,20 +86,13 @@ final class MoneyState {
         }
     }
 
-    func setHomeCurrencyCommand(_ code: String?) { Task { await setHomeCurrency(code) } }
+    func setHomeCurrencyCommand(_ code: String?) { setHomeCurrency(code) }
 
-    // Chooses the home currency, or nil to follow the Mac's region again. Prices you already
-    // paid keep the currency they were paid in.
+    // Chooses the home currency, or nil to follow the Mac's region again. It has no Undo.
+    // Prices you already paid keep the currency they were paid in.
     @discardableResult
-    func setHomeCurrency(_ code: String?) async -> Bool {
-        saveError = nil
-        do {
-            try await service.setHomeCurrency(code)
-            return true
-        } catch {
-            saveError = error.localizedDescription
-            return false
-        }
+    func setHomeCurrency(_ code: String?) -> EditTicket {
+        queue.submit(.money(.setHomeCurrency(code)), in: .money)
     }
 
     // Shows a row for a currency, so you can type its rate.
@@ -122,6 +104,17 @@ final class MoneyState {
     private func rateText(for currency: String) -> String {
         guard let rate = rates.rates[currency] else { return "" }
         return rate.formatted(.number.locale(service.locale).precision(.fractionLength(0...6)))
+    }
+
+    // The rate a field's text gives, or nil for a blank rate. The rule has already taken the
+    // text, so this only reads it.
+    nonisolated private static func rate(_ text: String, _ locale: Locale) throws -> Decimal? {
+        do throws(MoneyEntryProblem) {
+            return try MoneyEntry.rate.read(text, currency: "EUR", home: "EUR", locale: locale)?
+                .amount
+        } catch {
+            throw PartValidationError(message: error.message)
+        }
     }
 
     private static func rateRule(locale: Locale) -> FactRule {

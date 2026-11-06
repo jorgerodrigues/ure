@@ -21,8 +21,8 @@ struct MarkAsBoughtButton: View {
 }
 
 // The popover's content. It makes its form when it opens, from the part's options and your
-// rates, and Mark as Bought saves what you picked or typed, with Undo. Cancel and Esc close it
-// and change nothing.
+// rates, and Mark as Bought saves what you picked or typed, with Undo, and closes. Cancel and
+// Esc close it and change nothing.
 struct MarkAsBoughtPopover: View {
     @Environment(PartState.self) private var parts
     @Environment(MoneyState.self) private var money
@@ -30,16 +30,12 @@ struct MarkAsBoughtPopover: View {
     let part: PartRecord
     let close: () -> Void
     @State private var form: MarkAsBoughtForm?
-    @State private var isSaving = false
-    @State private var failure: String?
     @State private var unsavedOption = false
 
     var body: some View {
         Group {
             if let form {
-                MarkAsBoughtContent(
-                    form: form, isSaving: isSaving, failure: failure, cancel: close,
-                    confirm: confirm)
+                MarkAsBoughtContent(form: form, cancel: close, confirm: confirm)
             } else if unsavedOption {
                 MarkAsBoughtUnsavedOption(close: close)
             } else {
@@ -48,14 +44,11 @@ struct MarkAsBoughtPopover: View {
                     .frame(width: MarkAsBoughtLayout.width, height: 80)
             }
         }
-        // Once Mark as Bought is saving, the popover stays until it has saved.
-        .interactiveDismissDisabled(isSaving)
         .task(makeFormEffect)
     }
 
-    // The form starts from the options as they are saved, once any price still being typed
-    // has saved. An option whose typing did not save stops it, so it never offers an old
-    // price.
+    // The form starts from the options once every change before it has saved, so it offers a
+    // price you just typed. A price that did not save stops it, so it never offers an old one.
     private func makeFormEffect() async {
         guard form == nil else { return }
         guard let options = await parts.savedOptions(of: part.id) else {
@@ -65,22 +58,11 @@ struct MarkAsBoughtPopover: View {
         form = MarkAsBoughtForm(options: options, rates: money.rates)
     }
 
-    // The popover stays open until what was bought has saved, so nothing typed is lost when
-    // the save fails.
+    // Saves what was bought through the library's queue and closes, as every command does. If
+    // the save fails, the window's failure bar says so, with Try Again.
     private func confirm() {
-        guard !isSaving, let purchase = form?.purchase() else { return }
-        isSaving = true
-        failure = nil
-        Task { await save(purchase) }
-    }
-
-    private func save(_ purchase: PartPurchase) async {
-        let saved = await parts.markBought(purchase, of: part.id, undoManager: undoManager)
-        isSaving = false
-        guard saved else {
-            failure = parts.saveError ?? "What you bought did not save. Try again."
-            return
-        }
+        guard let purchase = form?.purchase() else { return }
+        parts.markBoughtCommand(purchase, of: part.id, undoManager: undoManager)
         close()
     }
 }
@@ -90,8 +72,6 @@ struct MarkAsBoughtPopover: View {
 // and Mark as Bought. Return confirms.
 struct MarkAsBoughtContent: View {
     let form: MarkAsBoughtForm
-    var isSaving = false
-    var failure: String?
     let cancel: () -> Void
     let confirm: () -> Void
 
@@ -110,19 +90,14 @@ struct MarkAsBoughtContent: View {
                 Divider()
                 MarkAsBoughtChargedField(form: form, submit: confirm)
             }
-            if let failure {
-                MarkAsBoughtProblem(message: failure)
-            }
             HStack(spacing: 8) {
                 Spacer()
                 Button("Cancel", action: cancel)
                     .keyboardShortcut(.cancelAction)
-                    .disabled(isSaving)
                     .buttonBorderShape(.capsule)
                     .accessibilityIdentifier("cancelMarkAsBought")
                 Button("Mark as Bought", action: confirm)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(isSaving)
                     .buttonStyle(.borderedProminent)
                     .buttonBorderShape(.capsule)
                     .fontWeight(.semibold)
@@ -135,7 +110,7 @@ struct MarkAsBoughtContent: View {
     }
 }
 
-// What the popover says when an option's price or shipping did not save.
+// What the popover says when an option's price or shipping did not save, or a save failed.
 private struct MarkAsBoughtUnsavedOption: View {
     let close: () -> Void
 
@@ -145,7 +120,7 @@ private struct MarkAsBoughtUnsavedOption: View {
                 .font(.system(size: PageLayout.detailSize, weight: .semibold))
             MarkAsBoughtProblem(
                 message:
-                    "An option’s price or shipping did not save. Correct it on the part’s page, then mark the part bought."
+                    "A price or another change did not save. Correct it on the part’s page, or choose Try Again at the top of the window, then mark the part bought."
             )
             HStack {
                 Spacer()

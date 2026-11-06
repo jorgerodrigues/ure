@@ -24,7 +24,7 @@ struct MoneySettingsSection: View {
             }
             .fixedSize()
             .accessibilityIdentifier("addRate")
-            if let error = money.saveError ?? money.loadError {
+            if let error = money.refusal ?? money.loadError {
                 Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
             }
             Text(

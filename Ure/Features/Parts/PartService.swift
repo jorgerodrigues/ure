@@ -31,14 +31,17 @@ nonisolated enum PartFact: Equatable, Sendable {
     case notes(String)
 }
 
-// One fact of a buying option, written in place on the part's page. The price and the
-// shipping are typed as on a receipt, and a currency typed with them sets the option's currency.
+// One fact of a buying option, written in place on the part's page. The field reads the price
+// and the shipping as typed on a receipt, in the option's currency, and only the currency's
+// pop-up changes that currency. Nil is no amount, or no currency chosen.
 nonisolated enum PartOptionFact: Equatable, Sendable {
     case supplier(String)
-    case price(String)
-    case shipping(String)
-    case currency(String)
+    case price(Decimal?)
+    case shipping(Decimal?)
+    case currency(String?)
     case note(String)
+    // The price, the shipping and the currency exactly as they were stored. Undo puts them back.
+    case money(price: Decimal?, shipping: Decimal?, currency: String?)
 }
 
 // A part's state with the dates and the purchase that belong to it. Undo puts back exactly
@@ -243,17 +246,17 @@ nonisolated struct PartService: Sendable {
 
     // Saves one fact of an option. A value that is already saved changes nothing, not even the
     // edit time.
-    func updateOption(_ id: UUID, _ fact: PartOptionFact) async throws -> PartOption {
-        try await coordinator.mutate { [region, locale] db, _, dependencies in
+    func updateOption(_ id: UUID, _ fact: PartOptionFact) async throws -> Revision<PartOption> {
+        try await coordinator.mutate { [region] db, _, dependencies in
             var option = try Self.requireOption(id, in: db)
             let saved = option
             let home = try MoneyQueries.homeCurrency(db, region: region)
-            try option.apply(fact, home: home, locale: locale)
-            guard option != saved else { return saved }
+            try option.apply(fact, home: home)
+            guard option != saved else { return Revision(before: saved, after: saved) }
             option.updatedAt = Date(
                 timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
             try option.update(db)
-            return option
+            return Revision(before: saved, after: option)
         }
     }
 
@@ -405,13 +408,11 @@ extension PartRecord {
 }
 
 extension PartOption {
-    // A supplier is required. A blank price or shipping is none. Only the currency's pop-up
-    // changes the option's currency, with its own Undo step, so a currency typed with the price
-    // or the shipping must be the option's. An option with no amount left in the home currency
-    // has no currency of its own again, as it had before its first amount.
-    nonisolated fileprivate mutating func apply(
-        _ fact: PartOptionFact, home: String, locale: Locale
-    ) throws {
+    // A supplier is required. Only the currency's pop-up changes the option's currency, with its
+    // own Undo step. An amount is always in a currency, the home currency until you choose
+    // another, and an option with no amount left in the home currency has no currency of its own
+    // again, as it had before its first amount. Undo puts back the stored money exactly.
+    nonisolated fileprivate mutating func apply(_ fact: PartOptionFact, home: String) throws {
         switch fact {
         case .supplier(let text):
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -419,47 +420,41 @@ extension PartOption {
                 throw PartValidationError(message: "Enter a supplier.")
             }
             supplier = trimmed
-        case .price(let text):
-            price = try amount(text, as: .price, home: home, locale: locale)
-        case .shipping(let text):
-            shipping = try amount(text, as: .shipping, home: home, locale: locale)
-        case .currency(let code):
-            // An empty code is no currency chosen, which is the home currency once there is an
-            // amount. Undo of a first choice puts it back.
-            let chosen = code.isEmpty ? nil : code
-            if let chosen, !CurrencyRules.isKnown(chosen) { throw PartError.unknownCurrency }
-            guard PartOptionRules.fits([price, shipping], in: chosen ?? home) else {
-                throw PartValidationError(
-                    message: PartOptionRules.tooPrecise(for: chosen ?? home))
+        case .price(let amount):
+            if let amount, amount <= 0 {
+                throw PartValidationError(message: "Enter a price above 0.")
             }
-            currency = chosen
+            try Self.check([amount], in: currency ?? home)
+            price = amount
+        case .shipping(let amount):
+            try Self.check([amount], in: currency ?? home)
+            shipping = amount
+        case .currency(let code):
+            if let code, !CurrencyRules.isKnown(code) { throw PartError.unknownCurrency }
+            try Self.check([price, shipping], in: code ?? home)
+            currency = code
         case .note(let text):
             note = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        case .money(let storedPrice, let storedShipping, let storedCurrency):
+            if let storedCurrency, !CurrencyRules.isKnown(storedCurrency) {
+                throw PartError.unknownCurrency
+            }
+            price = storedPrice
+            shipping = storedShipping
+            currency = storedCurrency
+            return
         }
-        // An amount is always in a currency, the home currency until you choose another.
         if price != nil || shipping != nil, currency == nil { currency = home }
         if price == nil, shipping == nil, currency == home { currency = nil }
     }
 
-    nonisolated private func amount(
-        _ text: String, as entry: MoneyEntry, home: String, locale: Locale
-    ) throws -> Decimal? {
-        let reading = try read(text, as: entry, home: home, locale: locale)
-        if let message = PartOptionRules.conflict(
-            typed: reading?.currency, current: currency ?? home)
-        {
-            throw PartValidationError(message: message)
+    // An amount is 0 or more, with no more decimals than its currency takes.
+    nonisolated private static func check(_ amounts: [Decimal?], in code: String) throws {
+        guard amounts.compactMap({ $0 }).allSatisfy({ $0 >= 0 }) else {
+            throw PartValidationError(message: "Enter an amount of 0 or more.")
         }
-        return reading?.amount
-    }
-
-    nonisolated private func read(
-        _ text: String, as entry: MoneyEntry, home: String, locale: Locale
-    ) throws -> MoneyEntry.Reading? {
-        do throws(MoneyEntryProblem) {
-            return try entry.read(text, currency: currency ?? home, home: home, locale: locale)
-        } catch {
-            throw PartValidationError(message: error.message)
+        guard PartOptionRules.fits(amounts, in: code) else {
+            throw PartValidationError(message: PartOptionRules.tooPrecise(for: code))
         }
     }
 }

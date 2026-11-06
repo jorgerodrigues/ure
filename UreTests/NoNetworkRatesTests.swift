@@ -28,25 +28,35 @@ struct NoNetworkRatesTests {
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
-        let money = MoneyState(service: MoneyService(coordinator: coordinator, region: "EUR"))
+        let queue = EditQueue(coordinator: coordinator)
+        let money = MoneyState(
+            service: MoneyService(
+                coordinator: coordinator, region: "EUR", locale: Locale(identifier: "en_GB")),
+            queue: queue)
         let observation = Task { await money.observe() }
         defer { observation.cancel() }
         let service = PartService(coordinator: coordinator, region: "EUR")
-        let parts = PartState(service: service, home: { money.home })
+        let parts = PartState(service: service, queue: queue, home: { money.home })
         let partsObservation = Task { await parts.observe() }
         defer { partsObservation.cancel() }
 
-        // A rate for a currency that has none, a home currency, an option in another currency,
-        // its estimate, and Mark as Bought with the amount charged.
-        try await MoneyService(coordinator: coordinator, region: "EUR").setRate("1.16", for: "GBP")
-        #expect(await money.setHomeCurrency("EUR"))
+        // A home currency, a rate typed for a currency that has none, an option in another
+        // currency, its estimate, and Mark as Bought with the amount charged.
+        #expect(await money.setHomeCurrency("EUR").saved)
+        let rate = money.rateField(for: "GBP")
+        rate.beginEditing()
+        rate.change(to: "1.16", undoManager: nil)
+        rate.endEditing()
         let job = try await JobTaskFixture.job(coordinator)
         let part = try await service.add(named: "Mainspring", to: job.id)
-        let option = try #require(
-            await parts.pasteOption("https://www.cousinsuk.com/gr3807x", on: part.id))
+        for _ in 0..<500 where parts.part(part.id) == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(await parts.pasteOption("https://www.cousinsuk.com/gr3807x", on: part.id).didSave)
+        let option = try #require(parts.options(of: part.id).first)
         _ = try await service.updateOption(option.id, .currency("GBP"))
-        _ = try await service.updateOption(option.id, .price("£12.90"))
-        _ = try await service.updateOption(option.id, .shipping("£5.50"))
+        _ = try await service.updateOption(option.id, .price(Decimal(string: "12.9")))
+        _ = try await service.updateOption(option.id, .shipping(Decimal(string: "5.5")))
         for _ in 0..<500
         where money.rates.rates["GBP"] == nil || parts.options(of: part.id).first?.price == nil {
             try await Task.sleep(for: .milliseconds(10))
@@ -54,7 +64,7 @@ struct NoNetworkRatesTests {
         let form = MarkAsBoughtForm(options: parts.options(of: part.id), rates: money.rates)
         #expect(form.estimate?.isEstimate == true)
         let purchase = try #require(form.purchase())
-        #expect(await parts.markBought(purchase, of: part.id))
+        #expect(await parts.markBought(purchase, of: part.id).didSave)
         #expect(
             ExchangeRates(home: "EUR").inHome(Money(1, "USD")) == nil,
             "A currency without a rate has no estimate, rather than one fetched online.")

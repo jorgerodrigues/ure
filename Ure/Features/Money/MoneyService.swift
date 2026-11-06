@@ -17,25 +17,25 @@ nonisolated struct MoneyService: Sendable {
         }
     }
 
-    // Saves the rate of one unit of a currency in a home currency, the current one unless
-    // another is given, typed as on paper, such as "1.16". A rate field gives the home currency
-    // it was made for, so its Undo never reaches another home currency's rate. A blank rate
-    // takes it away, so prices in that currency show no estimate.
-    func setRate(_ text: String, for currency: String, home given: String? = nil) async throws {
-        guard CurrencyRules.isKnown(currency) else { throw PartError.unknownCurrency }
-        try await coordinator.mutate { [region, locale] db, _, dependencies in
-            let home = try given ?? MoneyQueries.homeCurrency(db, region: region)
-            guard currency != home else { return }
-            let rate: Decimal?
-            do throws(MoneyEntryProblem) {
-                rate =
-                    try MoneyEntry.rate.read(text, currency: home, home: home, locale: locale)?
-                    .amount
-            } catch {
-                throw PartValidationError(message: error.message)
+    // Saves the rate of one unit of a currency in a home currency, read from what you typed.
+    // A rate field gives the home currency it was made for, so its Undo never reaches another
+    // home currency's rate. Nil takes the rate away, so prices in that currency show no
+    // estimate. The result has the rate before, for Undo.
+    func setRate(_ rate: Decimal?, for currency: String, home: String) async throws
+        -> Revision<Decimal?>
+    {
+        guard CurrencyRules.isKnown(currency), CurrencyRules.isKnown(home) else {
+            throw PartError.unknownCurrency
+        }
+        if let rate, rate <= 0 { throw PartValidationError(message: "Enter a rate above 0.") }
+        return try await coordinator.mutate { db, _, dependencies in
+            let before = try MoneyQueries.rate(of: currency, home: home, in: db)
+            guard currency != home, before != rate else {
+                return Revision(before: before, after: before)
             }
             let now = Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
             try MoneyQueries.setRate(rate, for: currency, home: home, at: now, in: db)
+            return Revision(before: before, after: rate)
         }
     }
 }

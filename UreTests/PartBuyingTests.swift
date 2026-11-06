@@ -15,10 +15,14 @@ struct PartBuyingTests {
     {
         let coordinator = fixture.coordinator(dependencies: LibraryDependencies(now: clock.now))
         _ = try await coordinator.open()
+        // The library's own home currency, so the queue's services and the fields agree on it
+        // whatever the Mac's region is.
+        try await MoneyService(coordinator: coordinator).setHomeCurrency("EUR")
         let job = try await JobTaskFixture.job(coordinator)
         let service = PartService(
             coordinator: coordinator, region: "EUR", locale: Locale(identifier: "en_GB"))
-        let parts = PartState(service: service, home: { "EUR" })
+        let parts = PartState(
+            service: service, queue: EditQueue(coordinator: coordinator), home: { "EUR" })
         let observation = Task { await parts.observe() }
         try await waitUntil { !parts.isLoading }
         return (coordinator, job, service, parts, observation)
@@ -36,31 +40,31 @@ struct PartBuyingTests {
         undoManager.groupsByEvent = false
 
         // Text that is not a link adds nothing and says so.
-        #expect(await parts.pasteOption("Cousins UK", on: part.id, undoManager: undoManager) == nil)
+        #expect(parts.pasteOption("Cousins UK", on: part.id, undoManager: undoManager) == nil)
         #expect(parts.optionError == LinkError.notALink.errorDescription)
         #expect(parts.options(of: part.id).isEmpty && !undoManager.canUndo)
 
         undoManager.beginUndoGrouping()
-        let option = try #require(
-            await parts.pasteOption(
-                "https://www.cousinsuk.com/product/gr3807x", on: part.id,
-                undoManager: undoManager))
+        let pasted = parts.pasteOption(
+            "https://www.cousinsuk.com/product/gr3807x", on: part.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
+        let option = try #require(await pasted?.option)
         #expect(option.supplier == "cousinsuk.com" && option.price == nil)
         #expect(parts.openOptionID == option.id && parts.priceToFocus == option.id)
         #expect(undoManager.undoActionName == PartState.addOptionActionName)
         let second = try #require(
-            await parts.pasteOption("https://www.ebay.co.uk/itm/1", on: part.id))
+            await parts.pasteOption("https://www.ebay.co.uk/itm/1", on: part.id)?.option)
         #expect(parts.options(of: part.id).map(\.id) == [option.id, second.id])
 
         undoManager.undo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         #expect(
             try await coordinator.read { try PartQueries.options(of: part.id, in: $0) }.map(\.id)
                 == [second.id])
+        #expect(parts.options(of: part.id).map(\.id) == [second.id])
         undoManager.redo()
-        await parts.waitForChanges()
-        try await waitUntil { parts.options(of: part.id).count == 2 }
+        await parts.queue.waitUntilIdle()
+        #expect(parts.options(of: part.id).map(\.id) == [option.id, second.id])
         #expect(try await coordinator.read { try PartQueries.option(option.id, in: $0) } == option)
         try await coordinator.close()
     }
@@ -75,22 +79,26 @@ struct PartBuyingTests {
         let option = try await service.addOption(
             try #require(URL(string: "https://www.cousinsuk.com/gr3807x")), to: part.id)
 
-        // A price without a mark is in the home currency. The pop-up changes the currency, and
-        // then "£" can be typed with the price.
-        var saved = try await service.updateOption(option.id, .price("24"))
+        // A first amount is in the home currency, and the currency's pop-up changes it.
+        var saved = try await service.updateOption(option.id, .price(decimal("24"))).after
         #expect(saved.price == decimal("24") && saved.currency == "EUR")
-        saved = try await service.updateOption(option.id, .currency("GBP"))
-        saved = try await service.updateOption(option.id, .price("£12.90"))
+        saved = try await service.updateOption(option.id, .currency("GBP")).after
+        saved = try await service.updateOption(option.id, .price(decimal("12.9"))).after
         #expect(saved.price == decimal("12.9") && saved.currency == "GBP")
-        saved = try await service.updateOption(option.id, .shipping("5.50"))
-        #expect(saved.shipping == decimal("5.5") && saved.currency == "GBP")
-        saved = try await service.updateOption(option.id, .supplier("  Cousins UK "))
-        saved = try await service.updateOption(option.id, .note("GR 3807X · in stock"))
+        saved = try await service.updateOption(option.id, .shipping(decimal("5.5"))).after
+        saved = try await service.updateOption(option.id, .supplier("  Cousins UK ")).after
+        let noted = try await service.updateOption(option.id, .note("GR 3807X · in stock"))
+        saved = noted.after
         #expect(saved.supplier == "Cousins UK" && saved.note == "GR 3807X · in stock")
         #expect(saved.total == Money(decimal("18.4"), "GBP"))
+        // A note's Undo puts back the stored note.
+        #expect(PartOptionFact.note("x").stored(in: noted.before) == .note(""))
         // A value the option does not take is refused, and the option keeps its last one.
         await #expect(throws: PartValidationError.self) {
-            _ = try await service.updateOption(option.id, .price("12.905"))
+            _ = try await service.updateOption(option.id, .price(decimal("12.905")))
+        }
+        await #expect(throws: PartValidationError.self) {
+            _ = try await service.updateOption(option.id, .price(0))
         }
         await #expect(throws: PartValidationError.self) {
             _ = try await service.updateOption(option.id, .supplier(" "))
@@ -103,7 +111,7 @@ struct PartBuyingTests {
         // The fields show the stored amount with its currency, and a typed price saves with Undo.
         try await waitUntil { parts.facts(forOption: option.id)?.price.text == "£12.90" }
         let facts = try #require(parts.facts(forOption: option.id))
-        #expect(facts.shipping.text == "£5.50" && facts.currency.text == "GBP")
+        #expect(facts.shipping.text == "£5.50" && parts.option(option.id)?.currency == "GBP")
         let undoManager = UndoManager()
         undoManager.groupsByEvent = false
         facts.price.beginEditing()
@@ -111,13 +119,15 @@ struct PartBuyingTests {
         facts.price.change(to: "20", undoManager: undoManager)
         undoManager.endUndoGrouping()
         facts.price.endEditing()
-        try await waitUntil { facts.price.text == "£20.00" }
+        await parts.queue.waitUntilIdle()
+        #expect(facts.price.text == "£20.00")
         saved = try #require(
             try await coordinator.read { try PartQueries.option(option.id, in: $0) })
         #expect(saved.price == decimal("20") && saved.currency == "GBP")
         // Undo puts back the price as it was.
         undoManager.undo()
-        try await waitUntil { !facts.price.hasUnsavedChanges && facts.price.text == "£12.90" }
+        await parts.queue.waitUntilIdle()
+        #expect(facts.price.text == "£12.90")
         saved = try #require(
             try await coordinator.read { try PartQueries.option(option.id, in: $0) })
         #expect(saved.price == decimal("12.9") && saved.currency == "GBP")
@@ -125,8 +135,8 @@ struct PartBuyingTests {
         facts.price.beginEditing()
         facts.price.change(to: "abc", undoManager: nil)
         facts.price.endEditing()
-        try await waitUntil { facts.price.problem != nil }
         #expect(facts.price.problem == "Enter the price as a number, such as 12.90.")
+        await parts.queue.waitUntilIdle()
         #expect(
             try await coordinator.read { try PartQueries.option(option.id, in: $0) }?.price
                 == decimal("12.9"))
@@ -144,11 +154,11 @@ struct PartBuyingTests {
         let cousins = try await service.addOption(
             try #require(URL(string: "https://cousinsuk.com/gr3807x")), to: part.id)
         _ = try await service.updateOption(cousins.id, .currency("GBP"))
-        _ = try await service.updateOption(cousins.id, .price("£12.90"))
-        _ = try await service.updateOption(cousins.id, .shipping("£5.50"))
+        _ = try await service.updateOption(cousins.id, .price(decimal("12.9")))
+        _ = try await service.updateOption(cousins.id, .shipping(decimal("5.5")))
         let ebay = try await service.addOption(
             try #require(URL(string: "https://ebay.co.uk/itm/1")), to: part.id)
-        _ = try await service.updateOption(ebay.id, .price("€24"))
+        _ = try await service.updateOption(ebay.id, .price(decimal("24")))
         try await waitUntil { parts.options(of: part.id).count == 2 }
 
         let rates = ExchangeRates(home: "EUR", rates: ["GBP": decimal("1.16")])
@@ -168,38 +178,42 @@ struct PartBuyingTests {
         undoManager.groupsByEvent = false
         clock.set(5_000)
         undoManager.beginUndoGrouping()
-        #expect(await parts.markBought(purchase, of: part.id, undoManager: undoManager))
+        let bought = parts.markBought(purchase, of: part.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
+        #expect(await bought.didSave)
         #expect(undoManager.undoActionName == PartState.buyActionName)
         var saved = try await stored(part.id, coordinator)
         #expect(saved.stage == .ordered && saved.orderedAt == clock.date(5_000))
         #expect(saved.purchase == purchase && saved.boughtURL == "https://cousinsuk.com/gr3807x")
+        #expect(parts.part(part.id)?.purchase == purchase)
         // Every option is kept.
         #expect(
             try await coordinator.read { try PartQueries.options(of: part.id, in: $0) }.count == 2)
         #expect(PartWording.days(of: saved, now: clock.date(5_000)) == "Bought today")
 
         undoManager.undo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         saved = try await stored(part.id, coordinator)
         #expect(saved.stage == .needed && saved.orderedAt == nil && saved.purchase == nil)
+        #expect(parts.part(part.id)?.purchase == nil)
         undoManager.redo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         saved = try await stored(part.id, coordinator)
         #expect(saved.stage == .ordered && saved.purchase == purchase)
         #expect(saved.orderedAt == clock.date(5_000))
 
         // Moving it on keeps what was bought. Back to Needed, it is to buy again, and Undo puts
         // back what was bought.
-        #expect(await parts.advance(part.id))
+        #expect(await parts.advance(part.id).didSave)
         #expect(try await stored(part.id, coordinator).purchase == purchase)
         undoManager.beginUndoGrouping()
-        #expect(await parts.setStage(.needed, of: part.id, undoManager: undoManager))
+        let needed = parts.setStage(.needed, of: part.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
+        #expect(await needed.didSave)
         saved = try await stored(part.id, coordinator)
         #expect(saved.stage == .needed && saved.purchase == nil)
         undoManager.undo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         saved = try await stored(part.id, coordinator)
         #expect(saved.stage == .inHand && saved.purchase == purchase)
         try await coordinator.close()
@@ -220,14 +234,14 @@ struct PartBuyingTests {
         form.change(.price, to: "6.40")
         let purchase = try #require(form.purchase())
         #expect(purchase.paid == Money(decimal("6.4"), "EUR") && purchase.shipping == nil)
-        #expect(await parts.markBought(purchase, of: part.id))
+        #expect(await parts.markBought(purchase, of: part.id).didSave)
         var saved = try await stored(part.id, coordinator)
         #expect(saved.stage == .ordered && saved.purchase?.supplier == "eBay, watchparts_uk")
 
         // A spare in hand keeps its state when you record what you paid for it.
         let spare = try await service.add(named: "Crystal, 29.5 mm", to: nil)
         try await waitUntil { parts.part(spare.id) != nil }
-        #expect(await parts.markBought(purchase, of: spare.id))
+        #expect(await parts.markBought(purchase, of: spare.id).didSave)
         saved = try await stored(spare.id, coordinator)
         #expect(saved.stage == .inHand && saved.orderedAt == nil && saved.purchase == purchase)
 
@@ -254,7 +268,7 @@ struct PartBuyingTests {
         let option = try await service.addOption(
             try #require(URL(string: "https://esslinger.com/crowns")), to: part.id)
         _ = try await service.updateOption(option.id, .currency("USD"))
-        let priced = try await service.updateOption(option.id, .price("$13.95"))
+        let priced = try await service.updateOption(option.id, .price(decimal("13.95"))).after
         let purchase = PartPurchase(
             supplier: "Esslinger", url: option.url, optionID: option.id,
             price: Money(decimal("13.95"), "USD"), shipping: nil,
@@ -266,22 +280,79 @@ struct PartBuyingTests {
         undoManager.groupsByEvent = false
 
         undoManager.beginUndoGrouping()
-        #expect(await parts.remove(part.id, undoManager: undoManager))
+        let removed = parts.remove(part.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
+        #expect(await removed.didSave)
         #expect(try await coordinator.read { try PartQueries.options(of: part.id, in: $0) }.isEmpty)
+        #expect(parts.options(of: part.id).isEmpty && parts.facts(forOption: option.id) == nil)
         undoManager.undo()
-        await parts.waitForChanges()
-        try await waitUntil { parts.options(of: part.id) == [priced] }
+        await parts.queue.waitUntilIdle()
+        #expect(parts.options(of: part.id) == [priced])
         #expect(try await stored(part.id, coordinator) == bought)
 
         undoManager.beginUndoGrouping()
-        #expect(await parts.removeOption(option.id, undoManager: undoManager))
+        let gone = parts.removeOption(option.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
+        #expect(await gone.didSave)
         #expect(undoManager.undoActionName == PartState.removeOptionActionName)
         #expect(try await coordinator.read { try PartQueries.option(option.id, in: $0) } == nil)
         undoManager.undo()
-        await parts.waitForChanges()
+        await parts.queue.waitUntilIdle()
         #expect(try await coordinator.read { try PartQueries.option(option.id, in: $0) } == priced)
+        #expect(parts.options(of: part.id) == [priced])
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func anOptionTakesNoEditsWhileItsDeletionSavesAndItsUndoComesFromTheStoredData()
+        async throws
+    {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let (coordinator, job, service, parts, observation) = try await setUp(fixture)
+        defer { observation.cancel() }
+        let part = try await service.add(named: "Crown", to: job.id)
+        let option = try await service.addOption(
+            try #require(URL(string: "https://esslinger.com/crowns")), to: part.id)
+        try await waitUntil { parts.facts(forOption: option.id) != nil }
+        let facts = try #require(parts.facts(forOption: option.id))
+        let undoManager = UndoManager()
+        undoManager.groupsByEvent = false
+
+        // A first price in the home currency, typed and saved before the option goes.
+        undoManager.beginUndoGrouping()
+        facts.price.beginEditing()
+        facts.price.change(to: "€30", undoManager: undoManager)
+        undoManager.endUndoGrouping()
+        facts.price.endEditing()
+
+        // While the deletion saves, the option takes no edits, and its part can't be marked
+        // bought with it.
+        let (hold, holding) = try await LibraryHold.start(on: coordinator)
+        undoManager.beginUndoGrouping()
+        let gone = parts.removeOption(option.id, undoManager: undoManager)
+        undoManager.endUndoGrouping()
+        let waiting = try #require(parts.option(option.id))
+        #expect(gone != nil && !parts.canEdit(waiting))
+        #expect(parts.chooseCurrency("GBP", of: option.id) == nil)
+        #expect(parts.removeOption(option.id) == nil)
+        hold.release()
+        _ = try await holding.value
+        #expect(await gone.didSave)
+        #expect(parts.option(option.id) == nil)
+
+        // Undo brings the option back with its price. Undo of the price then comes from the
+        // stored data, because the field that took it went with the option, and it leaves the
+        // option with no price and no currency of its own, as it was.
+        undoManager.undo()
+        await parts.queue.waitUntilIdle()
+        #expect(parts.option(option.id)?.price == decimal("30"))
+        undoManager.undo()
+        await parts.queue.waitUntilIdle()
+        let undone = try #require(
+            try await coordinator.read { try PartQueries.option(option.id, in: $0) })
+        #expect(undone.price == nil && undone.currency == nil)
+        #expect(parts.facts(forOption: option.id)?.price.text == "")
         try await coordinator.close()
     }
 
@@ -291,40 +362,43 @@ struct PartBuyingTests {
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
-        let money = MoneyState(
-            service: MoneyService(
-                coordinator: coordinator, region: "DKK", locale: Locale(identifier: "da_DK")))
+        let service = MoneyService(
+            coordinator: coordinator, region: "DKK", locale: Locale(identifier: "da_DK"))
+        let money = MoneyState(service: service, queue: EditQueue(coordinator: coordinator))
         let observation = Task { await money.observe() }
         defer { observation.cancel() }
         try await waitUntil { !money.isLoading }
         #expect(money.home == "DKK" && money.isHomeFromRegion && money.rates.rates.isEmpty)
 
-        // A rate is typed as on paper, and a blank rate takes it away.
-        let service = MoneyService(
-            coordinator: coordinator, region: "DKK", locale: Locale(identifier: "da_DK"))
-        try await service.setRate("8,65", for: "GBP")
+        // A rate is above 0, and none takes it away.
+        _ = try await service.setRate(decimal("8.65"), for: "GBP", home: "DKK")
         try await waitUntil { money.rates.rates["GBP"] == decimal("8.65") }
         await #expect(throws: PartValidationError.self) {
-            try await service.setRate("abc", for: "GBP")
+            _ = try await service.setRate(0, for: "GBP", home: "DKK")
         }
         #expect(money.rates.rates["GBP"] == decimal("8.65"))
         // Choosing another home currency shows its own rates, and choosing back finds them again.
-        #expect(await money.setHomeCurrency("EUR"))
+        #expect(await money.setHomeCurrency("EUR").saved)
         try await waitUntil { money.home == "EUR" }
         #expect(money.rates.rates.isEmpty && !money.isHomeFromRegion)
-        try await service.setRate("1,16", for: "GBP")
+        _ = try await service.setRate(decimal("1.16"), for: "GBP", home: "EUR")
         try await waitUntil { money.rates.rates["GBP"] == decimal("1.16") }
-        #expect(await money.setHomeCurrency(nil))
+        #expect(await money.setHomeCurrency(nil).saved)
         try await waitUntil { money.home == "DKK" }
         #expect(money.rates.rates == ["GBP": decimal("8.65")])
-        try await service.setRate("", for: "GBP")
+        _ = try await service.setRate(nil, for: "GBP", home: "DKK")
         try await waitUntil { money.rates.rates.isEmpty }
-        // The field in Settings saves the rate as you type it.
+        // The field in Settings reads the rate as typed on paper, and saves it as you type.
         let field = money.rateField(for: "USD")
         #expect(field.label == "US$1 =")
         field.beginEditing()
+        field.change(to: "abc", undoManager: nil)
+        field.endEditing()
+        #expect(field.problem != nil)
+        field.beginEditing()
         field.change(to: "6,9", undoManager: nil)
         field.endEditing()
+        await money.queue.waitUntilIdle()
         try await waitUntil { money.rates.rates["USD"] == decimal("6.9") }
         #expect(money.rateCurrencies == ["USD"])
         try await coordinator.close()
@@ -339,38 +413,35 @@ struct PartBuyingTests {
         let part = try await service.add(named: "Mainspring", to: job.id)
         let option = try await service.addOption(
             try #require(URL(string: "https://cousinsuk.com/gr3807x")), to: part.id)
-        func saved() async throws -> PartOption {
-            try #require(try await coordinator.read { try PartQueries.option(option.id, in: $0) })
-        }
 
-        // A price typed in pounds on an option in euros is refused, so the shipping never
-        // becomes £5 and typing never changes the currency.
-        _ = try await service.updateOption(option.id, .shipping("€5"))
-        await #expect(throws: PartValidationError.self) {
-            _ = try await service.updateOption(option.id, .price("£10"))
-        }
-        let kept = try await saved()
-        #expect(kept.currency == "EUR" && kept.shipping == decimal("5"))
+        // A price typed in pounds on an option in euros is refused, so typing never changes the
+        // currency.
+        _ = try await service.updateOption(option.id, .shipping(decimal("5")))
         try await waitUntil { parts.facts(forOption: option.id)?.shipping.text == "€5.00" }
         let facts = try #require(parts.facts(forOption: option.id))
         facts.price.beginEditing()
         facts.price.change(to: "£10", undoManager: nil)
         facts.price.endEditing()
-        try await waitUntil { facts.price.problem != nil }
         #expect(
             facts.price.problem == "Choose GBP in the currency menu first. This option is in EUR.")
         facts.price.beginEditing()
         facts.price.change(to: "", undoManager: nil)
         facts.price.endEditing()
-        try await waitUntil { !facts.price.hasUnsavedChanges }
+        await parts.queue.waitUntilIdle()
+        #expect(parts.option(option.id)?.currency == "EUR")
 
-        // A currency that can't take an amount is refused: 12.90 has no place in yen.
-        _ = try await service.updateOption(option.id, .price("12.90"))
+        // A currency that can't take an amount is refused at once: 12.90 has no place in yen.
+        _ = try await service.updateOption(option.id, .price(decimal("12.9")))
+        try await waitUntil { facts.price.text == "€12.90" }
+        #expect(parts.chooseCurrency("JPY", of: option.id) == nil)
+        #expect(parts.optionError == PartOptionRules.tooPrecise(for: "JPY"))
         await #expect(throws: PartValidationError.self) {
             _ = try await service.updateOption(option.id, .currency("JPY"))
         }
-        #expect(!PartOptionRules.fits([decimal("12.9")], in: "JPY"))
-        #expect(PartOptionRules.fits([decimal("12.9"), decimal("1290")], in: "GBP"))
+        // A currency that takes them keeps the numbers, and the price then reads in it.
+        #expect(await parts.chooseCurrency("GBP", of: option.id).didSave)
+        #expect(parts.option(option.id)?.price == decimal("12.9"))
+        #expect(facts.price.text == "£12.90")
 
         // A first choice of currency undoes to none, which is the home currency.
         let fresh = try await service.addOption(
@@ -380,16 +451,15 @@ struct PartBuyingTests {
         let undoManager = UndoManager()
         undoManager.groupsByEvent = false
         undoManager.beginUndoGrouping()
-        freshFacts.currency.choose("GBP", undoManager: undoManager)
+        let chosen = parts.chooseCurrency("GBP", of: fresh.id, undoManager: undoManager)
         undoManager.endUndoGrouping()
-        try await waitUntil {
-            parts.options(of: part.id).first { $0.id == fresh.id }?.currency == "GBP"
-        }
+        #expect(await chosen.didSave)
+        #expect(undoManager.undoActionName == PartState.currencyActionName)
         undoManager.undo()
-        try await waitUntil { !freshFacts.currency.hasUnsavedChanges }
-        let undone = try #require(
-            try await coordinator.read { try PartQueries.option(fresh.id, in: $0) })
-        #expect(undone.currency == nil && freshFacts.currency.saveError == nil)
+        await parts.queue.waitUntilIdle()
+        #expect(
+            try await coordinator.read { try PartQueries.option(fresh.id, in: $0) }?.currency == nil
+        )
 
         // Undo of a first price leaves the option with no currency of its own, as it was, so a
         // later price follows the home currency.
@@ -398,11 +468,10 @@ struct PartBuyingTests {
         freshFacts.price.change(to: "€12", undoManager: undoManager)
         undoManager.endUndoGrouping()
         freshFacts.price.endEditing()
-        try await waitUntil {
-            parts.options(of: part.id).first { $0.id == fresh.id }?.currency == "EUR"
-        }
+        await parts.queue.waitUntilIdle()
+        #expect(parts.option(fresh.id)?.currency == "EUR")
         undoManager.undo()
-        try await waitUntil { parts.options(of: part.id).first { $0.id == fresh.id }?.price == nil }
+        await parts.queue.waitUntilIdle()
         let emptied = try #require(
             try await coordinator.read { try PartQueries.option(fresh.id, in: $0) })
         #expect(emptied.price == nil && emptied.currency == nil)
@@ -410,7 +479,7 @@ struct PartBuyingTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func markAsBoughtOffersThePriceJustTypedAndSaysWhenItDidNotSave() async throws {
+    func markAsBoughtOffersThePriceJustTypedAndWaitsBehindAFailedSave() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let (coordinator, job, service, parts, observation) = try await setUp(fixture)
@@ -420,7 +489,7 @@ struct PartBuyingTests {
             try #require(URL(string: "https://cousinsuk.com/gr3807x")), to: part.id)
         try await waitUntil { parts.facts(forOption: option.id) != nil }
         let facts = try #require(parts.facts(forOption: option.id))
-        // The price is still waiting to save when Mark as Bought opens.
+        // The price is still being typed when Mark as Bought opens.
         facts.price.beginEditing()
         facts.price.change(to: "€30", undoManager: nil)
         let options = try #require(await parts.savedOptions(of: part.id))
@@ -428,24 +497,37 @@ struct PartBuyingTests {
         facts.price.endEditing()
 
         // A price that did not save stops Mark as Bought, so it never offers the old price.
+        // Try Again saves it, and then it is offered.
         try await JobTaskFixture.failWrites(coordinator, on: "partOption")
         facts.price.beginEditing()
         facts.price.change(to: "€40", undoManager: nil)
         #expect(await parts.savedOptions(of: part.id) == nil)
+        #expect(parts.queue.isStopped)
         try await JobTaskFixture.allowWrites(coordinator, on: "partOption")
+        parts.queue.retry()
         #expect(await parts.savedOptions(of: part.id)?.first?.price == decimal("40"))
         facts.price.endEditing()
 
-        // A purchase that does not save leaves the part as it was and says so, so the popover
-        // can stay open.
+        // A price the field does not take stops it too.
+        facts.price.beginEditing()
+        facts.price.change(to: "abc", undoManager: nil)
+        #expect(await parts.savedOptions(of: part.id) == nil)
+        facts.price.change(to: "€40", undoManager: nil)
+        facts.price.endEditing()
+
+        // A purchase whose save fails stops the queue with the part as it was, and Try Again
+        // saves it.
         let form = MarkAsBoughtForm(options: options, rates: ExchangeRates(home: "EUR"))
         let purchase = try #require(form.purchase())
         try await JobTaskFixture.failWrites(coordinator, on: "part")
-        #expect(await !parts.markBought(purchase, of: part.id))
-        #expect(parts.saveError != nil)
+        let bought = parts.markBought(purchase, of: part.id)
+        #expect(await parts.queue.waitUntilStopped())
+        #expect(parts.queue.failure != nil && bought?.isPending == true)
         #expect(try await stored(part.id, coordinator).purchase == nil)
         try await JobTaskFixture.allowWrites(coordinator, on: "part")
-        #expect(await parts.markBought(purchase, of: part.id))
+        parts.queue.retry()
+        #expect(await bought.didSave)
+        #expect(try await stored(part.id, coordinator).purchase == purchase)
         try await coordinator.close()
     }
 
@@ -457,7 +539,8 @@ struct PartBuyingTests {
         _ = try await coordinator.open()
         let money = MoneyState(
             service: MoneyService(
-                coordinator: coordinator, region: "EUR", locale: Locale(identifier: "en_GB")))
+                coordinator: coordinator, region: "EUR", locale: Locale(identifier: "en_GB")),
+            queue: EditQueue(coordinator: coordinator))
         let observation = Task { await money.observe() }
         defer { observation.cancel() }
         try await waitUntil { !money.isLoading }
@@ -473,18 +556,25 @@ struct PartBuyingTests {
         // In Danish kroner, the pound has a rate of its own, and the parts hear of the change.
         var changes = 0
         money.homeChanged = { changes += 1 }
-        #expect(await money.setHomeCurrency("DKK"))
+        #expect(await money.setHomeCurrency("DKK").saved)
         try await waitUntil { money.home == "DKK" }
         #expect(changes == 1)
-        try await MoneyService(coordinator: coordinator, region: "EUR").setRate("8.65", for: "GBP")
+        _ = try await MoneyService(coordinator: coordinator).setRate(
+            decimal("8.65"), for: "GBP", home: "DKK")
         try await waitUntil { money.rates.rates["GBP"] == decimal("8.65") }
         // Undo of the rate typed for euros takes away the euro rate, not the krone's.
         undoManager.undo()
-        try await waitUntil { !euros.hasUnsavedChanges }
+        await money.queue.waitUntilIdle()
         let rates = try await coordinator.read(MoneyQueries.settings).rates
         #expect(
             rates.map(\.homeCurrency) == ["DKK"] && rates.first?.rate == decimal("8.65"),
             "\(rates.map { "\($0.homeCurrency) \($0.currency) \($0.rate)" })")
+        // Redo puts the euro rate back.
+        undoManager.redo()
+        await money.queue.waitUntilIdle()
+        #expect(
+            try await coordinator.read { try MoneyQueries.rate(of: "GBP", home: "EUR", in: $0) }
+                == decimal("1.16"))
         try await coordinator.close()
     }
 
@@ -498,7 +588,9 @@ struct PartBuyingTests {
         let service = PartService(
             coordinator: coordinator, region: "JPY", locale: Locale(identifier: "en_GB"))
         let session = HomeCurrency("JPY")
-        let parts = PartState(service: service, home: { session.code })
+        let parts = PartState(
+            service: service, queue: EditQueue(coordinator: coordinator),
+            home: { session.code })
         let observation = Task { await parts.observe() }
         defer { observation.cancel() }
         let part = try await service.add(named: "Mainspring", to: job.id)
@@ -510,7 +602,7 @@ struct PartBuyingTests {
         facts.price.beginEditing()
         facts.price.change(to: "12.50", undoManager: nil)
         facts.price.endEditing()
-        try await waitUntil { facts.price.problem != nil }
+        #expect(facts.price.problem != nil)
         // Once the home currency is the euro, the same text is a price.
         session.code = "EUR"
         parts.homeCurrencyChanged()
@@ -535,6 +627,16 @@ struct PartBuyingTests {
 
     private func stored(_ id: UUID, _ coordinator: LibraryCoordinator) async throws -> PartRecord {
         try #require(try await coordinator.read { try PartQueries.fetch(id, in: $0) })
+    }
+}
+
+extension EditTicket {
+    // The option an edit added or changed, once it has run.
+    fileprivate var option: PartOption? {
+        get async {
+            for case .partOption(let option) in await value.changes { return option }
+            return nil
+        }
     }
 }
 

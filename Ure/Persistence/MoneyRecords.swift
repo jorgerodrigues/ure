@@ -86,6 +86,11 @@ nonisolated enum MoneyQueries {
     }
 
     // Sets the rate of a currency in the home currency, or takes it away with nil.
+    static func rate(of currency: String, home: String, in db: Database) throws -> Decimal? {
+        try CurrencyRateRecord.fetchOne(db, key: ["homeCurrency": home, "currency": currency])?
+            .rate
+    }
+
     static func setRate(
         _ rate: Decimal?, for currency: String, home: String, at time: Date, in db: Database
     ) throws {
