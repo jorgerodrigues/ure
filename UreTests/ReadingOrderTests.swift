@@ -154,3 +154,39 @@ private struct PartPage {
         return view
     }
 }
+
+// A long value ends in "…" at rest and scrolls while you type, so the cursor stays in view.
+@MainActor
+struct LongValueTests {
+    @Test
+    func aFieldScrollsWhileYouTypeAndEndsInAnEllipsisAtRest() throws {
+        let page = try PartPage()
+        let cell = try #require(page.title.cell)
+        #expect(!cell.isScrollable && cell.lineBreakMode == .byTruncatingTail)
+        #expect(page.window.makeFirstResponder(page.title))
+        #expect(cell.isScrollable)
+        #expect(page.window.makeFirstResponder(page.quantity))
+        #expect(!cell.isScrollable && !cell.wraps && cell.lineBreakMode == .byTruncatingTail)
+        #expect(page.window.makeFirstResponder(page.title))
+        #expect(page.window.makeFirstResponder(nil))
+        #expect(!cell.isScrollable && cell.lineBreakMode == .byTruncatingTail)
+    }
+
+    @Test
+    func aMaterialTitleDoesTheSame() throws {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 300, height: 100), styleMask: [.titled],
+            backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        let title = MaterialTitleField()
+        title.frame = NSRect(x: 10, y: 40, width: 120, height: 20)
+        title.stringValue = "Front, with the new crystal fitted.jpg"
+        window.contentView?.addSubview(title)
+        let cell = try #require(title.cell)
+        #expect(!cell.isScrollable && cell.lineBreakMode == .byTruncatingTail)
+        #expect(window.makeFirstResponder(title))
+        #expect(cell.isScrollable)
+        #expect(window.makeFirstResponder(nil))
+        #expect(!cell.isScrollable && !cell.wraps && cell.lineBreakMode == .byTruncatingTail)
+    }
+}

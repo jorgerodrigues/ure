@@ -25,7 +25,7 @@ Milestones describe implementation order, not separate production releases. Do n
 - Keep the PR within its stated boundary. Do not prebuild later features.
 - Introduce forward migrations. Preserve existing data and originals.
 - Implement the applicable loading, empty, failed-save, and closed-job states.
-- Run the app Debug build and formatter/lint checks during rapid implementation. Keep behavioral tests current and compile affected tests when needed. CI runs `make check` and `make release`, including the complete isolated unit suite. Native UI and device automation stays off CI.
+- Run the app Debug build and formatter/lint checks during rapid implementation. Keep behavioral tests current and compile affected tests when needed. CI is turned off for the prototype phase, so run `make check` and `make release`, including the complete isolated unit suite, locally on the PR's final commit. Native UI and device automation stays off CI.
 - Include actual verification results and any untested gate in the PR.
 - Do not add tool attribution or a coauthor footer.
 - Ask whether the user wants review comments resolved after addressing them.
@@ -75,4 +75,4 @@ Milestones describe implementation order, not separate production releases. Do n
 | W040 | [Track parts as their own records with spares (#68)](https://github.com/jorgerodrigues/ure/issues/68) ([verification](part-records-verification.md)). The local window check is the app check, as accepted for the Rework stories. | [W039](https://github.com/jorgerodrigues/ure/issues/67) |
 | Edit queue | Save every change through one ordered edit queue, with no issue ([verification](edit-queue-verification.md)). The local window check is the app check, as accepted for the Rework stories. | [W040](https://github.com/jorgerodrigues/ure/issues/68) |
 | W041 | [Compare buying options and record what you paid (#69)](https://github.com/jorgerodrigues/ure/issues/69) ([verification](buying-options-verification.md)). The local window check is the app check, as accepted for the Rework stories. | [W040](https://github.com/jorgerodrigues/ure/issues/68) |
-| W042 | [Accept the reworked app (#70)](https://github.com/jorgerodrigues/ure/issues/70) | [W041](https://github.com/jorgerodrigues/ure/issues/69) |
+| W042 | [Accept the reworked app (#70)](https://github.com/jorgerodrigues/ure/issues/70) ([verification](rework-acceptance-verification.md)). Accepted for everyday use. The native UI test run, VoiceOver, Increase Contrast and the minimum-OS run stay open in the [acceptance report](release-acceptance.md). | [W041](https://github.com/jorgerodrigues/ure/issues/69) |

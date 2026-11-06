@@ -1,12 +1,44 @@
-# W032 first-release acceptance
+# First-release acceptance
 
-First-release acceptance is **pending**. The complete isolated behavioral suite passes on the development Mac. Native tests exposed application defects and test-query defects. Their focused regressions pass. The corrected full native run passed fourteen tests before Automation Mode became disabled. Native acceptance on minimum macOS 27.0 and optimized native performance remain untested. The W031 async image-memory observation remains unresolved. Neither this report nor a green CI run declares the release complete.
+First-release acceptance is **pending**. The reworked app passed acceptance for everyday use on 6 November 2026 in [W042, issue #70](https://github.com/jorgerodrigues/ure/issues/70). Its evidence is in the [Rework acceptance record](rework-acceptance-verification.md). Four gates still need you at the Mac: the native UI test run, a spoken VoiceOver pass, a look at Increase Contrast, and a run on macOS 27.0. Neither this report nor a passing `make check` declares the release complete.
+
+## Rework acceptance, 6 November 2026
+
+The base was `072e09c` on `w002-recoverable-library`, after W033 to W041 and the edit queue. The development Mac ran macOS 27.3 with Xcode 27.2. CI is turned off for the prototype phase, so `make check` and `make release` run locally on each PR's final commit.
+
+| Check | Result |
+| --- | --- |
+| `make check` | Passed formatting, the unsigned Debug build and every unit test; the final count is in the PR |
+| `make release` | Passed on the final commit |
+| `make recovery` | Passed all 58 scenarios |
+| `make performance` | Every list as fast as W031 or faster; the "ÜHREN" search about 1.5 ms slower, near 22 ms |
+| Window check, fresh library | The whole journey of issue #70 passed through the real fields; every page rendered in light and dark |
+| Window check, upgraded W031 library | Opened with every migration, restored the backup made before the Rework, and listed every record |
+| Debug app on a copy of the W031 library | Upgraded it to `v27-buying-options` in a new generation and kept the old one |
+| Nothing typed is lost | 14,072 typed values checked; the upgraded and restored libraries are identical; the two gaps are explained in the record |
+| Native UI tests | Updated to the reworked app and compiled; not run, because Automation Mode needs your password |
+
+The acceptance fixed five gaps that normal use hits: Tab now reaches every field, notes text and paste box in reading order; long values end in "…"; the Calibers list shows photo tiles; a caliber's watch rows keep their full detail; and the Material count puts the larger count first.
+
+### Remaining gates
+
+- [ ] Run `make test-ui` on an idle desktop and give your password once for Automation Mode. Every native test must pass.
+- [ ] Go through a job page, a part page with Mark as Bought, a watch page and Settings with VoiceOver, and listen to the pop-ups, pills, tick boxes, option cards and the popover's fields.
+- [ ] Turn on Increase Contrast and look at a job page and a part page in light and dark.
+- [ ] Run `make check` and `make release` on macOS 27.0, or keep this gate open.
+- [ ] Check the native file panels with sandbox grants: import, export of an original, backup export and restore.
+- [ ] Profile memory while opening and moving through large photos in the main and reference viewers. W031's worker still grows to about 1.98 GB after 20 large originals.
+- [ ] Find the cause of the AppKit warning "Application performed a reentrant operation in its NSTableView delegate", which the Debug app logged once while it loaded 450 jobs.
+
+## W032 acceptance, 4 October 2026
+
+The rest of this report is W032's record from before the Rework. Its remaining checklist is replaced by the one above. Its keyboard, Save and Discard, and draft items no longer apply, because no record has Save or Cancel since the Rework.
 
 Recorded on 4 October 2026 for [W032, issue #28](https://github.com/jorgerodrigues/ure/issues/28). Dependencies #25, #26, and #27 were checked closed. PRs #55, #56, and #57 were checked merged. The fixed implementation base is `cb5a15a3cd7dfb6ce6579bb063f7c3c73fedca2b` on the live default branch, `w002-recoverable-library`.
 
 Hardware: Mac16,8, Apple M4 Pro, 48 GiB. Development system: macOS 27.2 beta, build 26B5091g. Toolchain: Xcode 27.0, build 27A266a. The proposed minimum is macOS 27.0 on Apple silicon. No minimum-OS Mac was available for local native acceptance. CI separately verified the builds and isolated unit suite on macOS 27.0, build 26A428.
 
-## Restored gates and demonstrated fixes
+### Restored gates and demonstrated fixes
 
 CI now runs `make check XCODE_EXTRA_FLAGS='-parallel-testing-enabled NO'` and `make release` on pull requests and pushes to the actual default branch. `make check` selects only `UreTests`. Serial test execution retains every test and its internal concurrency checks. UI and device automation remain off CI. Swift 6, complete concurrency checking, and warnings as errors remain enabled. Local commands also pass `SDK_STAT_CACHE_ENABLE=NO` for the development beta's build-cache stall. CI keeps the default SDK cache settings.
 
@@ -27,7 +59,7 @@ Correct mouse resizing exposed a window-size defect. The old 650-point content m
 
 The UI changes follow the existing native controls. Live Paper Ure screen rules were read through JSX and computed styles. The file has no document, task, search, or W032 feature page. No visual redesign, decoder optimization, new cache, package, or schema migration was added.
 
-## Executed evidence
+### Executed evidence
 
 | Check | Result |
 | --- | --- |
@@ -45,7 +77,7 @@ The full suite reports a runtime priority-inversion warning in the existing `Bac
 
 Build and test logs stay under ignored `.build/w032/`. Review logs stay under `.build/w032-review/`. The latest passing unit result is `ure-20261004-113752.xcresult` under `~/Developer/test-assets/w032-release-acceptance/`. The folder also retains failed and interrupted results for diagnosis. Remove only that branch folder when its PR is done. Frozen W029 inputs and the retained W031 performance fixture were preserved.
 
-## First-release journeys
+### First-release journeys
 
 `ReleaseJourneyTests` loads W029's frozen SQL, manifest, and original bytes from the test bundle. It does not recreate the historical schema with current migrations. Each run uses a new temporary library and production `LibraryCoordinator` access. The source dumps remain unchanged. Supported forward migrations run before the repair journey.
 
@@ -63,7 +95,7 @@ Build and test logs stay under ignored `.build/w032/`. Review logs stay under `.
 
 The combined journey captures every saved table after restart and compares it with the isolated restored library. It checks that older fixture rows survive, links retain their exact URLs, waiting-task state stays unchanged after arrival, skipped tasks leave the progress denominator, reopening reduces progress, and a second job leaves the completed repair intact. It checks all backup and restored originals against saved SHA-256 and sizes. The backup manifest remains unchanged after restore. These are domain/storage checks. They do not replace native acceptance.
 
-## Native run and remaining checklist
+### Native run and remaining checklist
 
 The initial partial run could not establish the cause of the keyboard failure. Two uninterrupted reproductions also failed. The watch editor requested focus before its text field was mounted. It now yields once in its view task before assigning focus and rejects a cancelled task. The unchanged keyboard test then passed three consecutive executions. Its result is `keyboard-minimal-focus-20261004.xcresult`.
 
