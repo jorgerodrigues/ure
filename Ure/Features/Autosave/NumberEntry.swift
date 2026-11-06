@@ -43,7 +43,7 @@ nonisolated struct NumberEntry: Sendable {
             throw problem(.belowMinimum, locale: locale)
         }
         let decimal = locale.decimalSeparator.flatMap(\.first) ?? "."
-        let groupMarks = groupingMarks(locale: locale, decimal: decimal)
+        let groupMarks = Self.groupingMarks(locale: locale, decimal: decimal)
         let numberEnd =
             trimmed.firstIndex { character in
                 !Self.isDigit(character) && character != decimal
@@ -104,7 +104,15 @@ nonisolated struct NumberEntry: Sendable {
         }
     }
 
-    private func groupingMarks(locale: Locale, decimal: Character) -> Set<Character> {
+    // The number as plain ASCII digits with "." before the fraction, read with the region's
+    // marks, or nil when it is not a number. Money reads its amounts the same way.
+    static func plainDigits(_ number: String, locale: Locale) -> String? {
+        let decimal = locale.decimalSeparator.flatMap(\.first) ?? "."
+        return digits(
+            number, decimal: decimal, groups: groupingMarks(locale: locale, decimal: decimal))
+    }
+
+    private static func groupingMarks(locale: Locale, decimal: Character) -> Set<Character> {
         var marks: Set<Character> = decimal == "," ? ["."] : [","]
         if let grouping = locale.groupingSeparator.flatMap(\.first), grouping != decimal,
             !grouping.isWhitespace
@@ -143,7 +151,7 @@ nonisolated struct NumberEntry: Sendable {
 
     // A decimal digit in any script, such as "٣" in an Arabic region, which shows numbers
     // in its own digits.
-    private static func isDigit(_ character: Character) -> Bool {
+    static func isDigit(_ character: Character) -> Bool {
         guard character.unicodeScalars.count == 1, let scalar = character.unicodeScalars.first
         else { return false }
         return scalar.properties.numericType == .decimal

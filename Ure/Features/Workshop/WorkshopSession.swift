@@ -16,6 +16,7 @@ final class WorkshopSession {
     let notes: RecordNotesState
     let checklist: ChecklistState
     let parts: PartState
+    let money: MoneyState
     let material: MaterialState
     let editing: WorkshopEditing
     let bench: BenchReferenceState
@@ -27,7 +28,13 @@ final class WorkshopSession {
         calibers = CaliberState(queue: queue)
         jobs = JobState(queue: queue)
         checklist = ChecklistState(queue: queue)
-        parts = PartState(service: PartService(coordinator: coordinator), queue: queue)
+        let money = MoneyState(service: MoneyService(coordinator: coordinator), queue: queue)
+        self.money = money
+        parts = PartState(
+            service: PartService(coordinator: coordinator), queue: queue,
+            home: { [money] in money.home })
+        // Weak, because the parts already hold the money state through their home currency.
+        money.homeChanged = { [weak parts] in parts?.homeCurrencyChanged() }
         notes = RecordNotesState(queue: queue)
         material = MaterialState(
             service: MaterialService(coordinator: coordinator), queue: queue)

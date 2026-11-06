@@ -17,7 +17,7 @@ nonisolated struct PartMigrationTests {
         let stored = try await coordinator.read { db in
             (
                 parts: try PartRecord.fetchAll(db, sql: "SELECT * FROM part ORDER BY createdAt"),
-                links: try PartLink.fetchAll(db, sql: "SELECT * FROM partLink ORDER BY id"),
+                options: try PartOption.fetchAll(db, sql: "SELECT * FROM partOption ORDER BY id"),
                 jobs: try JobRecord.fetchAll(db, sql: "SELECT * FROM job ORDER BY id"),
                 jobNotes: try String.fetchAll(db, sql: "SELECT notes FROM job ORDER BY id"),
                 tables: try String.fetchAll(
@@ -28,7 +28,7 @@ nonisolated struct PartMigrationTests {
                     db, sql: "SELECT identifier FROM grdb_migrations ORDER BY rowid")
             )
         }
-        #expect(stored.migrations.last == "v26-parts")
+        #expect(stored.migrations.contains("v26-parts"))
         #expect(!stored.tables.contains("partRequirement") && stored.tables.contains("part"))
         #expect(stored.integrity == "ok" && stored.foreignKeys == 0)
 
@@ -50,16 +50,17 @@ nonisolated struct PartMigrationTests {
             #expect(part.updatedAt.timeIntervalSince1970 == old.createdAt + 1)
         }
 
-        // Saved links stay on their parts, and a cancelled part's links are in its job's notes.
+        // Saved links stay on their parts, as options since v27, and a cancelled part's links
+        // are in its job's notes.
         let keptLinks = LegacyPartFixture.links.filter { link in
             kept.contains { $0.id == link.partID }
         }
-        #expect(stored.links.map(\.id.uuidString) == keptLinks.map(\.id).sorted())
-        for link in stored.links {
-            let old = try #require(keptLinks.first { $0.id == link.id.uuidString })
-            #expect(link.partID.uuidString == old.partID && link.url == old.url)
-            #expect(link.position == old.position)
-            #expect(link.createdAt.timeIntervalSince1970 == 30)
+        #expect(stored.options.map(\.id.uuidString) == keptLinks.map(\.id).sorted())
+        for option in stored.options {
+            let old = try #require(keptLinks.first { $0.id == option.id.uuidString })
+            #expect(option.partID.uuidString == old.partID && option.url == old.url)
+            #expect(option.position == old.position)
+            #expect(option.createdAt.timeIntervalSince1970 == 30)
         }
 
         // A cancelled part goes into its job's notes with every value and link, after any notes
@@ -98,7 +99,7 @@ nonisolated struct PartMigrationTests {
         let package = fixture.directory.appending(path: "before-parts.watchbackup")
         try LegacyPartFixture.package(at: package)
         let staged = try await coordinator.stageRestore(from: package)
-        #expect(staged.summary.appliedMigrations == ["v26-parts"])
+        #expect(staged.summary.appliedMigrations == ["v26-parts", "v27-buying-options"])
         let kept = LegacyPartFixture.parts.filter { $0.status != "Cancelled" }
         #expect(staged.summary.counts["part"] == kept.count)
         #expect(staged.summary.counts["partRequirement"] == nil)
@@ -170,6 +171,7 @@ nonisolated struct PartMigrationTests {
 // balanced.
 nonisolated enum PartMigrationFixture {
     static func restoreRequirements(in db: Database) throws {
+        try BuyingMigrationFixture.restoreLinks(in: db)
         let reference = try DatabaseQueue()
         try LibrarySchema.migrator.migrate(reference, upTo: "v25-jobs-without-watch")
         let definitions = try reference.read { db in

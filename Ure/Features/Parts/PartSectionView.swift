@@ -8,6 +8,7 @@ import SwiftUI
 // steps are independent.
 struct PartSectionView: View {
     @Environment(PartState.self) private var parts
+    @Environment(MoneyState.self) private var money
     @Environment(WorkshopEditing.self) private var editing
     let jobID: UUID
 
@@ -19,11 +20,17 @@ struct PartSectionView: View {
         }
     }
 
-    // How many of the job's parts are still to buy, such as "1 to buy".
+    // How many of the job's parts are still to buy and what you paid for its parts, such as
+    // "1 to buy · €42.40 paid". Only the amounts charged to you count.
     private var summary: String? {
         guard !parts.isLoading, parts.loadError == nil else { return nil }
-        let toBuy = parts.parts(on: jobID).filter { $0.stage == .needed }.count
-        return toBuy > 0 ? "\(toBuy) to buy" : nil
+        let lines = parts.parts(on: jobID)
+        let toBuy = lines.filter { $0.stage == .needed }.count
+        let summary = [
+            toBuy > 0 ? "\(toBuy) to buy" : nil,
+            PartMoneyWording.paid(PartPricing.paid(lines, home: money.home)),
+        ].compactMap { $0 }
+        return summary.isEmpty ? nil : summary.joined(separator: " · ")
     }
 
     @ViewBuilder private var content: some View {
@@ -82,9 +89,10 @@ private struct PartLines: View {
 }
 
 // One part: its state, which a click moves on, its name written in place with its quantity, the
-// line under it, and an arrow that opens its page. A fitted part reads quieter.
+// line under it, what it costs, and an arrow that opens its page. A fitted part reads quieter.
 private struct PartLine: View {
     @Environment(PartState.self) private var parts
+    @Environment(MoneyState.self) private var money
     let part: PartRecord
     let isEditable: Bool
 
@@ -113,13 +121,9 @@ private struct PartLine: View {
                         Spacer(minLength: 0)
                     }
                     .padding(.leading, -InPlaceLayout.inset)
-                    if let detail = PartWording.detail(of: part) {
-                        Text(detail)
-                            .font(.system(size: PartLineLayout.detailSize))
-                            .foregroundStyle(part.stage == .fitted ? .tertiary : .secondary)
-                            .lineLimit(1)
-                    }
+                    PartLineDetail(part: part, options: parts.options(of: part.id))
                 }
+                PartLinePrice(part: part, options: parts.options(of: part.id), rates: money.rates)
                 PartOpenButton(part: part)
             }
             .frame(height: PartLineLayout.rowHeight)
@@ -140,28 +144,112 @@ extension PartLine {
     }
 }
 
-// The state at the start of a part's line. A click moves the part on, such as Needed to
-// Ordered, and records the day. A fitted part stays fitted.
+// The state at the start of a part's line. A click on Needed opens Mark as Bought, as on the
+// "3c Mark as bought" artboard, and the part becomes Ordered once you mark it bought. A click on
+// a later state moves the part on, such as Ordered to In hand, and records the day. A fitted
+// part stays fitted.
 private struct PartStateButton: View {
     @Environment(PartState.self) private var parts
     @Environment(\.undoManager) private var undoManager
     let part: PartRecord
     let isEditable: Bool
+    @State private var isBuying = false
 
     var body: some View {
-        Button(action: advance) {
+        Button(action: click) {
             PartStagePill(stage: part.stage).contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .disabled(!isEditable)
-        .help(PartWording.advanceTitle(of: part.stage) ?? part.stage.rawValue)
+        .help(title ?? part.stage.rawValue)
+        .popover(isPresented: $isBuying, arrowEdge: .bottom) {
+            MarkAsBoughtPopover(part: part, close: closeBuying)
+        }
         .accessibilityLabel("State of \(part.name)")
         .accessibilityValue(part.stage.rawValue)
-        .accessibilityHint(PartWording.advanceTitle(of: part.stage) ?? "")
+        .accessibilityHint(title ?? "")
         .accessibilityIdentifier("partState-\(part.id.uuidString)")
     }
 
-    private func advance() { parts.advanceCommand(part.id, undoManager: undoManager) }
+    private var opensBuying: Bool { part.stage == .needed && part.purchase == nil }
+
+    private var title: String? {
+        opensBuying ? MarkAsBoughtWording.buttonTitle : PartWording.advanceTitle(of: part.stage)
+    }
+
+    private func click() {
+        if opensBuying {
+            isBuying = true
+        } else {
+            parts.advanceCommand(part.id, undoManager: undoManager)
+        }
+    }
+
+    private func closeBuying() { isBuying = false }
+}
+
+// The line under a part's name. A part to buy with options offers to compare them, such as
+// "Compare 3 options", which opens its page. A bought part names its supplier and the day of its
+// state, such as "Cousins UK · ordered 15 Oct". Otherwise it shows the first line of the
+// description and the day.
+private struct PartLineDetail: View {
+    @Environment(PartState.self) private var parts
+    @Environment(WorkshopEditing.self) private var editing
+    let part: PartRecord
+    let options: [PartOption]
+
+    var body: some View {
+        if part.stage == .needed, !options.isEmpty {
+            Button(action: open) {
+                Text(PartWording.compareTitle(count: options.count))
+                    .font(.system(size: PartLineLayout.detailSize))
+                    .foregroundStyle(Color.accentColor)
+            }
+            .buttonStyle(.plain)
+            .help("Open \(part.name) to compare its options")
+            .accessibilityIdentifier("compareOptions-\(part.id.uuidString)")
+        } else if let detail = PartWording.detail(of: part) {
+            Text(detail)
+                .font(.system(size: PartLineLayout.detailSize))
+                .foregroundStyle(part.stage == .fitted ? .tertiary : .secondary)
+                .lineLimit(1)
+        }
+    }
+
+    private func open() {
+        let id = part.id
+        editing.requestNavigation { parts.select(id) }
+    }
+}
+
+// What a part costs, where "2 Job" has its price column: what you paid for a bought part, or
+// "from" the lowest price with shipping of a part to buy.
+private struct PartLinePrice: View {
+    let part: PartRecord
+    let options: [PartOption]
+    let rates: ExchangeRates
+
+    var body: some View {
+        Group {
+            if let paid = part.purchase?.paid {
+                Text(paid.formatted())
+                    .foregroundStyle(part.stage == .fitted ? .secondary : .primary)
+            } else if part.stage == .needed,
+                let lowest = PartPricing.lowestPrice(options, rates: rates)
+            {
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text("from").font(.system(size: PartLineLayout.detailSize))
+                    Text(lowest.money.formatted())
+                }
+                .foregroundStyle(.secondary)
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .font(.system(size: InPlaceLayout.textSize))
+        .monospacedDigit()
+        .lineLimit(1)
+        .frame(width: PartLineLayout.priceWidth, alignment: .trailing)
+    }
 }
 
 // The arrow at the end of a part's line. It opens the part's page.
@@ -499,6 +587,7 @@ enum PartLineLayout {
     static let nameSlack: CGFloat = 2
     static let detailSize: CGFloat = 12
     static let descriptionWidth: CGFloat = 180
+    static let priceWidth: CGFloat = 84
     static let messageTop: CGFloat = 8
     static let hintsTop: CGFloat = 12
     static let iconSpacing: CGFloat = 8

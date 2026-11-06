@@ -12,6 +12,7 @@ struct WorkshopView: View {
     @Environment(PartListState.self) private var partList
     @Environment(ChecklistState.self) private var checklist
     @Environment(PartState.self) private var parts
+    @Environment(MoneyState.self) private var money
     @Environment(MaterialState.self) private var material
     @Environment(WorkshopEditing.self) private var editing
     @Environment(BenchReferenceState.self) private var bench
@@ -74,6 +75,7 @@ struct WorkshopView: View {
         .task(id: partList.observationRevision, partList.observe)
         .task(checklist.observe)
         .task(parts.observe)
+        .task(money.observe)
         .task(material.observe)
         .task(startBench)
         .onChange(of: jobs.selectedID, selectBenchJob)

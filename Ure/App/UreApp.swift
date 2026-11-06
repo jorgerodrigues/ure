@@ -37,6 +37,7 @@ struct UreApp: App {
                 .environment(restore.session.notes)
                 .environment(restore.session.checklist)
                 .environment(restore.session.parts)
+                .environment(restore.session.money)
                 .environment(restore.session.material)
                 .environment(restore.session.editing)
                 .environment(restore.session.bench)

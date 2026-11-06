@@ -6,7 +6,7 @@ import ImageIO
 import UniformTypeIdentifiers
 
 nonisolated enum PerformanceFixture {
-    static let version = "W031-v1"
+    static let version = "W041-v1"
     static let date = 1_700_000_000.0
 
     static func id(_ kind: Int, _ index: Int) throws -> UUID {
@@ -120,14 +120,17 @@ nonisolated enum PerformanceFixture {
                 VALUES (?, ?, ?, '00.A_%', 7, 'Needed', ?, ?)
                 """,
             arguments: [partID, jobID, "Synthetic part \(index)", date, date + Double(index)])
+        // Two buying options, one in euros and one in pounds.
         for position in 0..<2 {
             try db.execute(
                 sql: """
-                    INSERT INTO partLink (id, partID, position, url, createdAt, updatedAt)
-                    VALUES (?, ?, ?, 'https://example.com/part', ?, ?)
+                    INSERT INTO partOption (id, partID, position, supplier, url, price,
+                        shipping, currency, createdAt, updatedAt)
+                    VALUES (?, ?, ?, 'example.com', 'https://example.com/part', ?, '4.5', ?, ?, ?)
                     """,
                 arguments: [
-                    try id(9, index * 2 + position).uuidString, partID, position, date, date,
+                    try id(9, index * 2 + position).uuidString, partID, position,
+                    position == 0 ? "21.4" : "12.9", position == 0 ? "EUR" : "GBP", date, date,
                 ])
         }
     }

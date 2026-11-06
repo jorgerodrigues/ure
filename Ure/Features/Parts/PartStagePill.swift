@@ -100,12 +100,18 @@ enum PartWording {
         }
     }
 
-    // The line under a part's name on its job: the first line of its description and the day of
-    // its state, such as "GR 3800 · ordered 30 Oct". Nil when it has neither.
+    // The line under a part's name on its job: the supplier it was bought from, or else the
+    // first line of its description, and the day of its state, such as "Cousins UK · ordered
+    // 15 Oct" or "GR 3800 · ordered 30 Oct". Nil when it has neither.
     static func detail(of part: PartRecord, now: Date = .now) -> String? {
-        let parts = [firstLine(of: part.description), stateDay(of: part, now: now)]
-            .compactMap { $0 }
+        let first = part.purchase?.supplier ?? firstLine(of: part.description)
+        let parts = [first, stateDay(of: part, now: now)].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    // The link under a part to buy with options, such as "Compare 3 options".
+    static func compareTitle(count: Int) -> String {
+        count == 1 ? "1 option" : "Compare \(count) options"
     }
 
     static func firstLine(of text: String?) -> String? {
@@ -115,14 +121,23 @@ enum PartWording {
     }
 
     // When the part was added and every day it reached since, such as "Added 14 October ·
-    // Ordered 15 October".
+    // Ordered 15 October". A bought part says when it was bought instead, such as "Bought
+    // today", as on "3b Part, after Buy".
     static func days(of part: PartRecord, now: Date = .now) -> String {
-        [
-            "Added \(PageLayout.day(part.createdAt, now: now))",
-            part.orderedAt.map { "Ordered \(PageLayout.day($0, now: now))" },
-            part.inHandAt.map { "In hand \(PageLayout.day($0, now: now))" },
-            part.fittedAt.map { "Fitted \(PageLayout.day($0, now: now))" },
-        ].compactMap { $0 }.joined(separator: " · ")
+        var days: [String?] = []
+        if part.purchase != nil, let ordered = part.orderedAt {
+            days.append("Bought \(dayOrToday(ordered, now: now))")
+        } else {
+            days.append("Added \(PageLayout.day(part.createdAt, now: now))")
+            days.append(part.orderedAt.map { "Ordered \(PageLayout.day($0, now: now))" })
+        }
+        days.append(part.inHandAt.map { "In hand \(PageLayout.day($0, now: now))" })
+        days.append(part.fittedAt.map { "Fitted \(PageLayout.day($0, now: now))" })
+        return days.compactMap { $0 }.joined(separator: " · ")
+    }
+
+    private static func dayOrToday(_ date: Date, now: Date) -> String {
+        Calendar.current.isDate(date, inSameDayAs: now) ? "today" : PageLayout.day(date, now: now)
     }
 
     // What a click on the state does, such as "Move to Ordered".

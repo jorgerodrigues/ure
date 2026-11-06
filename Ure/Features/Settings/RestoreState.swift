@@ -33,6 +33,27 @@ final class RestoreState {
         "The library was not replaced, because a change did not save. In the main window, choose Try Again or Discard Unsaved Changes first."
 
     var isBusy: Bool { isStaging || isActivating }
+
+    // The money settings that Settings shows and edits: those of the library that is open. There
+    // are none while a restore replaces the library, because an edit then goes to the library
+    // that is being replaced and is lost.
+    var settingsMoney: MoneyState? { isActivating ? nil : session.money }
+
+    // Keeps the money settings in Settings current, also while the main window is closed. After
+    // a restore, it follows the restored library's money settings.
+    func observeSettingsMoney() async {
+        var observation: Task<Void, Never>?
+        for await money in Observations({ self.settingsMoney }) {
+            observation?.cancel()
+            observation = money.map(Self.observe)
+        }
+        observation?.cancel()
+    }
+
+    private static func observe(_ money: MoneyState) -> Task<Void, Never> {
+        Task { await money.observe() }
+    }
+
     var canRestore: Bool {
         guard case .ready = library.phase else { return false }
         return !isBusy && !backup.isExporting && session.editing.queue.isIdle

@@ -97,18 +97,38 @@ enum PartListWording {
         return "\(row.part.name) × \(row.part.quantity)"
     }
 
+    // An ordered part names the supplier it was bought from instead of its watch, such as
+    // "Cousins UK · 15 Oct", and a spare keeps "Spare" first, such as "Spare · Esslinger · 31 Oct".
     static func detail(of row: PartListRow, now: Date = .now) -> String {
         var parts: [String] = []
+        let supplier = row.part.stage == .ordered ? row.part.purchase?.supplier : nil
         if row.part.isSpare {
             parts.append("Spare")
-        } else if let watch = row.watch {
+        } else if supplier == nil, let watch = row.watch {
             parts.append(watch.name)
-        } else {
+        } else if supplier == nil {
             parts.append(row.job?.title ?? "No watch yet")
         }
+        if let supplier { parts.append(supplier) }
         if row.part.stage == .ordered, let ordered = row.part.orderedAt {
             parts.append(PartWording.shortDay(ordered, now: now))
         }
         return parts.joined(separator: " · ")
+    }
+
+    // What a part costs on the right of its row: what you paid, or for a part to buy the lowest
+    // price with shipping, such as "from €21.40", or "No options". A quiet text is one you have
+    // not paid.
+    static func price(
+        of part: PartRecord, options: [PartOption], rates: ExchangeRates,
+        locale: Locale = .current
+    ) -> (text: String, isQuiet: Bool)? {
+        if let paid = part.purchase?.paid { return (paid.formatted(locale: locale), false) }
+        guard part.stage == .needed else { return nil }
+        if options.isEmpty { return ("No options", true) }
+        if let lowest = PartPricing.lowestPrice(options, rates: rates) {
+            return ("from \(lowest.money.formatted(locale: locale))", true)
+        }
+        return (options.count == 1 ? "1 option" : "\(options.count) options", true)
     }
 }

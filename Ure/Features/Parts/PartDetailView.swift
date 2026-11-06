@@ -75,7 +75,11 @@ private struct PartPage: View {
                         Label(error, systemImage: "exclamationmark.triangle")
                             .foregroundStyle(.red)
                     }
-                    PartLinksSection(links: parts.links(of: part.id))
+                    if let purchase = part.purchase {
+                        PartBoughtSection(part: part, purchase: purchase, isEditable: isEditable)
+                    } else {
+                        PartOptionsSection(part: part, isEditable: isEditable)
+                    }
                     PartNotesSection(
                         field: facts.notes, isEditable: isEditable, edited: part.updatedAt)
                 }
@@ -110,6 +114,12 @@ private struct PartHeader: View {
                     .font(.system(size: PageLayout.pillTextSize))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                Spacer(minLength: 12)
+                // A part with nothing bought yet can be marked bought. A part to buy then
+                // becomes Ordered, and a part further along keeps its state.
+                if isEditable, part.purchase == nil {
+                    MarkAsBoughtButton(part: part)
+                }
             }
             InPlaceField(
                 field: facts.name, isEditable: isEditable, identifier: "partTitle",
@@ -287,37 +297,6 @@ private struct PartPageLink: View {
         .help("Open \(title)")
         .accessibilityLabel("Open \(title)")
         .accessibilityIdentifier(identifier)
-    }
-}
-
-// The links saved on the part, such as listings and identification references. Each opens in
-// the default browser only when you click Open. W041 turns them into buying options.
-private struct PartLinksSection: View {
-    @Environment(PartState.self) private var parts
-    let links: [PartLink]
-
-    var body: some View {
-        if !links.isEmpty {
-            VStack(alignment: .leading, spacing: PageLayout.headingSpacing) {
-                PageSectionHeading(title: "Links", detail: "\(links.count)")
-                ForEach(links) { link in
-                    HStack(spacing: PartPageLayout.linkSpacing) {
-                        Image(systemName: "link").foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
-                        Text(link.url).lineLimit(1).truncationMode(.middle)
-                        Spacer(minLength: 12)
-                        Button("Open") { parts.openLink(link) }
-                            .accessibilityLabel("Open \(link.url) in browser")
-                            .accessibilityIdentifier("openPartLink-\(link.id.uuidString)")
-                    }
-                    .font(.system(size: PageLayout.detailSize))
-                    .frame(maxWidth: NotesLayout.maximumWidth)
-                }
-                if let error = parts.openError {
-                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
-                }
-            }
-        }
     }
 }
 

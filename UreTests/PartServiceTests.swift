@@ -174,7 +174,7 @@ nonisolated struct PartServiceTests {
     }
 
     @Test
-    func aRemovedPartComesBackWithItsLinks() async throws {
+    func aRemovedPartComesBackWithItsOptions() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
@@ -184,19 +184,21 @@ nonisolated struct PartServiceTests {
         let part = try await service.update(
             try await service.add(named: "Mainspring", to: job.id).id, .notes("Keep this")
         ).after
-        let link = PartLink(
-            id: UUID(), partID: part.id, position: 0, url: "https://example.org/gr3800",
+        let option = PartOption(
+            id: UUID(), partID: part.id, position: 0, supplier: "Cousins UK",
+            url: "https://example.org/gr3800", price: Decimal(string: "12.9"),
+            shipping: Decimal(string: "5.5"), currency: "GBP", note: "In stock",
             createdAt: Date(timeIntervalSince1970: 30), updatedAt: Date(timeIntervalSince1970: 31))
-        try await coordinator.mutate { db, _, _ in try link.insert(db) }
+        try await coordinator.mutate { db, _, _ in try option.insert(db) }
 
         let removed = try await service.remove(part.id)
-        #expect(removed.part == part && removed.links == [link])
+        #expect(removed.part == part && removed.options == [option])
         #expect(try await coordinator.read(PartQueries.library) == PartLibrary())
         let restored = try await service.restore(removed)
         #expect(restored == part)
         #expect(
             try await coordinator.read(PartQueries.library)
-                == PartLibrary(parts: [part], links: [part.id: [link]]))
+                == PartLibrary(parts: [part], options: [part.id: [option]]))
         #expect(
             try await coordinator.read { try SearchQueries.fetch("keep this", in: $0) }.map(
                 \.recordID) == [part.id])
@@ -214,15 +216,10 @@ nonisolated struct PartServiceTests {
             opened.urls.append(url)
             return true
         }
-        let link = PartLink(
-            id: UUID(), partID: UUID(), position: 0, url: "https://example.org/gr3800",
-            createdAt: .now, updatedAt: .now)
+        let link = "https://example.org/gr3800"
         try service.open(link)
         #expect(opened.urls.map(\.absoluteString) == ["https://example.org/gr3800"])
-        let broken = PartLink(
-            id: UUID(), partID: UUID(), position: 0, url: "example", createdAt: .now,
-            updatedAt: .now)
-        #expect(throws: LinkError.invalidURL) { try service.open(broken) }
+        #expect(throws: LinkError.invalidURL) { try service.open("example") }
         let closed = PartService(coordinator: coordinator) { _ in false }
         #expect(throws: LinkError.browserUnavailable) { try closed.open(link) }
     }

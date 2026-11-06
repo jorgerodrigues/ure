@@ -59,6 +59,11 @@ struct SettingsView: View {
                 )
                 .font(.callout).foregroundStyle(.secondary)
             }
+            if let money = restore.settingsMoney {
+                MoneySettingsSection().environment(money)
+            } else {
+                MoneySettingsDuringRestore()
+            }
             RestoreSectionView()
             Section("About") {
                 LabeledContent("Application", value: "Ure")
@@ -69,7 +74,12 @@ struct SettingsView: View {
         .frame(width: 520, height: 620)
         .scenePadding()
         .task(loadSummary)
+        // Settings follows the home currency and the rates on its own, also while the main
+        // window is closed and after a restore.
+        .task(observeMoneyEffect)
     }
+
+    private func observeMoneyEffect() async { await restore.observeSettingsMoney() }
 
     private var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
