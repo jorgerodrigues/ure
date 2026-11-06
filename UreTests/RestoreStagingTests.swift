@@ -583,11 +583,14 @@ nonisolated private struct RestoreFixture: Sendable {
         let enumerator = try #require(
             FileManager.default.enumerator(
                 at: location, includingPropertiesForKeys: [.isRegularFileKey]))
+        // The enumerator gives paths through /private, as in /private/var/folders, while the
+        // fixture's root may not, so both are resolved before one is cut from the other.
+        let base = location.resolvingSymlinksInPath().path
         var values: [String: Data] = [:]
         for case let file as URL in enumerator {
             if try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true {
-                values[String(file.path.dropFirst(location.path.count + 1))] = try Data(
-                    contentsOf: file)
+                let path = file.resolvingSymlinksInPath().path
+                values[String(path.dropFirst(base.count + 1))] = try Data(contentsOf: file)
             }
         }
         return values
