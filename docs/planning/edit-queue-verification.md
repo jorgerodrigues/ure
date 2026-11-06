@@ -111,7 +111,7 @@ Development Mac: Apple silicon, macOS 27.3, Xcode 27.2. The SDK cache workaround
 | `make check` | {{CHECK}} |
 | `make release` | {{RELEASE}} |
 | Isolated running app | {{APP}} |
-| Local window checks | {{WINDOW}} |
+| Local window checks | Passed on `d7a2b91`: the edit queue check and the six W035 to W040 checks. The sidebar check failed once at ⌘F focusing search in three sections, and passed when run again on the same build |
 | GitHub CI | Off since 6 November, as the user asked while the app is a prototype. The gate in its place is `make check` and `make release` on the final code |
 
 ## Tests
@@ -140,7 +140,7 @@ So five of the six bug classes had been patched one by one before this change, a
 
 ### Local window checks
 
-This Mac gives sessions no Screen Recording or Accessibility permission. As accepted for the Rework stories on 5 November 2026, local-only tests hosted the app's real `LibraryRootView`, with every session environment and the bridged toolbar, in a window of the test host, and drove the real views. They were never committed and never run on CI. {{WINDOWRUN}}
+This Mac gives sessions no Screen Recording or Accessibility permission. As accepted for the Rework stories on 5 November 2026, local-only tests hosted the app's real `LibraryRootView`, with every session environment and the bridged toolbar, in a window of the test host, and drove the real views. They were never committed and never run on CI. The last run was on `d7a2b91`, the commit with the skip. On its first run the sidebar check found the search field not focused after ⌘F in Parts, Watches and Calibers. It passed when run again on the same build, and the queue does not touch focus, so that was the test window's focus timing.
 
 A new check, `LocalEditQueueAppCheck`, drove the six bug cases through the real fields and the session's own commands:
 
@@ -150,6 +150,12 @@ A new check, `LocalEditQueueAppCheck`, drove the six bug cases through the real 
 4. It renamed Mainspring to "Mainspring 1.10" and deleted the part. ⌘Z brought the part back with its new name, and the next ⌘Z reached the rename and gave back "Mainspring". ⇧⌘Z twice deleted it again with no failure.
 5. It typed "Crown tube replaced." in a watch's notes and "Supplier page" as a link's title, and archived the watch before the typing pause. The notes and the title saved, the watch was archived, and nothing was left unsaved.
 6. It typed a new job title, moved a part on to Fitted while the library was held, and closed the window. The window stayed open while the changes waited and closed once both had saved.
+
+It also checked the parts of the design that came after the brief:
+
+1. It typed in a job's notes while a part's state click saved, and the notes kept the cursor and every keystroke. While a part's deletion saved slowly, that part's name field took no edits, and the other part's name did.
+2. It made job writes fail and typed a title. The bar showed "Your changes are not saving." with "The library couldn't be written to.", a state change and a part waited, and the job page took no edits. Try Again saved all of it in order. A second failure and Discard put back the stored title and cleared Undo.
+3. It marked a job Done, started another job on the same watch, and pressed ⌘Z. The queue did not stop, the first job stayed Done, and the job page said "Nothing was undone. This watch already has an open job. Open that job to continue its repair."
 
 The W035 to W040 checks ran again against the queue, with their few calls that waited for a save changed to wait for the edit's ticket or for the queue. They cover the caliber, watch and job pages, the sidebar's jobs, the checklist and the parts, each as its story recorded. The renders and each check's `check-log.txt` are in `~/Developer/test-assets/jorge-edit-queue-ac6f77/`.
 
@@ -177,7 +183,7 @@ The review ran with `codex exec review --ignore-user-config`, which used Codex's
 16. Round fifteen, on `accf236`, found two things. The "Not saved yet: …" line sat where the hold hid it, and it now shows also while the page is held (rule six). Codex also said that an import whose file could not be added counted as saved and let the queue run on. This was declined: an import is one edit whose result lists each file that could not be added, with its reason, as W009 and W034 designed, and such a file never becomes material, so nothing can depend on it. Stopping the queue for a damaged PDF would make Try Again fail for good and leave only Discard.
 17. Round sixteen, on `cb6ca33`, found that the hold, which applies only while the queue is stopped, left the same gap during a slow normal save, and right after Try Again. I stopped and reported it. The user's rule became the general one in rule six: an edit that could fail for good is refused when you act. Only the record whose deletion or archive waits or runs stops taking edits, so the cursor stays everywhere else. The window check also showed that a long database error made the bar tall, so its reason is now cut to three lines with the full text in its help tag, and that a held page's Material section said the job was archived, which it no longer says.
 18. Round seventeen, on `067e119`, the last of the five rounds the coordinating session allowed, found three things. A part's name field on its job's page read only the job's permission, and Redo of Use Spare did not count as a spare in use. Both were fixed in rule six's place. The third was a gap in the design: an Undo or Redo can meet a rule after a change that has no Undo step of its own, such as ⌘Z of Done after Start Job, and that stopped the queue for good. I stopped and reported it. The user chose to skip such an Undo or Redo with the rule's message, as rule six now says. With the same commit, the bar now says what went wrong in plain words, as the coordinating session asked.
-{{CODEX}}
+19. Round eighteen started on `d7a2b91`, the commit with the skip, and was stopped before it gave a result. After round seventeen the user said: "Let's not overthink this - I am the main user of the app and it doesn't need to be perfect in all corner cases. These kinds are acceptable." So no more rounds ran, and the skip had no Codex review. The cases that are left are under "Accepted corner cases" below.
 
 ## Design rules that changed
 
@@ -186,6 +192,18 @@ Three of the brief's rules were changed as the work went on.
 1. The brief said that later edits still run in order after a failure. The user replaced that after round twelve: the queue stops at the first failed save. Most findings came from that rule.
 2. The brief said that Undo comes from the stored data. It still does, but a field or the checklist shows its own Undo at once, and that change saves as a normal edit. An Undo that waits for the stored inverse can't show at once, so typing after ⌘Z built on the old text, which the old fields never did (round five).
 3. Checklist edits are operations on single steps instead of the whole list. A whole list submitted by one change overwrote an Undo or a change that was still waiting (rounds one and two).
+
+## Accepted corner cases
+
+The user accepted these on 6 November, as the app's main user. Each is one line.
+
+1. A skipped Undo leaves the Undo list, so after the second job closes, ⌘Z can't reopen the first job, and you set its state by hand.
+2. The Redo of a skipped Undo does nothing, because nothing was undone.
+3. During a slow save, only a record whose deletion or archive is saving stops taking edits, so a run-time rule failure that rule six's list misses would stop the queue, and only Discard gets past it.
+4. A failed disk write stops the queue until the disk works again, and the only other way on is Discard, which drops every change since the failure.
+5. The message of a skipped Undo of a gone job's notes or checklist shows on the job page you have open, which can be another job's page.
+6. An import whose files could not be added counts as saved and does not stop the queue, as round fifteen's declined finding says.
+7. The skip itself had no Codex review, because round eighteen was stopped.
 
 ## Remaining gates
 
