@@ -241,6 +241,73 @@ struct PartStateTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
+    func typingWhileAPartWaitsToSaveUndoesFirst() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        let spare = try await PartService(coordinator: coordinator).add(
+            named: "Crystal 30.0 mm", to: nil)
+        let parts = PartState(service: PartService(coordinator: coordinator))
+        let observation = Task { await parts.observe() }
+        defer { observation.cancel() }
+        try await waitUntil { parts.parts.count == 1 }
+        let undoManager = UndoManager()
+        undoManager.groupsByEvent = false
+        let entry = parts.entry(for: job.id)
+        entry.beginEditing()
+
+        // A slow write holds the library, as a backup export does, so each save waits. The
+        // part and the spare are submitted, and the next name is typed while both wait.
+        let holdLibrary = Task.detached {
+            try await coordinator.mutate { _, _, _ in Thread.sleep(forTimeInterval: 0.6) }
+        }
+        try await Task.sleep(for: .milliseconds(100))
+        undoManager.beginUndoGrouping()
+        let adding = Task {
+            await parts.add(named: "Mainspring", to: job.id, undoManager: undoManager)
+        }
+        for _ in 0..<5 { await Task.yield() }
+        undoManager.endUndoGrouping()
+        undoManager.beginUndoGrouping()
+        let using = Task { await parts.useSpare(spare.id, on: job.id, undoManager: undoManager) }
+        for _ in 0..<5 { await Task.yield() }
+        undoManager.endUndoGrouping()
+        #expect(parts.parts(on: job.id).isEmpty)
+        undoManager.beginUndoGrouping()
+        entry.change(to: "Gasket", undoManager: undoManager)
+        undoManager.endUndoGrouping()
+        _ = try await holdLibrary.value
+        let added = await adding.value
+        let used = await using.value
+        #expect(added != nil && used)
+        #expect(parts.parts(on: job.id).map(\.name) == ["Mainspring", "Crystal 30.0 mm"])
+
+        // ⌘Z undoes the typing, then the spare's use, then the part, in the order they were
+        // done.
+        #expect(undoManager.undoActionName == PartEntryWording.typingActionName)
+        undoManager.undo()
+        #expect(entry.text.isEmpty && parts.parts(on: job.id).count == 2)
+        undoManager.undo()
+        await parts.waitForPresenceChanges()
+        #expect(try await stored(spare.id, coordinator).isSpare)
+        undoManager.undo()
+        await parts.waitForPresenceChanges()
+        #expect(parts.parts(on: job.id).isEmpty)
+        undoManager.redo()
+        await parts.waitForPresenceChanges()
+        undoManager.redo()
+        await parts.waitForPresenceChanges()
+        #expect(try await stored(spare.id, coordinator).jobID == job.id)
+        #expect(parts.parts(on: job.id).map(\.name) == ["Mainspring", "Crystal 30.0 mm"])
+        entry.endEditing()
+        observation.cancel()
+        await observation.value
+        try await coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
     func aDeletionWaitsForTypingThatDidNotSave() async throws {
         let fixture = WatchFixture()
         defer { fixture.remove() }

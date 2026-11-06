@@ -16,7 +16,8 @@ final class PartState {
     private let service: PartService
     @ObservationIgnored private let pause: (Duration) async throws -> Void
     @ObservationIgnored private let stages = ChangeUndo<PartStageValue>()
-    @ObservationIgnored private let placements = ChangeUndo<PartPlacement>()
+    // Where a spare sits. Nil puts the spare on its job again, at the end of the job's parts.
+    @ObservationIgnored private let placements = ChangeUndo<PartPlacement?>()
     // Whether a part is in the library. Undo of an added part removes it, and Undo of a
     // removal puts it back.
     @ObservationIgnored private let presence = ChangeUndo<Bool>()
@@ -119,7 +120,9 @@ final class PartState {
 
     func nameFocused() { nameToFocus = nil }
 
-    // Adds a part to the end of a job's parts, Needed. ⌘Z removes it again.
+    // Adds a part to the end of a job's parts, Needed. ⌘Z removes it again. The Undo is
+    // registered at once, before the part saves, so typing that follows while the save waits
+    // comes after it, and ⌘Z undoes that typing first.
     @discardableResult
     func add(
         named name: String, description: String = "", to jobID: UUID,
@@ -127,14 +130,15 @@ final class PartState {
     ) async -> PartRecord? {
         let typed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !typed.isEmpty else { return nil }
+        let target = PartUndoTarget()
+        registerPresence(of: target, setting: false, actionName: Self.addActionName, undoManager)
         // Parts typed one after another save one at a time, in the order they were typed.
         var made: PartRecord?
         _ = await presence.perform(true) { [weak self] _ in
             made = await self?.make(named: typed, description: description, on: jobID)
+            target.id = made?.id
             return made != nil
         }
-        guard let made else { return nil }
-        registerPresence(of: made.id, setting: false, actionName: Self.addActionName, undoManager)
         return made
     }
 
@@ -203,13 +207,24 @@ final class PartState {
     }
 
     // Moves a spare in hand from the drawer to the end of a job's parts. ⌘Z puts it back in
-    // the drawer.
+    // the drawer. As with an added part, the Undo is registered at once, before the spare
+    // moves.
     @discardableResult
     func useSpare(_ id: UUID, on jobID: UUID, undoManager: UndoManager? = nil) async -> Bool {
         guard let spare = part(id), spare.isSpare else { return false }
-        let prior = PartPlacement(part: spare)
-        return await placements.perform(prior) { [weak self] _ in
-            await self?.placeSpare(id, on: jobID, prior: prior, undoManager: undoManager) ?? false
+        let target = PartUndoTarget()
+        let write: ChangeUndo<PartPlacement?>.Write = { [weak self] placement in
+            guard let self, let id = target.id else { return true }
+            if let placement { return await self.restorePlacement(id, to: placement) }
+            return await self.placeSpare(id, on: jobID)
+        }
+        placements.registerUndo(
+            setting: PartPlacement(part: spare), redoing: nil, actionName: Self.spareActionName,
+            undoManager: undoManager, write: write)
+        return await placements.perform(nil) { [weak self] _ in
+            guard let self, await self.placeSpare(id, on: jobID) else { return false }
+            target.id = id
+            return true
         }
     }
 
@@ -264,7 +279,9 @@ final class PartState {
             await self?.setPresence(of: id, to: false) ?? false
         }
         guard removed else { return false }
-        registerPresence(of: id, setting: true, actionName: Self.removeActionName, undoManager)
+        registerPresence(
+            of: PartUndoTarget(id), setting: true, actionName: Self.removeActionName,
+            undoManager)
         return true
     }
 
@@ -364,21 +381,12 @@ final class PartState {
         }
     }
 
-    private func placeSpare(
-        _ id: UUID, on jobID: UUID, prior: PartPlacement, undoManager: UndoManager?
-    ) async -> Bool {
+    private func placeSpare(_ id: UUID, on jobID: UUID) async -> Bool {
         isSaving = true
         saveError = nil
         defer { isSaving = false }
         do {
-            let placed = try await service.useSpare(id, on: jobID)
-            adopt(placed)
-            let restore: ChangeUndo<PartPlacement>.Write = { [weak self] placement in
-                await self?.restorePlacement(id, to: placement) ?? false
-            }
-            placements.registerUndo(
-                setting: prior, redoing: PartPlacement(part: placed),
-                actionName: Self.spareActionName, undoManager: undoManager, write: restore)
+            adopt(try await service.useSpare(id, on: jobID))
             return true
         } catch {
             saveError = error.localizedDescription
@@ -400,10 +408,12 @@ final class PartState {
     }
 
     private func registerPresence(
-        of id: UUID, setting value: Bool, actionName: String, _ undoManager: UndoManager?
+        of target: PartUndoTarget, setting value: Bool, actionName: String,
+        _ undoManager: UndoManager?
     ) {
         let write: ChangeUndo<Bool>.Write = { [weak self] present in
-            await self?.setPresence(of: id, to: present) ?? false
+            guard let self, let id = target.id else { return true }
+            return await self.setPresence(of: id, to: present)
         }
         presence.registerUndo(
             setting: value, redoing: !value, actionName: actionName, undoManager: undoManager,
@@ -480,6 +490,14 @@ final class PartState {
         if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
         return lhs.id.uuidString < rhs.id.uuidString
     }
+}
+
+// The part an Undo acts on. An Undo registered when you act, before its change saves, learns
+// the part once the change has saved. When the change did not save, the Undo does nothing.
+final class PartUndoTarget {
+    var id: UUID?
+
+    init(_ id: UUID? = nil) { self.id = id }
 }
 
 // A part typed on a job's add line: its name and, after Tab, its description.
