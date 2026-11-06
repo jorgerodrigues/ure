@@ -56,7 +56,8 @@ struct MaterialSectionView: View {
                     style: style, choose: chooseFiles, drop: addDropped, paste: paste
                 )
                 .disabled(editing.isSaving)
-            } else {
+            } else if !editing.queue.holdsRecords {
+                // While a failed save holds the page, the failure bar says why instead.
                 Text(readOnlyMessage).foregroundStyle(.secondary)
             }
             MaterialImportProgress(owner: owner)
