@@ -76,10 +76,6 @@ private struct ChecklistLines: View {
             if editor.editingID != nil {
                 ChecklistKeyHints().padding(.top, ChecklistLayout.hintsTop)
             }
-            if let error = editor.saveError {
-                ChecklistSaveFailure(message: error, retry: editor.saveNow)
-                    .padding(.top, ChecklistLayout.hintsTop)
-            }
         }
         .padding(.top, ChecklistLayout.listTop)
     }
@@ -305,26 +301,6 @@ private struct ChecklistKeyHint: View {
                 .font(.system(size: ChecklistLayout.meaningSize))
                 .foregroundStyle(.secondary)
         }
-    }
-}
-
-private struct ChecklistSaveFailure: View {
-    let message: String
-    let retry: () -> Void
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Label {
-                Text("The checklist did not save. Your steps are still here. \(message)")
-            } icon: {
-                Image(systemName: "exclamationmark.circle.fill")
-            }
-            .font(.system(size: NotesLayout.failureSize))
-            .foregroundStyle(.red)
-            Button("Try Again", action: retry)
-                .controlSize(.small)
-        }
-        .accessibilityElement(children: .contain)
     }
 }
 

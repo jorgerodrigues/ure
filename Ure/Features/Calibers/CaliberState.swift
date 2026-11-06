@@ -38,7 +38,7 @@ final class CaliberState {
 
     // A caliber change, such as ⌘N or an archive, is still saving.
     var isSaving: Bool { queue.isBusy(.calibers) }
-    var saveError: String? { queue.failure(in: .calibers) }
+    var refusal: String? { queue.refusal(in: .calibers) }
 
     var selectedCaliber: CaliberRecord? { calibers.first { $0.id == selectedID } }
 
@@ -142,7 +142,6 @@ final class CaliberState {
         let id = record.id
         let archived = record.archivedAt == nil
         queue.flushTyping()
-        facts[id]?.saveFailedText()
         if archived, facts[id]?.hasRefusedText == true {
             queue.report(Self.unsavedFacts, in: .calibers)
             return nil

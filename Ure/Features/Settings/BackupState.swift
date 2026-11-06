@@ -54,8 +54,16 @@ final class BackupState {
         }
     }
 
+    static let unsavedChanges =
+        "The backup was not made, because a change did not save. In the main window, choose Try Again or Discard Unsaved Changes first."
+
     func chooseDestination() {
         guard summary != nil, !isExporting, panel == nil else { return }
+        if editing.failure != nil {
+            message = nil
+            errorMessage = Self.unsavedChanges
+            return
+        }
         let panel = NSSavePanel()
         panel.title = "Export Library Backup"
         panel.prompt = "Export"
@@ -84,8 +92,14 @@ final class BackupState {
             Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
             ?? "Unknown"
         operation = Task {
-            // The backup holds every change made before it, including typing on screen.
-            _ = await editing.saveAllFields()
+            // The backup holds every change made before it, including typing on screen. A save
+            // that fails stops the export, so the backup never leaves out a change.
+            guard await editing.saveAllFields() != .stopped else {
+                errorMessage = Self.unsavedChanges
+                progress = nil
+                operation = nil
+                return
+            }
             await performExport(to: destination, version: version)
         }
     }

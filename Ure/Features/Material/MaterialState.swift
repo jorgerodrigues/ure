@@ -46,7 +46,7 @@ final class MaterialState {
 
     // What went wrong on a record's page: a change that did not save, or another problem.
     func error(for page: LibraryItemOwner) -> String? {
-        problems[page] ?? queue.failure(in: .material(page))
+        problems[page] ?? queue.refusal(in: .material(page))
     }
 
     // Material in the order it was added.

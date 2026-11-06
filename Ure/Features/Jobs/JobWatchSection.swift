@@ -96,7 +96,7 @@ private struct WatchPickerField: View {
                         y: InPlaceLayout.boxHeight + JobWatchLayout.listGap)
                 }
             }
-            if let error = jobs.saveError, picker.isEditing {
+            if let error = jobs.refusal, picker.isEditing {
                 Text(error)
                     .font(.system(size: InPlaceLayout.messageSize))
                     .foregroundStyle(.red)

@@ -16,9 +16,13 @@ final class WorkshopApplicationDelegate: NSObject, NSApplicationDelegate {
         return .terminateLater
     }
 
-    // Every change still waiting saves first, in order, also one made while another saved.
+    // Every change still waiting saves first, in order, also one made while another saved. A
+    // save that fails asks whether to try again, discard the changes, or stay.
     private func saveFieldsThenTerminate(_ sender: NSApplication, restore: RestoreState) async {
-        guard await restore.session.editing.saveAllFields() || confirmQuitWithUnsavedFields()
+        guard
+            await UnsavedChanges.save(
+                restore.session.editing, toQuit: true,
+                ask: { UnsavedChanges.askAboutFailure($0, toQuit: true) })
         else {
             sender.reply(toApplicationShouldTerminate: false)
             return
@@ -28,16 +32,6 @@ final class WorkshopApplicationDelegate: NSObject, NSApplicationDelegate {
         case .terminateCancel: sender.reply(toApplicationShouldTerminate: false)
         default: break
         }
-    }
-
-    private func confirmQuitWithUnsavedFields() -> Bool {
-        let alert = NSAlert()
-        alert.messageText = "Some of your typing did not save."
-        alert.informativeText =
-            "The text is still on screen. If you quit now, the text that did not save is lost."
-        alert.addButton(withTitle: "Stay")
-        alert.addButton(withTitle: "Quit Anyway").hasDestructiveAction = true
-        return alert.runModal() == .alertSecondButtonReturn
     }
 
     // Quits at once, or first discards a restore that was staged.
@@ -121,11 +115,12 @@ struct WorkshopWindowGuard: NSViewRepresentable {
             guard !isSavingToClose else { return false }
             isSavingToClose = true
             Task { @MainActor [weak sender] in
-                _ = await editing.saveAllFields()
+                let saved = await UnsavedChanges.save(
+                    editing, toQuit: false,
+                    ask: { UnsavedChanges.askAboutFailure($0, toQuit: false) })
                 isSavingToClose = false
-                guard let sender, originalDelegate?.windowShouldClose?(sender) ?? true else {
-                    return
-                }
+                guard saved, let sender, originalDelegate?.windowShouldClose?(sender) ?? true
+                else { return }
                 sender.close()
             }
             return false
@@ -138,5 +133,65 @@ struct WorkshopWindowGuard: NSViewRepresentable {
         override func forwardingTarget(for selector: Selector) -> Any? {
             originalDelegate
         }
+    }
+}
+
+// Before quitting or closing the window, every change saves. A save that fails asks whether to
+// try again, discard the changes that did not save, or stay. Text that a field does not take,
+// such as a blank name, asks whether to quit without it.
+@MainActor
+enum UnsavedChanges {
+    // What to do about a save that failed.
+    enum Choice {
+        case tryAgain
+        case discard
+        case stay
+    }
+
+    // True when the app can quit or the window can close.
+    static func save(
+        _ editing: WorkshopEditing, toQuit: Bool, ask: @MainActor (String) -> Choice,
+        confirmTextNotValid: @MainActor () -> Bool = { confirmQuitWithTextNotValid() }
+    ) async -> Bool {
+        while true {
+            switch await editing.saveAllFields() {
+            case .saved:
+                return true
+            case .textNotValid:
+                return !toQuit || confirmTextNotValid()
+            case .stopped:
+                switch ask(editing.failure ?? "") {
+                case .tryAgain: editing.tryAgain()
+                case .discard: editing.discardUnsaved()
+                case .stay: return false
+                }
+            }
+        }
+    }
+
+    static func askAboutFailure(_ failure: String, toQuit: Bool) -> Choice {
+        let alert = NSAlert()
+        alert.messageText = "Some changes did not save."
+        let leaving = toQuit ? "quit" : "close the window"
+        alert.informativeText =
+            "\(failure) Try again to save them, or discard them to \(leaving) without them."
+        alert.addButton(withTitle: "Try Again")
+        alert.addButton(withTitle: "Discard Changes").hasDestructiveAction = true
+        alert.addButton(withTitle: "Cancel")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: return .tryAgain
+        case .alertSecondButtonReturn: return .discard
+        default: return .stay
+        }
+    }
+
+    static func confirmQuitWithTextNotValid() -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Some of your typing did not save."
+        alert.informativeText =
+            "The text is still on screen. If you quit now, the text that did not save is lost."
+        alert.addButton(withTitle: "Stay")
+        alert.addButton(withTitle: "Quit Anyway").hasDestructiveAction = true
+        return alert.runModal() == .alertSecondButtonReturn
     }
 }

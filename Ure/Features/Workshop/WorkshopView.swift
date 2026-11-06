@@ -63,6 +63,7 @@ struct WorkshopView: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .top, spacing: 0) { SaveFailureBar() }
         }
         .task(watches.observe)
         .task(calibers.observe)
@@ -114,7 +115,7 @@ struct WorkshopView: View {
                     ContentUnavailableView(
                         "Select a job", systemImage: WorkshopSection.jobs.symbol,
                         description: Text(
-                            jobs.saveError ?? "Choose a job, or start one with New Job."))
+                            jobs.refusal ?? "Choose a job, or start one with New Job."))
                 } else {
                     JobDetailView()
                 }
@@ -138,7 +139,7 @@ struct WorkshopView: View {
                 ContentUnavailableView(
                     "Select a part", systemImage: WorkshopSection.parts.symbol,
                     description: Text(
-                        parts.saveError ?? "Choose a part, or make a spare with New Part."))
+                        parts.refusal ?? "Choose a part, or make a spare with New Part."))
             }
         } else if navigation.selectedSection == .watches {
             WatchDetailView()

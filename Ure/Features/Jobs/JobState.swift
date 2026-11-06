@@ -36,7 +36,7 @@ final class JobState {
 
     // A job change, such as a state change or a new job, is still saving.
     var isSaving: Bool { queue.isBusy(.jobs) }
-    var saveError: String? { queue.failure(in: .jobs) }
+    var refusal: String? { queue.refusal(in: .jobs) }
 
     var selectedJob: JobRecord? { jobs.first { $0.id == selectedID } }
 
@@ -73,13 +73,13 @@ final class JobState {
     func open(_ job: JobRecord) {
         watchID = job.watchID
         selectedID = job.id
-        queue.clearFailure(in: .jobs)
+        queue.clearRefusal(in: .jobs)
     }
 
     func close() {
         selectedID = nil
         watchID = nil
-        queue.clearFailure(in: .jobs)
+        queue.clearRefusal(in: .jobs)
     }
 
     func startCommand(for watchID: UUID) { start(for: watchID) }
@@ -97,7 +97,7 @@ final class JobState {
         return queue.submit(.job(.start(watchID)), in: .jobs) { [weak self] result in
             guard let self else { return }
             if case .failed(JobError.openJobExists(let existing)) = result {
-                queue.clearFailure(in: .jobs)
+                queue.clearRefusal(in: .jobs)
                 adopt(existing)
                 open(existing)
             }
@@ -160,18 +160,14 @@ final class JobState {
 
     // Picking a watch that already has an open job opens that job, because a watch has one
     // open job at a time. The job being set up goes when nothing is in it yet. It goes after
-    // everything typed before, and only when no typing is left unsaved, so no text is lost.
+    // everything typed before, so a job with typing in it stays.
     @discardableResult
     func openOpenJob(of watchID: UUID, discardingBlank blankID: UUID?) -> JobRecord? {
         guard !isSaving, let existing = openJob(for: watchID) else { return nil }
         if let blank = jobs.first(where: { $0.id == blankID }), blank.id != existing.id,
             blank.watchID == nil
         {
-            queue.submit(
-                .job(.discardIfBlank(blank.id)), in: .jobs, reportsFailure: false,
-                requires: EditCheck { [weak self] in
-                    self?.queue.hasUnsavedTyping == false ? nil : "Typing on the job did not save."
-                })
+            queue.submit(.job(.discardIfBlank(blank.id)), in: .jobs)
         }
         open(existing)
         return existing
@@ -193,7 +189,6 @@ final class JobState {
         guard !isSaving, let job = selectedJob, job.stage != stage else { return nil }
         let id = job.id
         queue.flushTyping()
-        facts[id]?.saveFailedText()
         if facts[id]?.hasRefusedText == true {
             queue.report(Self.unsavedFields, in: .jobs)
             return nil
@@ -212,9 +207,8 @@ final class JobState {
                 self?.facts[id]?.hasUnsavedText == true ? Self.unsavedFields : nil
             }
         ) { [weak self] result in
-            guard let self else { return }
-            if case .failed(JobError.openJobExists(let existing)) = result { adopt(existing) }
-            if result.isSaved, stage == .waiting, id == selectedID { waitingToFocus = id }
+            guard let self, result.isSaved, stage == .waiting, id == selectedID else { return }
+            waitingToFocus = id
         }
     }
 

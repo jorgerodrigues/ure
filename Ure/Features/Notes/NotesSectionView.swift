@@ -26,10 +26,7 @@ struct NotesSectionView: View {
 
     @ViewBuilder private var content: some View {
         if let field = notes.field(for: owner) {
-            NotesEditor(
-                field: field, saveError: notes.saveError(for: owner),
-                isEditable: editing.canWrite(owner), retry: retrySave
-            ).id(owner)
+            NotesEditor(field: field, isEditable: editing.canWrite(owner)).id(owner)
         } else if let error = notes.loadErrors[owner] {
             Label(error, systemImage: "exclamationmark.triangle")
             Button("Retry", action: retry)
@@ -39,15 +36,12 @@ struct NotesSectionView: View {
     }
 
     private func load() async { await notes.load(owner) }
-    private func retrySave() { notes.retry(owner) }
     private func retry() { Task { await notes.load(owner) } }
 }
 
 private struct NotesEditor: View {
     let field: AutosaveField
-    let saveError: String?
     let isEditable: Bool
-    let retry: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -58,9 +52,7 @@ private struct NotesEditor: View {
                         NotesPrompt(isEditable: isEditable)
                     }
                 }
-            if let error = saveError {
-                NotesSaveFailure(message: error, retry: retry)
-            } else if field.isEditing {
+            if field.isEditing {
                 Text("Saved as you type · Esc undoes this field")
                     .font(.system(size: NotesLayout.hintSize))
                     .foregroundStyle(.secondary)
@@ -79,27 +71,6 @@ private struct NotesPrompt: View {
             .frame(height: NotesLayout.lineHeight)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
-    }
-}
-
-private struct NotesSaveFailure: View {
-    let message: String
-    let retry: () -> Void
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Label {
-                Text("Your notes did not save. They are still here. \(message)")
-            } icon: {
-                Image(systemName: "exclamationmark.circle.fill")
-            }
-            .font(.system(size: NotesLayout.failureSize))
-            .foregroundStyle(.red)
-            Button("Try Again", action: retry)
-                .controlSize(.small)
-                .accessibilityIdentifier("retryNotesSave")
-        }
-        .accessibilityElement(children: .contain)
     }
 }
 

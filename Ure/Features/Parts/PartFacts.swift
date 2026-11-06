@@ -13,13 +13,6 @@ struct PartFacts {
     var editors: [AutosaveField] { [name.editor, description, quantity.editor, notes] }
     // A field holds text that has not saved, such as a quantity of 0.
     var hasUnsavedText: Bool { editors.contains(where: \.hasUnsavedText) }
-    // A field holds text whose save failed. It can be tried again.
-    var hasFailedText: Bool { editors.contains(where: \.hasFailedText) }
-
-    // Tries text whose save failed once more.
-    func saveFailedText() {
-        for editor in editors { editor.saveFailedText() }
-    }
 
     static let quantityRule = FactRule(
         problem: { PartQuantity.value(of: $0) == nil ? "Enter a whole number above 0." : nil },

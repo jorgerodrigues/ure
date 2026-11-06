@@ -71,7 +71,7 @@ private struct PartPage: View {
                 VStack(alignment: .leading, spacing: PageLayout.sectionSpacing) {
                     PartHeader(part: part, facts: facts, isEditable: isEditable).zIndex(1)
                     PartFactsRow(facts: facts, isEditable: isEditable)
-                    if let error = parts.saveError {
+                    if let error = parts.refusal {
                         Label(error, systemImage: "exclamationmark.triangle")
                             .foregroundStyle(.red)
                     }
@@ -238,14 +238,6 @@ private struct PartFactsRow: View {
                                 .accessibilityHidden(true)
                         }
                     }
-                    if let error = facts.description.saveError {
-                        Label(
-                            "The description did not save. Your text is still here. \(error)",
-                            systemImage: "exclamationmark.circle.fill"
-                        )
-                        .font(.system(size: NotesLayout.failureSize))
-                        .foregroundStyle(.red)
-                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .layoutPriority(3)
@@ -353,20 +345,7 @@ private struct PartNotesSection: View {
                         .accessibilityHidden(true)
                 }
             }
-            if let error = field.saveError {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Label {
-                        Text("The notes did not save. Your text is still here. \(error)")
-                    } icon: {
-                        Image(systemName: "exclamationmark.circle.fill")
-                    }
-                    .font(.system(size: NotesLayout.failureSize))
-                    .foregroundStyle(.red)
-                    Button("Try Again", action: field.saveNow)
-                        .controlSize(.small)
-                }
-                .accessibilityElement(children: .contain)
-            } else if field.isEditing {
+            if field.isEditing {
                 Text("Saved as you type · Esc undoes this field")
                     .font(.system(size: NotesLayout.hintSize))
                     .foregroundStyle(.secondary)

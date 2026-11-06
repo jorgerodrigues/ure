@@ -18,7 +18,6 @@ final class AutosaveField {
     private(set) var isEditing = false
     // An edit of this field is still waiting in the queue.
     private(set) var isSaving = false
-    private(set) var saveError: String?
     @ObservationIgnored private let actionName: String
     @ObservationIgnored private let queue: EditQueue
     @ObservationIgnored private let scope: EditScope
@@ -35,14 +34,9 @@ final class AutosaveField {
     @ObservationIgnored private var isTyping = false
     // The Undo step that the text on screen belongs to while it has not saved.
     @ObservationIgnored private var unsavedChange: EditChange?
-    // The Undo step of the text whose save failed. Try Again saves the text under it, while new
-    // typing is a step of its own.
-    @ObservationIgnored private var failedChange: EditChange?
     // What the library holds, as far as this field knows.
     @ObservationIgnored private var storedText: String
     @ObservationIgnored private var latest: EditTicket?
-    // The number of the latest submission, so a failure can tell whether a later one followed.
-    @ObservationIgnored private var submissions = 0
     // The text each of this field's Undo and Redo steps puts back.
     @ObservationIgnored private var undoTexts: [EditChange: String] = [:]
     // The text each step submitted, which Redo brings back once Undo has taken it back. Another
@@ -73,20 +67,12 @@ final class AutosaveField {
     // Text on screen that has not saved, or an edit of it still waiting.
     var hasUnsavedChanges: Bool { text != savedText || isSaving }
 
-    // Text on screen that the library does not hold and no edit will give it: typing that has
-    // not submitted, text the field does not take, and text whose save failed.
+    // Text on screen that no edit will give the library: typing that has not submitted, and
+    // text the field does not take.
     var hasUnsavedText: Bool { text != savedText }
 
     // Text the field does not take, such as a blank name. It never saves.
     var isRefused: Bool { text != savedText && !accepts(text) }
-
-    // Text whose save failed. Try Again, or a change that needs the record saved, tries it once
-    // more.
-    var hasFailedText: Bool { text != savedText && saveError != nil }
-
-    func saveFailedText() {
-        if hasFailedText { saveNow() }
-    }
 
     func beginEditing() {
         isEditing = true
@@ -133,14 +119,13 @@ final class AutosaveField {
     // Adopts a stored value when nothing typed here is waiting. After Undo and Redo it does so
     // also while the field has the cursor, because Undo is what changed it.
     func refresh(_ stored: String, force: Bool = false) {
-        guard force || !isEditing, !isTyping, !isSaving, text == savedText, saveError == nil
-        else { return }
+        guard force || !isEditing, !isTyping, !isSaving, text == savedText else { return }
         text = stored
         savedText = stored
         storedText = stored
     }
 
-    // Submits the text now, if it changed and the field takes it. Try Again calls it too.
+    // Submits the text now, if it changed and the field takes it.
     func saveNow() { submit() }
 
     // Submits the text if the field takes it. Undo submits it also when it is the text the
@@ -151,30 +136,18 @@ final class AutosaveField {
         isTyping = false
         defer { track() }
         guard always || text != savedText else {
-            // The text that did not save is gone, so its failure is too.
-            if !isSaving { saveError = nil }
             settle()
             return
         }
-        guard accepts(text) else { return }
+        guard accepts(text), let submitted = try? edit(text) else { return }
         let value = text
-        let submitted: LibraryEdit
-        do {
-            submitted = try edit(value)
-        } catch {
-            saveError = error.localizedDescription
-            return
-        }
-        let change = unsavedChange ?? failedChange
+        let change = unsavedChange
         unsavedChange = nil
-        failedChange = nil
         if let change { submittedTexts[change] = value }
         savedText = value
         isSaving = true
-        submissions += 1
-        let number = submissions
         latest = queue.submitTyping(submitted, in: scope, as: change) { [weak self] result in
-            self?.finished(value, number: number, change: change, result: result)
+            self?.finished(value, result: result)
         }
     }
 
@@ -184,40 +157,36 @@ final class AutosaveField {
         scheduledSubmit = nil
         isTyping = false
         unsavedChange = nil
-        failedChange = nil
         text = savedText
         track()
     }
 
-    // A failed save keeps its text on screen with Try Again. Typing after it is a new Undo step.
-    private func finished(
-        _ value: String, number: Int, change: EditChange?, result: EditResult
-    ) {
-        let isLatest = number == submissions
+    // An edit of this field saved, or it was dropped with every change that did not save. Then
+    // the field shows what the library holds, and the typing on screen goes too.
+    private func finished(_ value: String, result: EditResult) {
         if latest?.isPending != true { isSaving = false }
-        switch result {
-        case .saved:
+        if result.isSaved {
             storedText = value
-            if isLatest { saveError = nil }
             showSavedText()
-        case .failed(let error):
-            // Only the latest save's failure keeps its text on screen as not saved. An older one
-            // that a later save took over settles.
-            if isLatest {
-                saveError = error.localizedDescription
-                savedText = storedText
-                failedChange = change
-            }
+        } else {
+            putBackStoredText()
         }
         track()
+    }
+
+    private func putBackStoredText() {
+        scheduledSubmit?.cancel()
+        scheduledSubmit = nil
+        isTyping = false
+        unsavedChange = nil
+        text = storedText
+        savedText = storedText
     }
 
     // Once saved, a field without the cursor shows its text the way it shows a stored value,
     // such as "28.800 vph" for "28800vph".
     private func showSavedText() {
-        guard !isEditing, !isTyping, !isSaving, text == savedText, saveError == nil else {
-            return
-        }
+        guard !isEditing, !isTyping, !isSaving, text == savedText else { return }
         let shown = normalized(text)
         guard shown != text else { return }
         text = shown
@@ -225,26 +194,24 @@ final class AutosaveField {
         storedText = shown
     }
 
-    // Undo or Redo of one of this field's changes puts back its text at once, and the text saves
+    // Undo or Redo of one of this field's changes puts back its text at once. Typing of the step
+    // that has not submitted submits first, so the library holds every step. Then the text saves
     // after everything before it, under the way back's number, also when it is the text the field
-    // shows as saved. The text the step submitted, or the typing it replaces, is what Redo puts
-    // back, unless the field does not take it.
+    // shows as saved. The text the step submitted is what Redo puts back, unless the field does
+    // not take it.
     private func undo(_ change: EditChange, back: EditChange) -> UndoHandling {
         guard let restored = undoTexts.removeValue(forKey: change) else { return .notMine }
+        if unsavedChange == change { saveNow() }
         let redone = submittedTexts.removeValue(forKey: change) ?? text
         scheduledSubmit?.cancel()
         scheduledSubmit = nil
         isTyping = false
-        saveError = nil
         let canRedo = accepts(redone)
         if canRedo { undoTexts[back] = redone }
         text = restored
         unsavedChange = canRedo ? back : nil
-        failedChange = nil
         submit(always: true)
-        var redo: LibraryEdit?
-        if canRedo { redo = try? edit(redone) }
-        return .done(redo: redo)
+        return .done(canRedo: canRedo)
     }
 
     private func forget(_ change: EditChange) {
@@ -257,8 +224,6 @@ final class AutosaveField {
         scheduledSubmit = nil
         isTyping = false
         unsavedChange = nil
-        failedChange = nil
-        saveError = nil
         text = savedText
         track()
     }
@@ -268,10 +233,7 @@ final class AutosaveField {
         saveNow()
     }
 
-    private func settle() {
-        unsavedChange = nil
-        failedChange = nil
-    }
+    private func settle() { unsavedChange = nil }
 
     private func scheduleSubmit() {
         scheduledSubmit?.cancel()
@@ -305,6 +267,10 @@ final class AutosaveField {
                     saveNow()
                 },
                 saveAll: { [weak self] in self?.saveEverything() },
-                isUnsaved: { [weak self] in self?.hasUnsavedText ?? false }))
+                isUnsaved: { [weak self] in self?.hasUnsavedText ?? false },
+                discard: { [weak self] in
+                    self?.putBackStoredText()
+                    self?.track()
+                }))
     }
 }

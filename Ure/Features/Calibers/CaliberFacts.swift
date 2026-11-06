@@ -33,11 +33,6 @@ struct CaliberFacts {
     // A fact holds text it does not take, such as a beat rate it cannot read.
     var hasRefusedText: Bool { all.contains { $0.editor.isRefused } }
 
-    // Tries text whose save failed once more.
-    func saveFailedText() {
-        for field in all { field.editor.saveFailedText() }
-    }
-
     init(
         caliber: CaliberRecord, queue: EditQueue, locale: Locale,
         makers: @escaping () -> [FactSuggestion],

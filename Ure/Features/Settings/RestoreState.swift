@@ -29,6 +29,9 @@ final class RestoreState {
         backup = BackupState(coordinator: library.coordinator, editing: session.editing)
     }
 
+    static let unsavedChanges =
+        "The library was not replaced, because a change did not save. In the main window, choose Try Again or Discard Unsaved Changes first."
+
     var isBusy: Bool { isStaging || isActivating }
     var canRestore: Bool {
         guard case .ready = library.phase else { return false }
@@ -127,8 +130,14 @@ final class RestoreState {
         operation = Task {
             defer { isActivating = false; operation = nil }
             do {
-                // A change that came in since the check saves before the library is replaced.
-                _ = await editing.saveAllFields()
+                // A change that came in since the check saves before the library is replaced. A
+                // save that fails stops the restore, so no change is lost without asking.
+                guard await editing.saveAllFields() != .stopped else {
+                    self.staged = staged
+                    library.restoreFailedBeforeActivation(Self.unsavedChanges)
+                    errorMessage = Self.unsavedChanges
+                    return
+                }
                 let result = try await coordinator.activateRestore(staged)
                 recoveryDirectory = result.recovery?.directory
                 self.staged = result.candidate

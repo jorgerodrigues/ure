@@ -36,7 +36,7 @@ final class WatchState {
 
     // A watch change, such as ⌘N or an archive, is still saving.
     var isSaving: Bool { queue.isBusy(.watches) }
-    var saveError: String? { queue.failure(in: .watches) }
+    var refusal: String? { queue.refusal(in: .watches) }
 
     var selectedWatch: WatchRecord? { watches.first { $0.id == selectedID } }
 
@@ -113,7 +113,6 @@ final class WatchState {
         let id = record.id
         let archived = record.archivedAt == nil
         queue.flushTyping()
-        facts[id]?.saveFailedText()
         if archived, facts[id]?.hasRefusedText == true {
             queue.report(CaliberState.unsavedFacts, in: .watches)
             return nil

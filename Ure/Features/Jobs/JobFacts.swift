@@ -14,11 +14,6 @@ struct JobFacts {
     // A field holds text it does not take, such as a blank title.
     var hasRefusedText: Bool { editors.contains(where: \.isRefused) }
 
-    // Tries text whose save failed once more.
-    func saveFailedText() {
-        for editor in editors { editor.saveFailedText() }
-    }
-
     init(
         job: JobRecord, queue: EditQueue,
         pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }

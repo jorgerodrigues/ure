@@ -13,8 +13,6 @@ final class PartState {
     static let removeActionName = "Delete Part"
     static let spareActionName = "Use Spare"
     static let maximumSpares = 5
-    static let failedFields =
-        "A field on this part did not save. Try it again before you delete the part."
 
     private let service: PartService
     let queue: EditQueue
@@ -43,7 +41,7 @@ final class PartState {
 
     // A part change, such as an added part or a state click, is still saving.
     var isSaving: Bool { queue.isBusy(.parts) }
-    var saveError: String? { queue.failure(in: .parts) }
+    var refusal: String? { queue.refusal(in: .parts) }
 
     var selectedPart: PartRecord? { parts.first { $0.id == selectedID } }
 
@@ -138,65 +136,15 @@ final class PartState {
         submit(typed, spare: spare, on: entry, undoManager: undoManager)
     }
 
-    // A part that did not save stays under the line, with Try Again, also while you type the
-    // next one. A spare that could not be used stays in the drawer.
     @discardableResult
     func submit(
         _ typed: PartEntryText, spare: UUID?, on entry: PartEntry,
         undoManager: UndoManager? = nil
     ) -> EditTicket? {
         if let spare { return useSpare(spare, on: entry.jobID, undoManager: undoManager) }
-        return save(typed, on: entry, undoManager: undoManager)
-    }
-
-    func retryUnsavedCommand(_ entry: PartEntry, undoManager: UndoManager?) {
-        retryUnsaved(entry, undoManager: undoManager)
-    }
-
-    // Adds the names that did not save again, in the order they were typed. Each name leaves
-    // the line as it is submitted, so a second Try Again never adds it twice. A name that fails
-    // again comes back under the line.
-    @discardableResult
-    func retryUnsaved(_ entry: PartEntry, undoManager: UndoManager? = nil) -> [EditTicket] {
-        var tickets: [EditTicket] = []
-        while let typed = entry.takeUnsaved() {
-            if let ticket = save(typed, on: entry, undoManager: undoManager) {
-                tickets.append(ticket)
-            }
-        }
-        trackUnsaved(entry)
-        return tickets
-    }
-
-    private func save(_ typed: PartEntryText, on entry: PartEntry, undoManager: UndoManager?)
-        -> EditTicket?
-    {
-        add(
+        return add(
             named: typed.name, description: typed.description, to: entry.jobID,
-            undoManager: undoManager
-        ) { [weak self, weak entry] result in
-            guard !result.isSaved, let self, let entry else { return }
-            entry.keepUnsaved(typed)
-            trackUnsaved(entry)
-        }
-    }
-
-    // Names that did not save count as unsaved typing, and saving everything tries them again.
-    private func trackUnsaved(_ entry: PartEntry) {
-        let key = ObjectIdentifier(entry)
-        guard !entry.unsaved.isEmpty else {
-            queue.untrack(key)
-            return
-        }
-        queue.track(
-            key,
-            TypingSource(
-                began: { nil }, submit: {},
-                saveAll: { [weak self, weak entry] in
-                    guard let self, let entry else { return }
-                    retryUnsaved(entry)
-                },
-                isUnsaved: { [weak entry] in entry?.unsaved.isEmpty == false }))
+            undoManager: undoManager)
     }
 
     // ⌘N in Parts makes a spare named "New Part", in hand, selects it, and puts the cursor in
@@ -266,19 +214,13 @@ final class PartState {
     }
 
     // Deletes a part with its links. ⌘Z puts both back. Typing on the part saves first, so
-    // Undo brings it back too. A field whose save failed stops the deletion, so it can be tried
-    // again. A text the part does not take, such as a quantity of 0, goes with the part.
+    // Undo brings it back too. A text the part does not take, such as a quantity of 0, goes
+    // with the part.
     @discardableResult
     func remove(_ id: UUID, undoManager: UndoManager? = nil) -> EditTicket? {
         guard part(id) != nil else { return nil }
-        queue.flushTyping()
-        facts[id]?.saveFailedText()
         return queue.submit(
-            .part(.remove(id)), in: .parts, undo: Self.removeActionName,
-            undoManager: undoManager,
-            requires: EditCheck { [weak self] in
-                self?.facts[id]?.hasFailedText == true ? Self.failedFields : nil
-            })
+            .part(.remove(id)), in: .parts, undo: Self.removeActionName, undoManager: undoManager)
     }
 
     func openLink(_ link: PartLink) {
@@ -463,14 +405,4 @@ final class PartEntry {
         isTypingBurst = false
         queue.removeLocalTyping(jobID)
     }
-
-    // The parts typed on this line that did not save, in the order they were typed.
-    private(set) var unsaved: [PartEntryText] = []
-
-    func keepUnsaved(_ typed: PartEntryText) { unsaved.append(typed) }
-
-    // The first part that did not save, taken off the list while it is tried again.
-    func takeUnsaved() -> PartEntryText? { unsaved.isEmpty ? nil : unsaved.removeFirst() }
-
-    func putBackUnsaved(_ typed: PartEntryText) { unsaved.insert(typed, at: 0) }
 }

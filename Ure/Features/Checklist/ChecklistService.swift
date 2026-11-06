@@ -122,30 +122,42 @@ nonisolated enum ChecklistOperation: Equatable, Sendable {
     case update(ChecklistStepUpdate)
     case delete(UUID)
 
-    // The changes that make one list of saved steps another.
+    // The changes that make one list of saved steps another. Each move is decided against the
+    // order that the changes before it leave, so the changes give exactly the new order.
     static func changes(from old: [ChecklistStep], to new: [ChecklistStep]) -> [ChecklistOperation]
     {
         let newIDs = Set(new.map(\.id))
         var oldByID: [UUID: ChecklistStep] = [:]
         for step in old { oldByID[step.id] = step }
         var operations = old.filter { !newIDs.contains($0.id) }.map { delete($0.id) }
-        let remaining = old.filter { newIDs.contains($0.id) }
-        var before: [UUID: UUID] = [:]
-        for (index, step) in remaining.enumerated() where index > 0 {
-            before[step.id] = remaining[index - 1].id
-        }
+        var order = old.map(\.id).filter { newIDs.contains($0) }
         for (index, step) in new.enumerated() {
             let previous = index > 0 ? new[index - 1].id : nil
             guard let saved = oldByID[step.id] else {
                 operations.append(.insert(step, after: previous))
+                place(step.id, after: previous, in: &order)
                 continue
             }
-            if before[step.id] != previous { operations.append(.move(step.id, after: previous)) }
+            let now = order.firstIndex(of: step.id).flatMap { $0 > 0 ? order[$0 - 1] : nil }
+            if now != previous {
+                operations.append(.move(step.id, after: previous))
+                place(step.id, after: previous, in: &order)
+            }
             if let update = ChecklistStepUpdate(from: saved, to: step) {
                 operations.append(.update(update))
             }
         }
         return operations
+    }
+
+    // Puts a step after another in an order of steps, or first.
+    private static func place(_ id: UUID, after previous: UUID?, in order: inout [UUID]) {
+        order.removeAll { $0 == id }
+        if let previous, let index = order.firstIndex(of: previous) {
+            order.insert(id, at: index + 1)
+        } else {
+            order.insert(id, at: 0)
+        }
     }
 
     // Applies changes to a list of saved steps. The changes that undo them come back too, in

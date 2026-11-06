@@ -61,13 +61,12 @@ private struct PartLines: View {
                 if entry.isTyping {
                     PartKeyHints().padding(.top, PartLineLayout.hintsTop)
                 }
-                PartUnsavedNames(entry: entry)
             } else if lines.isEmpty {
                 Text("No parts")
                     .foregroundStyle(.secondary)
                     .frame(height: PartLineLayout.entryHeight)
             }
-            if let error = state.saveError {
+            if let error = state.refusal {
                 Label(error, systemImage: "exclamationmark.circle.fill")
                     .font(.system(size: NotesLayout.failureSize))
                     .foregroundStyle(.red)
@@ -375,35 +374,6 @@ private struct PartKeyHint: View {
                 .foregroundStyle(.secondary)
         }
     }
-}
-
-// The parts typed on the line that did not save, with Try Again. They stay while you type the
-// next part.
-private struct PartUnsavedNames: View {
-    @Environment(PartState.self) private var parts
-    @Environment(\.undoManager) private var undoManager
-    let entry: PartEntry
-
-    var body: some View {
-        if !entry.unsaved.isEmpty {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Label {
-                    Text(
-                        "Not saved yet: \(entry.unsaved.map(\.name).joined(separator: ", "))")
-                } icon: {
-                    Image(systemName: "exclamationmark.circle.fill")
-                }
-                .font(.system(size: NotesLayout.failureSize))
-                .foregroundStyle(.red)
-                Button("Try Again", action: retry)
-                    .controlSize(.small)
-            }
-            .padding(.top, PartLineLayout.messageTop)
-            .accessibilityElement(children: .contain)
-        }
-    }
-
-    private func retry() { parts.retryUnsavedCommand(entry, undoManager: undoManager) }
 }
 
 // The spares in hand whose name has what you typed, under the line you type in. The Down arrow

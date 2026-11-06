@@ -59,17 +59,26 @@ final class WorkshopEditing {
     }
 
     // Text on screen that has not saved, in fields that save as you type, such as notes,
-    // material titles, the facts on watch, caliber, job and part pages, checklists, and part
-    // names that did not save. They never ask to be saved, so nothing is a draft.
+    // material titles, the facts on watch, caliber, job and part pages, and checklists. They
+    // never ask to be saved, so nothing is a draft.
     var hasUnsavedFields: Bool { queue.hasUnsavedTyping }
 
     // Submits the typing on screen now, as leaving a page does.
     func saveFieldsNow() { queue.flushTyping() }
 
     // The one wait before quitting, closing the window, restoring and exporting a backup: every
-    // field saves, and every change waiting in the queue runs. True when nothing on screen is
-    // left unsaved.
-    func saveAllFields() async -> Bool { await queue.saveEverything() }
+    // field saves, and every change waiting in the queue runs, until nothing waits or a save
+    // fails.
+    func saveAllFields() async -> SaveOutcome { await queue.saveEverything() }
+
+    // A save failed, and the changes after it wait. The message says why.
+    var failure: String? { queue.failure }
+
+    // Try Again runs the failed save once more, and then the changes that wait.
+    func tryAgain() { queue.retry() }
+
+    // Drops every change that did not save, and shows what the library holds.
+    func discardUnsaved() { queue.discardUnsaved() }
 
     // A change other than typing is still saving, or a file is being copied out.
     var isSaving: Bool { queue.isBusy || material.isExporting }

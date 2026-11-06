@@ -28,17 +28,6 @@ final class RecordNotesState {
 
     func field(for owner: LibraryItemOwner) -> AutosaveField? { fields[owner] }
 
-    // What did not save in a record's notes: the field's own save, or an Undo of it.
-    func saveError(for owner: LibraryItemOwner) -> String? {
-        fields[owner]?.saveError ?? queue.failure(in: .notes(owner))
-    }
-
-    // Try Again: the notes save again, or the Undo that failed runs once more.
-    func retry(_ owner: LibraryItemOwner) {
-        if queue.retryUndo(in: .notes(owner)) { return }
-        fields[owner]?.saveNow()
-    }
-
     func load(_ owner: LibraryItemOwner) async {
         loadErrors[owner] = nil
         do {

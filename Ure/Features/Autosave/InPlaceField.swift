@@ -117,7 +117,7 @@ enum FactTone: Equatable {
     init(_ field: FactField) {
         if field.isEditing {
             self = .editing
-        } else if field.problem != nil || field.saveError != nil {
+        } else if field.problem != nil {
             self = .invalid
         } else {
             self = .rest
@@ -146,15 +146,13 @@ struct FactLabel: View {
     }
 }
 
-// The line under a fact: what to enter, that it did not save, or how typing works.
+// The line under a fact: what to enter, or how typing works.
 struct FactMessage: View {
     let field: FactField
     var showsHint = true
 
     var body: some View {
-        if let error = field.saveError {
-            FactSaveFailure(message: error, retry: field.saveNow)
-        } else if let problem = field.problem {
+        if let problem = field.problem {
             FactProblem(message: problem)
         } else if showsHint, field.isEditing, field.matches.isEmpty {
             Text("Saved as you type · Esc undoes this field")
@@ -179,20 +177,6 @@ private struct FactProblem: View {
         .foregroundStyle(.red)
         .padding(.horizontal, InPlaceLayout.inset)
         .padding(.top, InPlaceLayout.messageTop)
-    }
-}
-
-private struct FactSaveFailure: View {
-    let message: String
-    let retry: () -> Void
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            FactProblem(message: "This did not save. Your text is still here. \(message)")
-            Button("Try Again", action: retry)
-                .controlSize(.small)
-        }
-        .accessibilityElement(children: .contain)
     }
 }
 

@@ -70,7 +70,6 @@ final class FactField {
 
     var text: String { editor.text }
     var isEditing: Bool { editor.isEditing }
-    var saveError: String? { editor.saveError }
     var hasUnsavedChanges: Bool { editor.hasUnsavedChanges }
     var hasUnsavedText: Bool { editor.hasUnsavedText }
     var unit: String? { rule.unit }

@@ -167,9 +167,6 @@ private struct MaterialTile: View {
                 MaterialTitleView(
                     field: field, text: field.text, isEditable: isEditable,
                     endEditing: material.endEditingTitle)
-                if let error = field.saveError {
-                    MaterialTitleFailure(message: error, retry: field.saveNow)
-                }
             }
             Text(record.item.detailLine())
                 .font(style == .page ? .system(size: MaterialLayout.detailSize) : .caption)
@@ -248,20 +245,6 @@ private struct MaterialPreview: View {
                     .font(.system(size: 30, weight: .light))
                     .foregroundStyle(.secondary)
             }
-        }
-    }
-}
-
-private struct MaterialTitleFailure: View {
-    let message: String
-    let retry: () -> Void
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Label("The title did not save. \(message)", systemImage: "exclamationmark.circle.fill")
-                .font(.caption)
-                .foregroundStyle(.red)
-            Button("Try Again", action: retry).controlSize(.mini)
         }
     }
 }

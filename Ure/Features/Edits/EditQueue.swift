@@ -46,7 +46,8 @@ enum EditResult {
 
 // The field or checklist that made a change. Undo and Redo go to it first.
 struct UndoOwner {
-    // Puts the change back itself, at once, and saves it under the way back's number.
+    // Puts the change back on screen itself, at once, and saves that through the queue under
+    // the way back's number.
     let undo: (_ undone: EditChange, _ back: EditChange) -> UndoHandling
     // Forgets what it kept for a step the undo manager no longer holds.
     let forget: (EditChange) -> Void
@@ -56,24 +57,34 @@ struct UndoOwner {
 enum UndoHandling {
     // It has nothing for the change, so the stored inverse undoes it.
     case notMine
-    // It put the change back. The edit that brings the change back again is the way back's
-    // inverse, so Redo works also when the owner is gone by then. Without one there is no Redo,
-    // as for text the field does not take.
-    case done(redo: LibraryEdit?)
+    // It put the change back. There is no Redo of text the field does not take.
+    case done(canRedo: Bool)
 }
 
 // An edit the queue did not apply, because what it needs did not hold when its turn came, such
-// as a field on the record that did not save.
+// as a fact on the record that is not valid yet.
 nonisolated struct EditRefusal: LocalizedError, Equatable {
     let message: String
 
     var errorDescription: String? { message }
 }
 
+// An edit that was dropped with every change that did not save.
+nonisolated struct EditDiscarded: Error {}
+
 // A check that runs when an edit's turn comes, after every edit before it. A message from it
-// refuses the edit, such as when a field on the record did not save.
+// refuses the edit, such as when a fact on the record is not valid yet.
 struct EditCheck {
     let refusal: () -> String?
+}
+
+// How saving everything ended, before quitting, closing the window, restoring or exporting.
+enum SaveOutcome: Equatable {
+    case saved
+    // A field shows text it does not take, such as a blank name, so that text can't save.
+    case textNotValid
+    // An edit failed, and the queue waits for Try Again or for the changes to be discarded.
+    case stopped
 }
 
 // One submitted edit. Its result comes once the queue has applied it, after every edit submitted
@@ -111,33 +122,40 @@ final class EditTicket {
     }
 }
 
-// Typing on screen that has not reached the queue, or that did not save: a field, a checklist,
-// or a job's add line. The queue asks it to submit before any other edit, so edits save in the
-// order you made them, and asks it to save everything before quitting, closing the window,
-// restoring and exporting a backup.
+// Typing on screen that has not reached the queue: a field or a checklist. The queue asks it to
+// submit before any other edit, so edits save in the order you made them, and asks it to save
+// everything before quitting, closing the window, restoring and exporting a backup.
 struct TypingSource {
     // When the typing waiting to submit began, so typing submits in the order it began. Nil when
     // nothing waits to submit.
     let began: () -> EditChange?
     // Submits typing that can save, as the typing pause would.
     let submit: () -> Void
-    // Submits everything it can, and tries text that did not save once more.
+    // Submits everything it can before quitting.
     let saveAll: () -> Void
-    // Whether text on screen has not saved.
+    // Whether text on screen has not reached the queue.
     let isUnsaved: () -> Bool
+    // Drops the typing on screen and shows what the library holds.
+    let discard: () -> Void
 }
 
 // The one queue every change to the library goes through, in the order you made the changes. It
-// applies one edit at a time. Each applied edit reads the rows it changes and gives back the edit
-// that undoes it, and the queue keeps that inverse under the change's number. Undo and Redo
-// register on the window's undo manager with the queue as their target and the change's number
-// as their value, at the moment you act, so ⌘Z always follows the order you acted in. Undo
-// submits the inverse as a new edit, which the queue applies after everything before it.
+// applies one edit at a time, so each edit runs on a library that holds every edit before it.
+// Each applied edit reads the rows it changes and gives back the edit that undoes it, and the
+// queue keeps that inverse under the change's number. When an edit fails, the queue stops there:
+// nothing runs past it until Try Again runs it again, or until the changes that did not save are
+// discarded. Changes made meanwhile show on screen and wait in order. Undo and Redo register on
+// the window's undo manager with the queue as their target and the change's number as their
+// value, at the moment you act, so ⌘Z always follows the order you acted in. Undo submits the
+// inverse as a new edit, which waits like any other.
 @Observable
 final class EditQueue {
     let coordinator: LibraryCoordinator
-    // The message of the latest edit that failed in each scope, until the next edit there.
-    private(set) var failures: [EditScope: String] = [:]
+    // Why the queue stopped: the error of the edit that failed. Nil while edits run.
+    private(set) var failure: String?
+    // A rule that a change broke when you made it, such as a second open job for a watch, in
+    // the scope where it shows, until the next change there.
+    private(set) var refusals: [EditScope: String] = [:]
     private var pending: [QueuedEdit] = []
     private var typing: [ObjectIdentifier: TypingSource] = [:]
     @ObservationIgnored private let editor: LibraryEditor
@@ -150,15 +168,9 @@ final class EditQueue {
     // The edit that undoes each change, once the change has saved.
     @ObservationIgnored private var inverses: [EditChange: LibraryEdit] = [:]
     // The field or checklist that made a change. Its Undo and Redo go to it first: it puts back
-    // the text at once and saves it in order, under the way back's number. When it is gone, or
-    // has nothing to put back, the stored inverse undoes the change instead.
+    // the text at once and saves it in order, under the way back's number. When it is gone, the
+    // stored inverse undoes the change instead.
     @ObservationIgnored private var owners: [EditChange: UndoOwner] = [:]
-    // The way back of an Undo that failed, and the change that Undo was for. The change still
-    // holds, so its way back does nothing and hands the inverse on to the next Undo.
-    @ObservationIgnored private var retries: [EditChange: EditChange] = [:]
-    // The latest Undo or Redo that failed in each scope: the change it was for and its way back.
-    // Try Again there runs it once more.
-    @ObservationIgnored private var failedUndos: [EditScope: FailedUndo] = [:]
     // The ways back on each undo manager's Redo list. A new action clears that list, and then
     // the queue and the owners forget what they kept for them.
     @ObservationIgnored private var redoChanges: [ObjectIdentifier: Set<EditChange>] = [:]
@@ -179,6 +191,9 @@ final class EditQueue {
     // Nothing is waiting to save.
     var isIdle: Bool { pending.isEmpty }
 
+    // An edit failed, and the edits after it wait.
+    var isStopped: Bool { failure != nil }
+
     // A change you made, other than typing, is still saving. Lists and record buttons wait.
     var isBusy: Bool { pending.contains(where: \.holdsScreen) }
 
@@ -188,48 +203,18 @@ final class EditQueue {
 
     var isBusyWithMaterial: Bool { pending.contains { $0.holdsScreen && $0.scope.isMaterial } }
 
-    func failure(in scope: EditScope) -> String? { failures[scope] }
+    func refusal(in scope: EditScope) -> String? { refusals[scope] }
 
-    // Says why a change could not be made, where its failures show.
-    func report(_ message: String, in scope: EditScope) { setFailure(message, in: scope) }
+    // Says why a change could not be made, where the change was made.
+    func report(_ message: String, in scope: EditScope) { refusals[scope] = message }
 
-    func clearFailure(in scope: EditScope) { setFailure(nil, in: scope) }
-
-    // The latest failure in a scope. A failed Undo there can run again only while its failure
-    // shows, so a new failure, or a new edit there, ends it.
-    private func setFailure(_ message: String?, in scope: EditScope) {
-        failures[scope] = message
-        if let failed = failedUndos.removeValue(forKey: scope) { release(failed) }
-    }
-
-    // Lets go of what a failed Undo kept, unless its way back is still on the Redo list, where
-    // Redo hands the inverse on.
-    private func release(_ failed: FailedUndo) {
-        if let back = failed.back, retries[back] != nil { return }
-        inverses[failed.undone] = nil
-    }
-
-    // Try Again for an Undo or Redo that failed in a scope runs it once more, after everything
-    // submitted before. False when no Undo failed there.
-    @discardableResult
-    func retryUndo(in scope: EditScope) -> Bool {
-        guard let failed = failedUndos.removeValue(forKey: scope) else { return false }
-        if let back = failed.back { retries[back] = nil }
-        failures[scope] = nil
-        flushTyping()
-        enqueue(
-            QueuedEdit(
-                work: .reverse(failed.undone), change: failed.back, scope: scope,
-                holdsScreen: failed.holdsScreen, isUndo: true, reportsFailure: true,
-                requires: nil, then: nil))
-        return true
-    }
+    func clearRefusal(in scope: EditScope) { refusals[scope] = nil }
 
     // How many Undo and Redo steps the queue keeps an inverse or an owner for.
     var keptUndoCount: Int { Set(inverses.keys).union(owners.keys).count }
 
-    // Text on screen that has not saved: typing that has not reached the queue, text the field
-    // does not take yet, and text whose save failed.
+    // Text on screen that has not reached the queue: typing, and text the field does not take
+    // yet.
     var hasUnsavedTyping: Bool { typing.values.contains { $0.isUnsaved() } }
 
     // Hears what the library holds after each edit. The flag says whether Undo or Redo made it.
@@ -237,18 +222,46 @@ final class EditQueue {
         listeners.append(listener)
     }
 
+    // MARK: Stopped
+
+    // Try Again: the edit that failed runs once more, and then every edit that waits, in order.
+    // If it fails again, the queue stays stopped.
+    func retry() {
+        guard failure != nil else { return }
+        failure = nil
+        startWorker()
+    }
+
+    // Drops the edit that failed and every edit that waits, with the typing on screen. Each
+    // dropped edit ends as discarded, so its field or checklist shows what the library holds.
+    // The Undo and Redo lists start over, as after Revert to Saved, because their steps may
+    // belong to dropped edits.
+    func discardUnsaved() {
+        guard failure != nil else { return }
+        let dropped = pending
+        pending = []
+        failure = nil
+        for source in typing.values { source.discard() }
+        let result = EditResult.failed(EditDiscarded())
+        for item in dropped {
+            item.ticket.finish(result)
+            item.then?(result)
+        }
+        discardUndo()
+        resumeIdleWaiters()
+    }
+
     // MARK: Submitting
 
     // Submits an edit you made now, after the typing on screen. With an undo manager and an
     // action name, ⌘Z undoes it, registered now. A precondition runs when the edit's turn comes;
-    // a message from it refuses the edit. A failure shows in the scope unless the edit is one
-    // you did not ask for, such as removing a job left blank, or its submitter shows it. The
-    // edit holds the screen while it saves.
+    // a message from it refuses the edit and stops the queue. The edit holds the screen while
+    // it saves.
     @discardableResult
     func submit(
         _ edit: LibraryEdit, in scope: EditScope, undo actionName: String? = nil,
-        undoManager: UndoManager? = nil, reportsFailure: Bool = true,
-        requires: EditCheck? = nil, then: ((EditResult) -> Void)? = nil
+        undoManager: UndoManager? = nil, requires: EditCheck? = nil,
+        then: ((EditResult) -> Void)? = nil
     ) -> EditTicket {
         flushTyping()
         var change: EditChange?
@@ -258,11 +271,11 @@ final class EditQueue {
             register(step, on: undoManager)
             change = step.change
         }
-        if reportsFailure { setFailure(nil, in: scope) }
+        refusals[scope] = nil
         return enqueue(
             QueuedEdit(
                 work: .edit(edit), change: change, scope: scope, holdsScreen: true,
-                isUndo: false, reportsFailure: reportsFailure, requires: requires, then: then))
+                isUndo: false, requires: requires, then: then))
     }
 
     // Registers one Undo step, now, for a change that its owner shows at once and saves itself,
@@ -280,8 +293,8 @@ final class EditQueue {
         return step.change
     }
 
-    // Submits typing as the edit of its burst. Typing never holds the screen, and its failure
-    // goes back to the field that submitted it.
+    // Submits what an owner shows, such as typing, as an edit of its step. It does not hold the
+    // screen.
     @discardableResult
     func submitTyping(
         _ edit: LibraryEdit, in scope: EditScope, as change: EditChange?,
@@ -291,10 +304,11 @@ final class EditQueue {
         return enqueue(
             QueuedEdit(
                 work: .edit(edit), change: change, scope: scope, holdsScreen: false,
-                isUndo: false, reportsFailure: false, requires: nil, then: then))
+                isUndo: false, requires: nil, then: then))
     }
 
-    // Stops an edit before it runs, or while it runs if it can stop, such as an import.
+    // Stops an edit before it runs, or while it runs if it can stop, such as an import. A
+    // stopped edit is not a failure, so the edits after it still run.
     func cancel(_ ticket: EditTicket) {
         if let running, running.ticket === ticket {
             running.task.cancel()
@@ -303,6 +317,7 @@ final class EditQueue {
             let result = EditResult.failed(CancellationError())
             item.ticket.finish(result)
             item.then?(result)
+            if pending.isEmpty { resumeIdleWaiters() }
         }
     }
 
@@ -332,23 +347,30 @@ final class EditQueue {
 
     // MARK: Waiting
 
-    // Waits until every edit submitted so far, and every edit they led to, has run.
+    // Waits until every edit submitted so far, and every edit they led to, has run, or until
+    // the queue stops at a failure.
     func waitUntilIdle() async {
-        guard !pending.isEmpty else { return }
+        guard !pending.isEmpty, failure == nil else { return }
         await withCheckedContinuation { idleWaiters.append($0) }
     }
 
     // The one wait before quitting, closing the window, restoring and exporting a backup. Every
-    // field saves what it can, text that did not save is tried once more, and the queue runs
-    // until nothing waits. True when no text on screen is left unsaved.
-    func saveEverything() async -> Bool {
+    // field saves what it can, and the queue runs until nothing waits or an edit fails.
+    func saveEverything() async -> SaveOutcome {
         repeat {
             isSubmittingTyping = true
             for source in sources() { source.saveAll() }
             isSubmittingTyping = false
             await waitUntilIdle()
-        } while !pending.isEmpty
-        return !hasUnsavedTyping
+        } while !pending.isEmpty && failure == nil
+        if failure != nil { return .stopped }
+        return hasUnsavedTyping ? .textNotValid : .saved
+    }
+
+    private func resumeIdleWaiters() {
+        let waiting = idleWaiters
+        idleWaiters = []
+        for waiter in waiting { waiter.resume() }
     }
 
     // MARK: Undo
@@ -361,10 +383,9 @@ final class EditQueue {
                 undoManager.removeAllActions(withTarget: typing)
             }
         }
+        for (change, owner) in owners { owner.forget(change) }
         inverses = [:]
         owners = [:]
-        retries = [:]
-        failedUndos = [:]
         redoChanges = [:]
         retired = Set(pending.compactMap(\.change))
     }
@@ -379,14 +400,6 @@ final class EditQueue {
     private func forget(_ change: EditChange) {
         retire(change)
         owners.removeValue(forKey: change)?.forget(change)
-        for (scope, failed) in failedUndos where failed.back == change {
-            failedUndos[scope]?.back = nil
-        }
-        if let undone = retries.removeValue(forKey: change),
-            !failedUndos.values.contains(where: { $0.undone == undone })
-        {
-            inverses[undone] = nil
-        }
     }
 
     // Keeps track of the Redo list as AppKit does: a step registered while undoing goes onto it,
@@ -420,16 +433,15 @@ final class EditQueue {
         let back = EditUndoStep(
             change: makeChange(), actionName: step.actionName, scope: step.scope,
             holdsScreen: step.holdsScreen)
-        setFailure(nil, in: step.scope)
+        refusals[step.scope] = nil
         if let owner = owners[step.change],
-            case .done(let redo) = owner.undo(step.change, back.change)
+            case .done(let canRedo) = owner.undo(step.change, back.change)
         {
             retire(step.change)
             owners[step.change] = nil
-            if let redo, let undoManager {
+            if canRedo, let undoManager {
                 register(back, on: undoManager)
                 owners[back.change] = owner
-                inverses[back.change] = redo
             } else {
                 owner.forget(back.change)
             }
@@ -440,8 +452,7 @@ final class EditQueue {
         enqueue(
             QueuedEdit(
                 work: .reverse(step.change), change: back.change, scope: step.scope,
-                holdsScreen: step.holdsScreen, isUndo: true, reportsFailure: true, requires: nil,
-                then: nil))
+                holdsScreen: step.holdsScreen, isUndo: true, requires: nil, then: nil))
     }
 
     // MARK: Typing that saves nowhere
@@ -495,20 +506,28 @@ final class EditQueue {
     @discardableResult
     private func enqueue(_ item: QueuedEdit) -> EditTicket {
         pending.append(item)
-        if worker == nil { worker = Task { await drain() } }
+        startWorker()
         return item.ticket
     }
 
+    private func startWorker() {
+        if worker == nil, failure == nil { worker = Task { await drain() } }
+    }
+
+    // Runs the edits in order. A failure stops the queue with the failed edit still first, so
+    // Try Again runs it again. An edit that you stopped, such as an import, is not a failure.
     private func drain() async {
-        while let item = pending.first {
+        while failure == nil, let item = pending.first {
             let result = await run(item)
+            if let error = result.error, !(error is CancellationError) {
+                failure = error.localizedDescription
+                break
+            }
             pending.removeFirst()
             finish(item, with: result)
         }
         worker = nil
-        let waiting = idleWaiters
-        idleWaiters = []
-        for waiter in waiting { waiter.resume() }
+        resumeIdleWaiters()
     }
 
     private func run(_ item: QueuedEdit) async -> EditResult {
@@ -520,10 +539,6 @@ final class EditQueue {
         case .edit(let submitted):
             edit = submitted
         case .reverse(let change):
-            if let undone = retries.removeValue(forKey: change), let back = item.change {
-                inverses[back] = inverses.removeValue(forKey: undone)
-                return .saved(EditApplied())
-            }
             guard let inverse = inverses[change] else { return .saved(EditApplied()) }
             edit = inverse
         }
@@ -539,11 +554,9 @@ final class EditQueue {
     }
 
     // What the library holds now reaches the screens first, then the edit's own handler. An Undo
-    // that saved uses up the inverse it applied. One that failed leaves it, so the next Undo of
-    // the change can try again.
+    // uses up the inverse it applied.
     private func finish(_ item: QueuedEdit, with result: EditResult) {
-        switch result {
-        case .saved(let applied):
+        if case .saved(let applied) = result {
             if case .reverse(let undone) = item.work {
                 inverses[undone] = nil
                 owners.removeValue(forKey: undone)?.forget(undone)
@@ -554,17 +567,6 @@ final class EditQueue {
             for change in applied.changes {
                 for listener in listeners { listener(change, item.isUndo) }
             }
-        case .failed(let error):
-            if item.reportsFailure, !(error is CancellationError) {
-                setFailure(error.localizedDescription, in: item.scope)
-            }
-            if case .reverse(let undone) = item.work, let back = item.change {
-                retries[back] = undone
-                let failed = FailedUndo(undone: undone, back: back, holdsScreen: item.holdsScreen)
-                if let earlier = failedUndos.updateValue(failed, forKey: item.scope) {
-                    release(earlier)
-                }
-            }
         }
         if let change = item.change, !pending.contains(where: { $0.change == change }) {
             retired.remove(change)
@@ -572,13 +574,6 @@ final class EditQueue {
         item.ticket.finish(result)
         item.then?(result)
     }
-}
-
-private nonisolated struct FailedUndo: Sendable {
-    let undone: EditChange
-    // The way back, while the undo manager still holds it.
-    var back: EditChange?
-    let holdsScreen: Bool
 }
 
 // The value the undo manager keeps for one Undo or Redo step.
@@ -601,21 +596,19 @@ private struct QueuedEdit {
     let scope: EditScope
     let holdsScreen: Bool
     let isUndo: Bool
-    let reportsFailure: Bool
     let requires: EditCheck?
     let then: ((EditResult) -> Void)?
     let ticket: EditTicket
 
     init(
         work: Work, change: EditChange?, scope: EditScope, holdsScreen: Bool, isUndo: Bool,
-        reportsFailure: Bool, requires: EditCheck?, then: ((EditResult) -> Void)?
+        requires: EditCheck?, then: ((EditResult) -> Void)?
     ) {
         self.work = work
         self.change = change
         self.scope = scope
         self.holdsScreen = holdsScreen
         self.isUndo = isUndo
-        self.reportsFailure = reportsFailure
         self.requires = requires
         self.then = then
         ticket = EditTicket(change: change)
