@@ -50,7 +50,7 @@ Development Mac: Apple silicon, macOS 27.3, Xcode 27.2. The SDK cache workaround
 | `make recovery` | Passed all 58 recovery scenarios, including upgrades of the retained v10 and v15 libraries with every interruption checkpoint |
 | Isolated running app | Passed. See below |
 | Local window check | Passed on the final code, commit `0322675`, in 11.5 seconds. See below |
-| GitHub CI | Failed once, on commit `c8f966d`, in `SearchStateTests`. The test read the search results before the part's saved description had reached them. It now waits for the saved description in each list, and passed five times in a row here. CI passed on `e1d621d` and `3062a90` |
+| GitHub CI | Failed once, on commit `c8f966d`, in `SearchStateTests`. The test read the search results before the part's saved description had reached them. It now waits for the saved description in each list, and passed five times in a row here. CI passed on `e1d621d`, `3062a90` and `f135b30`. On 6 November the user turned CI off while the app is a prototype, so no run started for the final code. The gate in its place is `make check` and `make release` on the final code, which both passed on `0322675` |
 
 ### Acceptance criteria
 
