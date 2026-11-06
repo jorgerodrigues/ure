@@ -3,16 +3,17 @@ import XCTest
 
 nonisolated final class SearchUITests: XCTestCase {
     @MainActor
-    func testDuplicateNotesOpenExactJobAndSearchProtectsUnsavedDraft() {
+    func testSearchFindsTheExactJobFromItsNotesAndSaysWhenNothingMatches() {
         let app = XCUIApplication()
         app.launchEnvironment["URE_TESTING"] = "1"
         app.launchEnvironment["URE_TEST_LIBRARY_ID"] = UUID().uuidString
         app.launchArguments = ["-AppleLocale", "en_US", "-ApplePersistenceIgnoreState", "YES"]
         app.launch()
         defer { app.terminate() }
-        createNote(watch: "Search watch A", job: "Service A", body: "Finding A", app: app)
-        createNote(watch: "Search watch B", job: "Service B", body: "Finding B", app: app)
-        app.windows.firstMatch.typeKey("f", modifierFlags: [.command, .shift])
+        createJob(watch: "Search watch A", job: "Service A", notes: "Finding A 0012–Å/04", app: app)
+        createJob(watch: "Search watch B", job: "Service B", notes: "Finding B 0012–Å/04", app: app)
+        let window = app.windows.firstMatch
+        window.typeKey("f", modifierFlags: [.command, .shift])
         let field = app.searchFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.click()
@@ -22,27 +23,16 @@ nonisolated final class SearchUITests: XCTestCase {
         XCTAssertTrue(rowA.waitForExistence(timeout: 5))
         XCTAssertTrue(rowB.waitForExistence(timeout: 5))
         rowA.click()
-        XCTAssertTrue(app.buttons["editNote"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Finding A"].exists)
-        app.buttons["editNote"].click()
-        enter("Keep correction", identifier: "noteTitle", app: app)
-        app.windows.firstMatch.typeKey("f", modifierFlags: [.command, .shift])
+        XCTAssertTrue(app.textFields["jobTitle"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.textFields["jobTitle"].value as? String, "Service A")
+        XCTAssertTrue(notes(app).contains("Finding A"))
+        window.typeKey("f", modifierFlags: [.command, .shift])
         XCTAssertTrue(rowB.waitForExistence(timeout: 5))
         rowB.click()
-        XCTAssertTrue(app.sheets.buttons["Stay"].waitForExistence(timeout: 3))
-        app.sheets.buttons["Stay"].click()
-        XCTAssertEqual(app.textFields["noteTitle"].value as? String, "Keep correction")
-        rowB.click()
-        app.sheets.buttons["Save"].click()
-        XCTAssertTrue(app.buttons["editNote"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Finding B"].exists)
-        app.buttons["backFromNote"].click()
-        app.windows.firstMatch.typeKey("f", modifierFlags: [.command, .shift])
-        XCTAssertTrue(rowB.waitForExistence(timeout: 5))
-        rowB.click()
-        XCTAssertTrue(app.buttons["editNote"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Finding B"].exists)
-        app.windows.firstMatch.typeKey("f", modifierFlags: [.command, .shift])
+        XCTAssertTrue(app.textFields["jobTitle"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.textFields["jobTitle"].value as? String, "Service B")
+        XCTAssertTrue(notes(app).contains("Finding B"))
+        window.typeKey("f", modifierFlags: [.command, .shift])
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.click()
         field.typeKey("a", modifierFlags: .command)
@@ -56,20 +46,29 @@ nonisolated final class SearchUITests: XCTestCase {
             app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "searchResult-"))
                 .count, 0)
         app.buttons["closeGlobalSearch"].click()
-        XCTAssertTrue(app.buttons["editNote"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["jobTitle"].waitForExistence(timeout: 5))
     }
 
+    // A job found by its notes, whose row names its watch.
     @MainActor
     private func result(watch: String, app: XCUIApplication) -> XCUIElement {
         app.buttons.matching(
             NSPredicate(
-                format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "searchResult-Note-",
+                format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "searchResult-Job-",
                 watch)
         ).firstMatch
     }
 
     @MainActor
-    private func createNote(watch: String, job: String, body: String, app: XCUIApplication) {
+    private func notes(_ app: XCUIApplication) -> String {
+        let notes = app.textViews["recordNotes"]
+        XCTAssertTrue(notes.waitForExistence(timeout: 3))
+        return notes.value as? String ?? ""
+    }
+
+    // A new watch with a job whose notes are typed in place. The notes save as you type.
+    @MainActor
+    private func createJob(watch: String, job: String, notes: String, app: XCUIApplication) {
         app.windows.firstMatch.typeKey("3", modifierFlags: .command)
         XCTAssertTrue(app.buttons["newRecord"].waitForExistence(timeout: 5))
         app.buttons["newRecord"].click()
@@ -79,15 +78,11 @@ nonisolated final class SearchUITests: XCTestCase {
         app.buttons["startWatchJob"].click()
         enter(job, identifier: "jobTitle", app: app)
         app.windows.firstMatch.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(app.buttons["addNote"].waitForExistence(timeout: 5))
-        app.buttons["addNote"].click()
-        enter("0012–Å/04", identifier: "noteTitle", app: app)
-        let editor = app.textViews["noteBody"]
+        let editor = app.textViews["recordNotes"]
         XCTAssertTrue(editor.waitForExistence(timeout: 3))
         editor.click()
-        editor.typeText(body)
-        app.windows.firstMatch.typeKey("s", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["editNote"].waitForExistence(timeout: 5))
+        editor.typeText(notes)
+        app.textFields["jobTitle"].click()
     }
 
     @MainActor

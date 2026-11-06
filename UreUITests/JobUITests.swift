@@ -69,41 +69,29 @@ nonisolated final class JobUITests: XCTestCase {
     }
 
     @MainActor
-    func testReferenceWindowDoesNotSaveOrReplaceTheMainDraft() {
+    func testReferenceWindowIsReadOnlyAndLeavesTheMainPageAsItIs() {
         let app = isolatedApp()
         app.launch()
         defer { app.terminate() }
         createWatch(app)
         startJob("Bench repair", app: app)
-        XCTAssertTrue(app.buttons["addReference"].waitForExistence(timeout: 5))
-        app.buttons["addReference"].click()
-        enter("Bench sheet", in: "referenceTitle", app: app)
-        enter("https://example.org/bench", in: "referenceURL", app: app)
-        app.buttons["saveReference"].click()
-        XCTAssertTrue(app.buttons["backFromReference"].waitForExistence(timeout: 5))
-        app.buttons["backFromReference"].click()
-        let pin = app.descendants(matching: .any)["pinReference"].firstMatch
-        XCTAssertTrue(pin.waitForExistence(timeout: 5))
-        pin.click()
-        app.windows.firstMatch.menuItems["Job · Link · Bench sheet"].click()
-        app.buttons["addNote"].click()
-        enter("Unfinished note", in: "noteTitle", app: app)
+        let notes = app.textViews["recordNotes"]
+        XCTAssertTrue(notes.waitForExistence(timeout: 5))
+        notes.click()
+        notes.typeText("Half-typed finding")
         let main = app.windows.firstMatch
         main.typeKey("r", modifierFlags: [.command, .option])
         let reference = app.windows["Reference"]
         XCTAssertTrue(reference.waitForExistence(timeout: 5))
-        XCTAssertTrue(reference.staticTexts["Bench sheet"].exists)
-        XCTAssertFalse(reference.buttons["saveNote"].exists)
+        XCTAssertTrue(reference.staticTexts["No pinned reference"].exists)
+        XCTAssertEqual(reference.textViews.count, 0)
+        // The record commands belong to the main window, so they change nothing from here.
         reference.typeKey("s", modifierFlags: .command)
         reference.typeKey("n", modifierFlags: .command)
         reference.typeKey("w", modifierFlags: .command)
-        XCTAssertTrue(app.textFields["noteTitle"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.textFields["noteTitle"].value as? String, "Unfinished note")
-        XCTAssertTrue(app.buttons["saveNote"].exists)
-        app.buttons["backFromNote"].click()
-        XCTAssertTrue(app.sheets.buttons["Stay"].waitForExistence(timeout: 3))
-        app.sheets.buttons["Stay"].click()
-        XCTAssertEqual(app.textFields["noteTitle"].value as? String, "Unfinished note")
+        XCTAssertTrue(app.textFields["jobTitle"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.textFields["jobTitle"].value as? String, "Bench repair")
+        XCTAssertEqual(app.textViews["recordNotes"].value as? String, "Half-typed finding")
     }
 
     @MainActor

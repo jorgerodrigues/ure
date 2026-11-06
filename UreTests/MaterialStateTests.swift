@@ -5,6 +5,17 @@ import Testing
 @testable import Ure
 
 struct MaterialStateTests {
+    @Test
+    func theMaterialCountPutsTheLargerCountFirstAsOnTheArtboards() {
+        #expect(MaterialCounts.text(for: [.photo, .document, .photo]) == "2 photos · 1 PDF")
+        #expect(
+            MaterialCounts.text(for: [.link, .document, .photo, .document])
+                == "2 PDFs · 1 photo · 1 link")
+        #expect(MaterialCounts.text(for: [.link, .photo, .photo, .photo]) == "3 photos · 1 link")
+        #expect(MaterialCounts.text(for: [.document, .link, .photo]) == "1 photo · 1 PDF · 1 link")
+        #expect(MaterialCounts.text(for: []) == nil)
+    }
+
     @Test(.timeLimit(.minutes(1)))
     func pastingACompleteAddressAddsALinkAndOtherTextOnlyExplainsWhy() async throws {
         let fixture = WatchFixture()

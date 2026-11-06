@@ -28,7 +28,7 @@
 ## Verification
 
 - During rapid implementation, run `make lint` and `make build` for app changes. Keep behavioral tests current and compile affected tests when needed. Build commands and local setup are in `README.md`.
-- CI runs `make check` (formatting/lint, unsigned Debug, and isolated unit tests) and `make release` (unsigned optimized Release). Native UI and device acceptance stays local.
+- `make check` runs formatting/lint, the unsigned Debug build, and isolated unit tests. `make release` builds the unsigned optimized Release. CI is turned off for the prototype phase, so run both locally on a PR's final commit. Native UI and device acceptance stays local.
 - Never run macOS or iOS UI tests on GitHub Actions. Skip all tests that need UI or device automation on CI.
 - Run focused macOS UI tests locally on the Mac during W032 release acceptance. Do not run them during story implementation or routine edit cycles. Use simulator devices for local iOS UI automation.
 - Test behavior and failure boundaries. Tests must use isolated libraries. Keep `URE_TESTING=1` and the injected library location.

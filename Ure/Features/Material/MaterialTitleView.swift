@@ -80,6 +80,16 @@ struct MaterialTitleView: NSViewRepresentable {
             case #selector(NSResponder.insertNewline(_:)):
                 control.window?.makeFirstResponder(nil)
                 return true
+            case #selector(NSResponder.insertTab(_:)):
+                if !ReadingOrder.moveFocus(from: control, forward: true) {
+                    control.window?.selectNextKeyView(nil)
+                }
+                return true
+            case #selector(NSResponder.insertBacktab(_:)):
+                if !ReadingOrder.moveFocus(from: control, forward: false) {
+                    control.window?.selectPreviousKeyView(nil)
+                }
+                return true
             default:
                 return false
             }
@@ -87,7 +97,7 @@ struct MaterialTitleView: NSViewRepresentable {
     }
 }
 
-final class MaterialTitleField: NSTextField {
+final class MaterialTitleField: NSTextField, ReadingOrderStop {
     var onBeginEditing: () -> Void = {}
 
     init() {
@@ -98,11 +108,9 @@ final class MaterialTitleField: NSTextField {
         focusRingType = .default
         font = .systemFont(ofSize: MaterialLayout.titleSize)
         textColor = .labelColor
-        lineBreakMode = .byTruncatingTail
         cell?.usesSingleLineMode = true
-        cell?.wraps = false
-        cell?.isScrollable = true
         cell?.allowsUndo = false
+        truncatesAtRest()
         // VoiceOver reads the field's cell, so the label goes on the cell as well as the field.
         setAccessibilityLabel("Material title")
         cell?.setAccessibilityLabel("Material title")
@@ -111,10 +119,22 @@ final class MaterialTitleField: NSTextField {
 
     required init?(coder: NSCoder) { return nil }
 
+    var takesReadingOrderFocus: Bool { isEditable }
+
+    // A long title scrolls while you type and ends in "…" at rest, as the in-place fields do.
     override func becomeFirstResponder() -> Bool {
-        guard super.becomeFirstResponder() else { return false }
+        scrollsWhileTyping()
+        guard super.becomeFirstResponder() else {
+            truncatesAtRest()
+            return false
+        }
         if isEditable { onBeginEditing() }
         return true
+    }
+
+    override func textDidEndEditing(_ notification: Notification) {
+        super.textDidEndEditing(notification)
+        truncatesAtRest()
     }
 }
 

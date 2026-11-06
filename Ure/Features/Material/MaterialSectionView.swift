@@ -29,18 +29,8 @@ struct MaterialSectionView: View {
             allowsMultipleSelection: true, onCompletion: pickedFiles)
     }
 
-    // How much material there is, such as "2 PDFs · 1 photo · 1 link".
     private var counts: String? {
-        let records = material.records(for: owner)
-        let parts: [(LibraryItemKind, String, String)] = [
-            (.document, "PDF", "PDFs"), (.photo, "photo", "photos"), (.link, "link", "links"),
-        ]
-        let text = parts.compactMap { kind, one, many -> String? in
-            let count = records.filter { $0.item.kind == kind }.count
-            if count == 0 { return nil }
-            return count == 1 ? "1 \(one)" : "\(count) \(many)"
-        }
-        return text.isEmpty ? nil : text.joined(separator: " · ")
+        MaterialCounts.text(for: material.records(for: owner).map(\.item.kind))
     }
 
     @ViewBuilder private var content: some View {
@@ -470,5 +460,32 @@ extension LibraryItem {
             style = style.year()
         }
         return "\(kind.title) · \(createdAt.formatted(style))"
+    }
+}
+
+// How much material there is, the larger count first, as on the artboards: "2 photos · 1 PDF"
+// on "4 Watch" and "2 PDFs · 1 photo · 1 link" on "5 Caliber". Equal counts go photos, PDFs,
+// links.
+nonisolated enum MaterialCounts {
+    static func text(for kinds: [LibraryItemKind]) -> String? {
+        let parts: [(LibraryItemKind, String, String)] = [
+            (.photo, "photo", "photos"), (.document, "PDF", "PDFs"), (.link, "link", "links"),
+        ]
+        let counted = parts.map { kind, one, many in
+            (count: kinds.filter { $0 == kind }.count, one: one, many: many)
+        }
+        let text = counted.enumerated()
+            .filter { $0.element.count > 0 }
+            .sorted { lhs, rhs in
+                if lhs.element.count != rhs.element.count {
+                    return lhs.element.count > rhs.element.count
+                }
+                return lhs.offset < rhs.offset
+            }
+            .map {
+                $0.element.count == 1
+                    ? "1 \($0.element.one)" : "\($0.element.count) \($0.element.many)"
+            }
+        return text.isEmpty ? nil : text.joined(separator: " · ")
     }
 }

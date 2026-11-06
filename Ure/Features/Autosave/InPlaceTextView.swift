@@ -102,19 +102,23 @@ struct InPlaceTextView: NSViewRepresentable {
                 return true
             case #selector(NSResponder.insertNewline(_:)):
                 take(in: textView, undoManager: undoManager)
-                if !InPlaceTextField.moveFocus(from: control, forward: true) {
+                // Return moves on to the next one-line field, such as from a new job's title to
+                // its watch, past the problem. Tab stops at every place that takes input.
+                if !ReadingOrder.moveFocus(
+                    from: control, forward: true, skipping: { !($0 is InPlaceTextField) })
+                {
                     control.window?.makeFirstResponder(nil)
                 }
                 return true
             case #selector(NSResponder.insertTab(_:)):
                 take(in: textView, undoManager: undoManager)
-                if !InPlaceTextField.moveFocus(from: control, forward: true) {
+                if !ReadingOrder.moveFocus(from: control, forward: true) {
                     control.window?.selectNextKeyView(nil)
                 }
                 return true
             case #selector(NSResponder.insertBacktab(_:)):
                 field.dismissSuggestion()
-                if !InPlaceTextField.moveFocus(from: control, forward: false) {
+                if !ReadingOrder.moveFocus(from: control, forward: false) {
                     control.window?.selectPreviousKeyView(nil)
                 }
                 return true
@@ -154,11 +158,9 @@ class InPlaceTextField: NSTextField {
         focusRingType = .none
         font = textFont
         textColor = .labelColor
-        lineBreakMode = .byTruncatingTail
         cell?.usesSingleLineMode = true
-        cell?.wraps = false
-        cell?.isScrollable = true
         cell?.allowsUndo = false
+        truncatesAtRest()
         setPrompt(prompt)
         suggestionView.font = textFont
         suggestionView.isHidden = true
@@ -208,12 +210,22 @@ class InPlaceTextField: NSTextField {
             string: prompt, attributes: [.font: textFont, .foregroundColor: NSColor.clear])
     }
 
-    // While you type, the whole value is in the label colour.
+    // While you type, the whole value is in the label colour, and a long value scrolls so the
+    // cursor stays in view. At rest it ends in "…" where it does not fit.
     override func becomeFirstResponder() -> Bool {
         if isEditable { stringValue = stringValue }
-        guard super.becomeFirstResponder() else { return false }
+        scrollsWhileTyping()
+        guard super.becomeFirstResponder() else {
+            truncatesAtRest()
+            return false
+        }
         if isEditable { onBeginEditing() }
         return true
+    }
+
+    override func textDidEndEditing(_ notification: Notification) {
+        super.textDidEndEditing(notification)
+        truncatesAtRest()
     }
 
     override func viewDidMoveToWindow() {
@@ -264,41 +276,6 @@ class InPlaceTextField: NSTextField {
         addSubview(suggestionView, positioned: .above, relativeTo: nil)
     }
 
-    // Moves focus to the next or previous in-place field in reading order: top to bottom, then
-    // left to right. False when there is none in that direction.
-    // A field can skip others on its way, such as a part's add line moving past its own
-    // description to the checklist.
-    static func moveFocus(
-        from control: NSControl, forward: Bool,
-        skipping skipped: (InPlaceTextField) -> Bool = { _ in false }
-    ) -> Bool {
-        guard let window = control.window, let content = window.contentView else { return false }
-        let fields = editableFields(in: content).sorted(by: isInReadingOrder)
-            .filter { $0 === control || !skipped($0) }
-        guard let index = fields.firstIndex(where: { $0 === control }) else { return false }
-        let target = forward ? index + 1 : index - 1
-        guard fields.indices.contains(target) else { return false }
-        return window.makeFirstResponder(fields[target])
-    }
-
-    private static func editableFields(in view: NSView) -> [InPlaceTextField] {
-        var found: [InPlaceTextField] = []
-        if let field = view as? InPlaceTextField, field.isEditable,
-            !field.isHiddenOrHasHiddenAncestor
-        {
-            found.append(field)
-        }
-        for child in view.subviews { found += editableFields(in: child) }
-        return found
-    }
-
-    private static func isInReadingOrder(_ lhs: InPlaceTextField, _ rhs: InPlaceTextField) -> Bool {
-        let left = lhs.convert(lhs.bounds, to: nil)
-        let right = rhs.convert(rhs.bounds, to: nil)
-        if abs(left.maxY - right.maxY) > 1 { return left.maxY > right.maxY }
-        return left.minX < right.minX
-    }
-
     private func performFocusRequest() {
         guard let didFocus = focusRequest, window != nil else { return }
         let cursor = focusCursor
@@ -317,6 +294,25 @@ class InPlaceTextField: NSTextField {
             didFocus()
         }
     }
+}
+
+extension NSTextField {
+    // One line that ends in "…" where it does not fit.
+    func truncatesAtRest() {
+        cell?.isScrollable = false
+        cell?.wraps = false
+        lineBreakMode = .byTruncatingTail
+    }
+
+    // While you type, a long value scrolls so the cursor stays in view. Scrolling changes the
+    // cell's line break, so the field truncates again once typing ends.
+    func scrollsWhileTyping() {
+        cell?.isScrollable = true
+    }
+}
+
+extension InPlaceTextField: ReadingOrderStop {
+    var takesReadingOrderFocus: Bool { isEditable }
 }
 
 // The grey rest of a suggestion. It never takes clicks, so they reach the field under it.

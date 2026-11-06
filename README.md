@@ -35,7 +35,7 @@ python3 PerformanceHarness/run.py .build/DerivedData/Build/Products/Release/UreP
   --fixture .build/performance-runs/<run-id>
 ```
 
-Copy the earlier summary before rerunning because measurement files are replaced. Keep the fixture for W032's native checks. Remove only that disposable run directory when acceptance no longer needs it. W029's frozen fixtures and recovery driver are separate.
+Copy the earlier summary before rerunning because measurement files are replaced. W042 compared a new run with W031's numbers in [the Rework acceptance record](docs/planning/rework-acceptance-verification.md). Remove only that disposable run directory when acceptance no longer needs it. W029's frozen fixtures and recovery driver are separate.
 
 ## Build and run
 

@@ -251,11 +251,12 @@ private struct CaliberWatchRow: View {
                     .font(.system(size: InPlaceLayout.textSize))
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                // The detail takes the room it needs first, and a long name gives way before it.
                 Text(detail)
                     .font(.system(size: PageLayout.detailSize))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .frame(width: CaliberPageLayout.detailWidth, alignment: .trailing)
+                    .layoutPriority(1)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.tertiary)
@@ -315,6 +316,5 @@ private enum CaliberPageLayout {
     static let rowItemSpacing: CGFloat = 12
     static let thumbnailSize: CGFloat = 32
     static let thumbnailRadius: CGFloat = 8
-    static let detailWidth: CGFloat = 200
     static let chevronWidth: CGFloat = 16
 }

@@ -80,7 +80,7 @@ nonisolated final class WorkshopUITests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         XCTAssertTrue(app.staticTexts["Library needs recovery"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.staticTexts["No open jobs"].exists)
+        XCTAssertFalse(app.staticTexts["No jobs"].exists)
         let reason = app.staticTexts["libraryRecoveryReason"]
         XCTAssertTrue(reason.exists)
         let initialReason = reason.value as? String ?? reason.label
@@ -92,7 +92,7 @@ nonisolated final class WorkshopUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Library needs recovery"].waitForExistence(timeout: 5))
         XCTAssertTrue(reason.waitForExistence(timeout: 5))
         XCTAssertEqual(reason.value as? String ?? reason.label, initialReason)
-        XCTAssertFalse(app.staticTexts["No open jobs"].exists)
+        XCTAssertFalse(app.staticTexts["No jobs"].exists)
     }
 
     @MainActor
@@ -101,18 +101,18 @@ nonisolated final class WorkshopUITests: XCTestCase {
         app.launchEnvironment["URE_TESTING"] = "1"
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["No open jobs"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["No jobs"].waitForExistence(timeout: 5))
 
+        // ⌘1 to ⌘4 select Jobs, Parts, Watches and Calibers, in the sidebar's order.
         let sections = [
-            ("2", "No watches"),
-            ("3", "No calibers"),
-            ("4", "No required parts"),
-            ("5", "No archived records"),
-            ("1", "No open jobs"),
+            ("2", "Nothing to buy"),
+            ("3", "No watches"),
+            ("4", "No calibers"),
+            ("1", "No jobs"),
         ]
 
         for (key, emptyTitle) in sections {
-            app.typeKey(key, modifierFlags: [.command, .option])
+            app.typeKey(key, modifierFlags: .command)
             XCTAssertTrue(app.staticTexts[emptyTitle].waitForExistence(timeout: 3))
         }
 
@@ -151,7 +151,7 @@ nonisolated final class WorkshopUITests: XCTestCase {
 
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["No open jobs"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["No jobs"].waitForExistence(timeout: 5))
 
         let rightEdge = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5))
             .withOffset(CGVector(dx: -1, dy: 0))
@@ -168,7 +168,7 @@ nonisolated final class WorkshopUITests: XCTestCase {
         XCTAssertLessThanOrEqual(window.frame.width, 1020)
         XCTAssertGreaterThanOrEqual(window.frame.height, 650)
         XCTAssertLessThanOrEqual(window.frame.height, 670)
-        XCTAssertTrue(app.staticTexts["No open jobs"].exists)
+        XCTAssertTrue(app.staticTexts["No jobs"].exists)
         XCTAssertTrue(app.staticTexts["Select a job"].exists)
 
         let attachment = XCTAttachment(screenshot: window.screenshot())
