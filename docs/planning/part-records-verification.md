@@ -45,11 +45,11 @@ Development Mac: Apple silicon, macOS 27.3, Xcode 27.2. The SDK cache workaround
 | --- | --- |
 | `make lint` | Passed |
 | `make build` | Passed, unsigned Debug |
-| `make check` | Passed lint, unsigned Debug, and 252 tests in 341 runs with no failures or skips, on the final code, commit `c2433ce`. Result bundle `ure-20261106-060753.xcresult`. An earlier run, while Codex ran on the same Mac, failed two backup export tests on a 10-second wait. Both pass alone in 0.2 seconds and in the final run, and no backup code changed. All test targets also compile, including the rewritten UI test |
-| `make release` | Passed, unsigned optimized Release, on the final code |
+| `make check` | Passed lint, unsigned Debug, and 255 tests in 343 runs with no failures or skips, on commit `098219e`. Result bundle `ure-20261106-065400.xcresult`. An earlier run, while Codex ran on the same Mac, failed two backup export tests on a 10-second wait. Both pass alone in 0.2 seconds and in the later runs, and no backup code changed. All test targets also compile, including the rewritten UI test |
+| `make release` | Passed, unsigned optimized Release, on commit `c2433ce`. Only `PartState` and its tests changed after it |
 | `make recovery` | Passed all 58 recovery scenarios, including upgrades of the retained v10 and v15 libraries with every interruption checkpoint |
 | Isolated running app | Passed. See below |
-| Local window check | Passed on the final code. See below |
+| Local window check | Passed on commit `098219e` in 11.4 seconds. See below |
 
 ### Acceptance criteria
 
@@ -67,7 +67,7 @@ The Debug binary ran directly with `URE_TESTING=1` and a new `URE_TEST_LIBRARY_I
 
 ### Local window check
 
-This Mac gives sessions no Screen Recording or Accessibility permission, so there is no screenshot of the running app's own window. As accepted for the Rework stories on 5 November 2026, a local-only test hosted the app's real `LibraryRootView`, with every session environment and the bridged toolbar, in a window of the test host. It opened a library made by the v25 schema and drove the real views. It was never committed and never runs on CI. It ran on the final code and checked these things in order:
+This Mac gives sessions no Screen Recording or Accessibility permission, so there is no screenshot of the running app's own window. As accepted for the Rework stories on 5 November 2026, a local-only test hosted the app's real `LibraryRootView`, with every session environment and the bridged toolbar, in a window of the test host. It opened a library made by the v25 schema and drove the real views. It was never committed and never runs on CI. It ran on commit `098219e` and checked these things in order:
 
 - The migrated library at `v26-parts`, with every part, its notes and the cancelled part in the job's notes.
 - The job's part lines, such as "Needed · Mainspring · GR 3800" and "In hand · Gaskets × 3 · 0012-Å · arrived 3 Nov". Each name field's cell has the text field role and the label "Name", and the add line's has "Add a part or use a spare".
@@ -85,7 +85,7 @@ These are the limits of the substitution:
 
 - The window ignores the mouse, because a real mouse over the test window crashed SwiftUI's hover hit test in W036. The state click and the spare's use were driven through what the pill's button and Return call. Clicks were not sent.
 - The main menu in the test host belongs to the app's own session, so the Record menu's Delete Part was not read from the hosted window.
-- The test host turns off undo grouping by event, so each simulated key press opens and closes its own group. Adding a part registers its Undo after it saves, so the check keeps the group open across it. Before that, one run crashed in an executor check, as W036 recorded.
+- The test host turns off undo grouping by event, so each simulated key press opens and closes its own group. A press that starts a part change registers its Undo a moment later, from the change's task, so the check keeps the group open until the change shows. Before that, one run crashed in an executor check, as W036 recorded.
 - Two runs paused for about nine minutes at one of the check's half-second waits and then passed. A third run of the same code passed in 12 seconds. The pause was not in the app's code path that the check drives, and its cause was not found. The hidden test host may have been throttled.
 - SwiftUI fills in its accessibility tree only when an accessibility client is attached, so the pills and the list rows could not be read through accessibility in the test host. VoiceOver itself did not run. The AppKit fields could be read.
 
@@ -98,9 +98,15 @@ The review ran with `codex exec review --ignore-user-config`, which used Codex's
 3. Round three found three things, and all were fixed. Quitting did not count part names that had not saved, two quick Try Agains could add a name twice, and two quick clicks on a state moved the part on only once.
 4. Round four, after the design pass, found that Return on an empty name went into the add line's own description. It now skips it and moves to the checklist.
 5. Round five found that typing on the add line had no Undo, so ⌘Z removed the part added before it. Each burst of typing there is now its own Undo step.
-6. Round six, on commit `1dc998c`, found that two quick choices from the part page's pop-up could drop the last one, because the check used the part's state before the first change had saved. The queued change now lets the stored part decide, and a new test fails without the fix. Six rounds is the most the story steps allow, so no seventh round ran. The final code, commit `c2433ce`, has had no clean Codex round. Code changed after round six only in `PartState.setStage` and its test.
+6. Round six, on commit `1dc998c`, found that two quick choices from the part page's pop-up could drop the last one, because the check used the part's state before the first change had saved. The queued change now lets the stored part decide, and a new test fails without the fix.
+7. The coordinator then asked for more rounds, up to ten, until one came back clean. Round seven, on commit `c8f966d`, found that an added part registered its Undo after it saved. When the save waited and the next name was typed meanwhile, ⌘Z removed the part before it undid the typing. An added part and a spare's use now register their Undo when you act, and learn the part once it has saved.
+8. Round eight, on commit `e1d621d`, found two things, and both were fixed. A state click still registered its Undo after it saved, with the same effect on typing during the wait. It now registers it at the click, and the Undo learns the states before and after once the change has saved. A deletion does the same. Also, all part changes shared one saving flag, so the first change to finish cleared it while another still waited, and quitting could go ahead and lose that change. Each change now counts itself from when you act until it has saved, and quitting waits until none is left. Choosing the state a part already has, with nothing saving, adds no Undo step. Two new tests fail without the fixes. They hold the library until the test lets it go, and the round-seven test now does the same, because its timed hold ended too early once under the load of a full run.
+9. Round nine, on commit `3062a90`, found that an added part and a spare's use saved through separate queues. When a save waited, a spare used after two typed parts could save before the second part and take its place in the job's order. Every part change now saves through one queue, in the order you made it. The slow-save test now submits two parts and then the spare, and checks the saved order. It fails without the fix with exactly that order.
+10. Round ten, on commit `098219e`, found that deleting a part and undoing the deletion loses the Undo of edits made on the part before it was deleted. This is not fixed, because round ten is the last round the coordinator allowed. A deletion drops the part's fields, and its return builds new ones, but the window's undo manager does not keep the old fields alive. A small program here showed that an Undo whose field was released crashes when it runs. So renaming a part, deleting it, undoing the deletion and pressing ⌘Z again would most likely crash the app, and the same holds for an added part that is undone and redone. The window check does not take that path. The proposed fix keeps a removed part's fields with its removed record, outside the fields that count as unsaved, and gives them back when the part returns, with a test that undoes a rename after a deletion is undone.
 
 ## Remaining gates
+
+- Codex round ten's finding is open: ⌘Z after a part's deletion is undone can run an Undo for a field that was released. See the Codex review above.
 
 - Native UI tests were not run, as the repository rules require during story work. The part UI test was rewritten for the one-line parts, the spare and the state click, and the parts overview UI test was removed. They compile but have not run. W042 runs them.
 - The performance measurement was not rerun. Its worker now measures the Parts list as `parts` and still builds.
