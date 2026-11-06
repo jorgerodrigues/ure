@@ -8,17 +8,17 @@ Recorded on 6 November 2026 for [W042, issue #70](https://github.com/jorgerodrig
 
 The acceptance found five gaps that normal use hits. Each is fixed where the rule lives.
 
-1. Tab skipped every multi-line text and every paste box. On a part's page Tab went from the name to the quantity, past the description, and then stayed in the quantity. A job's problem and every record's notes were never reached. Tab now moves through every place on a page that takes input, in reading order. Return in a one-line field still moves to the next one-line field, so Return in a new job's title still goes to its watch picker.
+1. Tab skipped every multi-line text, every paste box and every material title. On a part's page Tab went from the name to the quantity, past the description, and then stayed in the quantity. A job's problem and every record's notes were never reached. Tab now moves through every place on a page that takes input, in reading order. Return in a one-line field still moves to the next one-line field, so Return in a new job's title still goes to its watch picker.
 2. A value longer than its column was cut off with no "…". A long filename as a material title, or a long case in a watch's facts, simply stopped at the column's edge. A field now ends in "…" at rest and scrolls while you type.
 3. The Calibers list had no photo tiles. W035 left them to W038, and W038 did not build them. Each row now shows the caliber's first photo, the same photo as its page's header, as on "5 Caliber".
-4. A caliber's watch rows cut their detail at 200 points, so "Omega · About 1958 · In progress" read "In progr…" on a wide page. The detail now keeps its full width, and a long watch name gives way first.
+4. A caliber's watch rows cut their detail at 200 points, so "Omega · About 1958 · In progress" read "In progr…" on a wide page. The detail now takes the room it needs first, a long watch name gives way before it, and the detail truncates only when the pane runs out of room.
 5. The Material count always put PDFs first, as on "5 Caliber", so a watch read "1 PDF · 2 photos" where "4 Watch" reads "2 photos · 1 PDF". The larger count now comes first, which matches all three artboards.
 
 Three native UI tests still drove the screens from before the Rework: the search test used note records, the keyboard test used ⌥⌘1 to ⌥⌘5 and the Archive section, and the reference-window test used the old notes and references. They now drive the reworked app. Their identifiers and texts were checked against the source, and they compile.
 
 ## Design rules
 
-1. Tab and Shift-Tab stop at every place on a record page that takes input, top to bottom and then left to right: the one-line fields, the notes texts, and the boxes that paste material or an option. Return in a one-line field moves to the next one-line field. The place is `ReadingOrder` in `Ure/Features/Autosave/ReadingOrder.swift`. Each view that takes input says whether it is a stop through `ReadingOrderStop`, and every Tab handler calls `ReadingOrder.moveFocus`. The tests are `ReadingOrderTests`, which lay out a part's page and press Tab, Shift-Tab and Return through the real handlers, and the window check, which pressed Tab through the real job, part, watch and caliber pages.
+1. Tab and Shift-Tab stop at every place on a record page that takes input, top to bottom and then left to right: the one-line fields, the notes texts, the material titles, and the boxes that paste material or an option. Return in a one-line field moves to the next one-line field. The place is `ReadingOrder` in `Ure/Features/Autosave/ReadingOrder.swift`. Each view that takes input says whether it is a stop through `ReadingOrderStop`, and every Tab handler calls `ReadingOrder.moveFocus`. The tests are `ReadingOrderTests`, which lay out a part's page and press Tab, Shift-Tab and Return through the real handlers, and the window check, which pressed Tab through the real job, part, watch and caliber pages.
 2. A one-line value ends in "…" where it does not fit, and scrolls while you type. Scrolling resets the cell's line break, so one helper sets both states. The place is `truncatesAtRest()` and `scrollsWhileTyping()` on `NSTextField`, used by `InPlaceTextField` and `MaterialTitleField`. The tests are `LongValueTests` and the window check's renders of a long case while typing and at rest, and of a long material title.
 
 ## Journeys
@@ -119,7 +119,7 @@ Tab, as the keyboard sends it, went through each page in reading order:
 
 - Job: title, problem, each part's name, the add line, its description, each checklist line, the add-step line, the material box, the notes.
 - Part: name, description, quantity, the paste box, the notes.
-- Watch: name, brand, model, reference, serial, year, case, diameter, lug width, owner, contact, the material box, the notes. The caliber pop-up is a control, so it is reached with Full Keyboard Access.
+- Watch: name, brand, model, reference, serial, year, case, diameter, lug width, owner, contact, each material title, the material box, the notes. The caliber pop-up is a control, so it is reached with Full Keyboard Access.
 - Caliber: name, maker, beat rate, jewels, power reserve, lift angle, the material box, the notes.
 
 ## The HIG review points
@@ -131,6 +131,14 @@ Tab, as the keyboard sends it, went through each page in reading order:
 - Keyboard paths: ⌘1 to ⌘4 select the sections, ⌘N makes a record and puts the cursor in its name, Tab and Return move through each page, the checklist's keys, the part line's keys, and Esc in a field.
 - Region formats: money and numbers follow the Mac's region. This Mac is in Denmark, so the pages show "21,40 €" and "19.800 vph".
 - System colours: see Appearances.
+
+## Codex review
+
+Codex ran with its default model through `codex exec review --ignore-user-config`, as you asked on 5 November.
+
+1. Round one, on the fixes before the records, found nothing.
+2. Round two found two problems that normal use hits, and both are fixed. Material titles are renamed in place, but they were not stops, so Tab passed them; they are now stops, and Tab in one moves on in reading order. The test is `ReadingOrderTests.aMaterialTitleIsAStopAndTabInItMovesOn`, and the window check's Tab now goes through each title on the watch page. A caliber's watch detail used `.fixedSize()`, which can push a row past a narrow page; it now takes the room it needs first and still truncates when the pane runs out.
+3. Round three ran on the final code. Its result is in the PR.
 
 ## Not verified
 

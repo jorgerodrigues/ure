@@ -69,6 +69,33 @@ struct ReadingOrderTests {
     }
 
     @Test
+    func aMaterialTitleIsAStopAndTabInItMovesOn() throws {
+        let page = try PartPage()
+        let title = MaterialTitleField()
+        title.frame = NSRect(x: 20, y: 110, width: 150, height: 20)
+        title.setAccessibilityIdentifier("materialTitle")
+        page.window.contentView?.addSubview(title)
+        #expect(page.window.makeFirstResponder(page.paste))
+        #expect(ReadingOrder.moveFocus(from: page.paste, forward: true))
+        #expect(page.focused == "materialTitle")
+        let field = AutosaveField(
+            text: "", actionName: "Title", queue: page.queue, scope: .parts,
+            edit: { .notes(.job(UUID()), $0) })
+        let coordinator = MaterialTitleView.Coordinator(field: field) { _, _ in }
+        let editor = try #require(title.currentEditor() as? NSTextView)
+        #expect(
+            coordinator.control(
+                title, textView: editor, doCommandBy: #selector(NSResponder.insertTab(_:))))
+        #expect(page.focused == "notes")
+        #expect(page.window.makeFirstResponder(title))
+        let again = try #require(title.currentEditor() as? NSTextView)
+        #expect(
+            coordinator.control(
+                title, textView: again, doCommandBy: #selector(NSResponder.insertBacktab(_:))))
+        #expect(page.focused == "pasteOption")
+    }
+
+    @Test
     func aNotesTextThatTakesNoTypingIsNotAStop() throws {
         let page = try PartPage()
         page.description.isEditable = false

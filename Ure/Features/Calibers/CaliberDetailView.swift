@@ -251,12 +251,12 @@ private struct CaliberWatchRow: View {
                     .font(.system(size: InPlaceLayout.textSize))
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                // The detail keeps its full width, and a long name gives way first.
+                // The detail takes the room it needs first, and a long name gives way before it.
                 Text(detail)
                     .font(.system(size: PageLayout.detailSize))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .fixedSize()
+                    .layoutPriority(1)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.tertiary)

@@ -80,6 +80,16 @@ struct MaterialTitleView: NSViewRepresentable {
             case #selector(NSResponder.insertNewline(_:)):
                 control.window?.makeFirstResponder(nil)
                 return true
+            case #selector(NSResponder.insertTab(_:)):
+                if !ReadingOrder.moveFocus(from: control, forward: true) {
+                    control.window?.selectNextKeyView(nil)
+                }
+                return true
+            case #selector(NSResponder.insertBacktab(_:)):
+                if !ReadingOrder.moveFocus(from: control, forward: false) {
+                    control.window?.selectPreviousKeyView(nil)
+                }
+                return true
             default:
                 return false
             }
@@ -87,7 +97,7 @@ struct MaterialTitleView: NSViewRepresentable {
     }
 }
 
-final class MaterialTitleField: NSTextField {
+final class MaterialTitleField: NSTextField, ReadingOrderStop {
     var onBeginEditing: () -> Void = {}
 
     init() {
@@ -108,6 +118,8 @@ final class MaterialTitleField: NSTextField {
     }
 
     required init?(coder: NSCoder) { return nil }
+
+    var takesReadingOrderFocus: Bool { isEditable }
 
     // A long title scrolls while you type and ends in "…" at rest, as the in-place fields do.
     override func becomeFirstResponder() -> Bool {
