@@ -132,9 +132,9 @@ final class EditQueue {
     @ObservationIgnored private let undoManagers = NSHashTable<UndoManager>.weakObjects()
     @ObservationIgnored private var localTyping: [UUID: LocalTyping] = [:]
 
-    init(coordinator: LibraryCoordinator, editor: LibraryEditor? = nil) {
+    init(coordinator: LibraryCoordinator) {
         self.coordinator = coordinator
-        self.editor = editor ?? LibraryEditor(coordinator: coordinator)
+        editor = LibraryEditor(coordinator: coordinator)
     }
 
     // MARK: State
@@ -234,7 +234,9 @@ final class EditQueue {
             running.task.cancel()
         } else if let index = pending.firstIndex(where: { $0.ticket === ticket }) {
             let item = pending.remove(at: index)
-            item.ticket.finish(.failed(CancellationError()))
+            let result = EditResult.failed(CancellationError())
+            item.ticket.finish(result)
+            item.then?(result)
         }
     }
 

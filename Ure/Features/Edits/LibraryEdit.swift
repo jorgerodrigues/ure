@@ -106,14 +106,14 @@ nonisolated struct LibraryEditor: Sendable {
     let material: MaterialService
     let archive: ArchiveService
 
-    init(coordinator: LibraryCoordinator, material: MaterialService? = nil) {
+    init(coordinator: LibraryCoordinator) {
         calibers = CaliberService(coordinator: coordinator)
         watches = WatchService(coordinator: coordinator)
         jobs = JobService(coordinator: coordinator)
         parts = PartService(coordinator: coordinator)
         checklists = ChecklistService(coordinator: coordinator)
         notes = RecordNotesService(coordinator: coordinator)
-        self.material = material ?? MaterialService(coordinator: coordinator)
+        material = MaterialService(coordinator: coordinator)
         archive = ArchiveService(coordinator: coordinator)
     }
 
