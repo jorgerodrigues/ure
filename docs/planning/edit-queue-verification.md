@@ -108,9 +108,9 @@ Development Mac: Apple silicon, macOS 27.3, Xcode 27.2. The SDK cache workaround
 | --- | --- |
 | `make lint` | Passed |
 | `make build` | Passed, unsigned Debug |
-| `make check` | {{CHECK}} |
-| `make release` | {{RELEASE}} |
-| Isolated running app | {{APP}} |
+| `make check` | Passed on `dba4502`: lint, unsigned Debug build, and 305 of 305 unit tests |
+| `make release` | Passed on `dba4502`, unsigned optimized Release build |
+| Isolated running app | The Debug build from `make check` on `dba4502` started with `URE_TESTING=1` and a new test library id, made that library in its container, kept running, and quit on `kill -TERM`. The screen was not checked, because sessions have no Screen Recording permission. The window checks above drove the real views instead |
 | Local window checks | Passed on `d7a2b91`: the edit queue check and the six W035 to W040 checks. The sidebar check failed once at ⌘F focusing search in three sections, and passed when run again on the same build |
 | GitHub CI | Off since 6 November, as the user asked while the app is a prototype. The gate in its place is `make check` and `make release` on the final code |
 
