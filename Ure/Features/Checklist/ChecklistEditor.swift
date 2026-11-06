@@ -50,7 +50,9 @@ final class ChecklistEditor {
     @ObservationIgnored private var unsavedChange: EditChange?
     // What the library holds, as far as this checklist knows.
     @ObservationIgnored private var storedSteps: [ChecklistStep]
-    @ObservationIgnored private var latest: EditTicket?
+    // This checklist's changes still on their way to the library, in the order they went.
+    @ObservationIgnored private var inFlight: [(number: Int, operations: [ChecklistOperation])] = []
+    @ObservationIgnored private var lastNumber = 0
     @ObservationIgnored private var textBeforeEditing: String?
     @ObservationIgnored private var isTracked = false
 
@@ -260,7 +262,7 @@ final class ChecklistEditor {
     // reports can come from before a change, so they wait while a step has the cursor. What the
     // queue reports after an edit, Undo included, shows at once.
     func refresh(_ stored: [ChecklistStep], fromQueue: Bool = false) {
-        guard !isSaving, fromQueue || editingID == nil else { return }
+        guard fromQueue || (!isSaving && editingID == nil) else { return }
         show(stored)
     }
 
@@ -278,29 +280,43 @@ final class ChecklistEditor {
         }
         let change = unsavedChange
         unsavedChange = nil
-        savedSteps = value
-        isSaving = true
-        latest = queue.submitTyping(.checklist(jobID, operations), in: scope, as: change) {
-            [weak self] result in self?.finished(value, change: change, result: result)
+        let number = send(operations, becoming: value)
+        queue.submitTyping(.checklist(jobID, operations), in: scope, as: change) {
+            [weak self] result in self?.finished(number, change: change, result: result)
         }
     }
 
-    // The stored steps with the changes made here that have not saved on top. An empty step on
-    // screen stays after the step before it.
+    // The stored steps with this checklist's changes on their way, and the changes made here
+    // that have not gone yet, on top. An empty step on screen stays after the step before it.
     private func show(_ stored: [ChecklistStep]) {
-        let kept = Self.kept(stored)
         let local = ChecklistOperation.changes(
             from: savedSteps, to: steps.filter { !$0.isBlank })
-        var shown = ChecklistOperation.applying(local, to: kept).steps
+        storedSteps = Self.kept(stored)
+        savedSteps = expectedSteps()
+        var shown = ChecklistOperation.applying(local, to: savedSteps).steps
         for (index, step) in steps.enumerated() where step.isBlank {
             let ids = Set(shown.map(\.id))
+            guard !ids.contains(step.id) else { continue }
             let previous = steps[..<index].last { ids.contains($0.id) }
             let place = previous.flatMap { previous in shown.firstIndex { $0.id == previous.id } }
             shown.insert(step, at: place.map { $0 + 1 } ?? 0)
         }
         steps = shown
-        savedSteps = kept
-        storedSteps = kept
+    }
+
+    // What the library will hold once this checklist's changes on their way have run.
+    private func expectedSteps() -> [ChecklistStep] {
+        ChecklistOperation.applying(inFlight.flatMap(\.operations), to: storedSteps).steps
+    }
+
+    private func send(_ operations: [ChecklistOperation], becoming value: [ChecklistStep])
+        -> Int
+    {
+        lastNumber += 1
+        inFlight.append((lastNumber, operations))
+        isSaving = true
+        savedSteps = value
+        return lastNumber
     }
 
     // The steps as they are saved: those with text, without the spaces around it.
@@ -308,27 +324,21 @@ final class ChecklistEditor {
         steps.filter { !$0.isBlank }.map(\.saved)
     }
 
-    // A failure of the latest save keeps its steps on screen as not saved. An older one that a
-    // later save took over settles.
-    private func finished(_ value: [ChecklistStep], change: EditChange?, result: EditResult) {
-        if latest?.isPending != true { isSaving = false }
-        switch result {
-        case .saved:
-            if savedSteps == value { ownError = nil }
-            if !isSaving {
-                for case .checklist(let job, let records) in result.changes where job == jobID {
-                    show(records.map(ChecklistStep.init(record:)))
-                }
-            }
-        case .failed(let error):
+    // A change that did not save stays on screen as not saved, also when a later change saved,
+    // until Try Again saves it or Undo takes it back.
+    private func finished(_ number: Int, change: EditChange?, result: EditResult) {
+        inFlight.removeAll { $0.number == number }
+        isSaving = !inFlight.isEmpty
+        if case .failed(let error) = result {
             ownError = error.localizedDescription
-            if savedSteps == value {
-                savedSteps = storedSteps
-                if unsavedChange == nil { unsavedChange = change }
+            if inFlight.isEmpty, unsavedChange == nil {
+                unsavedChange = change
             } else if let change {
                 queue.typingSettled(change)
             }
         }
+        savedSteps = expectedSteps()
+        if Self.kept(steps) == savedSteps { ownError = nil }
         track()
     }
 
@@ -365,12 +375,11 @@ final class ChecklistEditor {
         let value = Self.kept(steps)
         let operations = ChecklistOperation.changes(from: savedSteps, to: value)
         guard !operations.isEmpty else { return }
-        savedSteps = value
-        isSaving = true
-        latest = queue.submit(
+        let number = send(operations, becoming: value)
+        queue.submit(
             .checklist(jobID, operations), in: scope, undo: actionName,
             undoManager: undoManager, holdsScreen: false, reportsFailure: false,
-            then: { [weak self] result in self?.finished(value, change: nil, result: result) },
+            then: { [weak self] result in self?.finished(number, change: nil, result: result) },
             onUndo: { [weak self] _ in self?.dropUnsavedChanges() })
         track()
     }
@@ -410,8 +419,8 @@ final class ChecklistEditor {
         if let unsavedChange { queue.typingSettled(unsavedChange) }
         unsavedChange = nil
         ownError = nil
-        steps = storedSteps
-        savedSteps = storedSteps
+        savedSteps = expectedSteps()
+        steps = savedSteps
         track()
     }
 

@@ -29,7 +29,7 @@ struct EditQueueTests {
             (.caliber(.set(caliber.id, .maker("Omega"))), .calibers),
             (.notes(.job(job.id), "Ordered from Cousins"), .notes(.job(job.id))),
             (.job(.stage(job.id, .done)), .jobs),
-            (.checklist(job.id, [.place(step, after: nil)]), .checklist(job.id)),
+            (.checklist(job.id, [.insert(step, after: nil)]), .checklist(job.id)),
         ]
         var finished: [Int] = []
         var tickets: [EditTicket] = []
@@ -233,6 +233,96 @@ struct EditQueueTests {
         let saved = try await library.stored()
         #expect(saved.map(\.isTicked) == [false, true])
         #expect(editor.steps.map(\.isTicked) == [false, true] && !editor.hasUnsavedChanges)
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func undoOfAClearedStepWhileItHasTheCursorShowsItOnce() async throws {
+        let step = ChecklistStep(id: UUID(), text: "Clean all parts")
+        let library = try await ChecklistLibrary.make(steps: [step])
+        let editor = library.editor
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        editor.beginEditing(step.id)
+        undo.beginUndoGrouping()
+        editor.change(step.id, to: "", undoManager: undo)
+        undo.endUndoGrouping()
+        editor.saveNow()
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored().isEmpty && editor.steps.count == 1)
+        undo.undo()
+        await library.queue.waitUntilIdle()
+        #expect(editor.steps == [step])
+        undo.beginUndoGrouping()
+        editor.change(step.id, to: "Clean all parts twice", undoManager: undo)
+        undo.endUndoGrouping()
+        editor.endEditing(step.id)
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored().map(\.text) == ["Clean all parts twice"])
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aTickWhileTheUndoOfItsRenameWaitsKeepsTheUndo() async throws {
+        let step = ChecklistStep(id: UUID(), text: "Clean")
+        let library = try await ChecklistLibrary.make(steps: [step])
+        let editor = library.editor
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        editor.beginEditing(step.id)
+        undo.beginUndoGrouping()
+        editor.change(step.id, to: "Clean all parts", undoManager: undo)
+        undo.endUndoGrouping()
+        editor.endEditing(step.id)
+        await library.queue.waitUntilIdle()
+
+        let (hold, holding) = try await LibraryHold.start(on: library.coordinator)
+        undo.undo()
+        undo.beginUndoGrouping()
+        editor.toggleTick(step.id, undoManager: undo)
+        undo.endUndoGrouping()
+        hold.release()
+        _ = try await holding.value
+        await library.queue.waitUntilIdle()
+        #expect(
+            try await library.stored() == [
+                ChecklistStep(id: step.id, text: "Clean", isTicked: true)
+            ])
+        #expect(editor.steps == [ChecklistStep(id: step.id, text: "Clean", isTicked: true)])
+        try await library.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aTickThatFailedStaysUnsavedWhenALaterTickSaves() async throws {
+        let first = ChecklistStep(id: UUID(), text: "Clean all parts")
+        let second = ChecklistStep(id: UUID(), text: "Oil the escapement")
+        let library = try await ChecklistLibrary.make(steps: [first, second])
+        let editor = library.editor
+        try await library.coordinator.mutate { db, _, _ in
+            try db.execute(
+                sql: """
+                    CREATE TRIGGER failFirstStep BEFORE UPDATE ON checklistStep
+                    WHEN NEW.id = '\(first.id.uuidString)'
+                    BEGIN SELECT RAISE(ABORT, 'fixture disk failure'); END
+                    """)
+        }
+        let (hold, holding) = try await LibraryHold.start(on: library.coordinator)
+        editor.toggleTick(first.id, undoManager: nil)
+        editor.toggleTick(second.id, undoManager: nil)
+        hold.release()
+        _ = try await holding.value
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored().map(\.isTicked) == [false, true])
+        #expect(editor.steps.map(\.isTicked) == [true, true])
+        #expect(
+            editor.saveError != nil && editor.hasUnsavedChanges && library.queue.hasUnsavedTyping)
+        try await library.coordinator.mutate { db, _, _ in
+            try db.execute(sql: "DROP TRIGGER failFirstStep")
+        }
+        editor.saveNow()
+        await library.queue.waitUntilIdle()
+        #expect(try await library.stored().map(\.isTicked) == [true, true])
+        #expect(editor.saveError == nil && !editor.hasUnsavedChanges)
         try await library.close()
     }
 

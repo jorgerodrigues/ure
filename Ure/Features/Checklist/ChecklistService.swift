@@ -75,22 +75,59 @@ nonisolated enum ChecklistError: LocalizedError, Equatable {
     }
 }
 
+// The properties of one step that a change gives it. A property left nil keeps what the step
+// holds when the change runs.
+nonisolated struct ChecklistStepUpdate: Equatable, Sendable {
+    let id: UUID
+    var text: String? = nil
+    var isHeading: Bool? = nil
+    var isTicked: Bool? = nil
+
+    // The properties that differ between two versions of a step, as the later one has them.
+    init?(from old: ChecklistStep, to new: ChecklistStep) {
+        id = new.id
+        if old.text != new.text { text = new.text }
+        if old.isHeading != new.isHeading { isHeading = new.isHeading }
+        if old.isTicked != new.isTicked { isTicked = new.isTicked }
+        if text == nil, isHeading == nil, isTicked == nil { return nil }
+    }
+
+    init(id: UUID, text: String? = nil, isHeading: Bool? = nil, isTicked: Bool? = nil) {
+        self.id = id
+        self.text = text
+        self.isHeading = isHeading
+        self.isTicked = isTicked
+    }
+
+    // The step with these properties. A heading has no tick.
+    func applied(to step: ChecklistStep) -> ChecklistStep {
+        var changed = step
+        if let text { changed.text = text }
+        if let isHeading { changed.isHeading = isHeading }
+        if let isTicked { changed.isTicked = isTicked }
+        if changed.isHeading { changed.isTicked = false }
+        return changed
+    }
+}
+
 // One change to a job's checklist, applied to the steps the library holds when its turn comes.
-// A change to one step leaves the other steps as they are, so an Undo and a later change never
-// overwrite each other.
+// A change touches only the step and the properties it names, so an Undo and a later change
+// never overwrite each other.
 nonisolated enum ChecklistOperation: Equatable, Sendable {
-    // Gives a step its text, heading and tick where it is. A step the list does not have goes at
-    // the end.
-    case update(ChecklistStep)
-    // Puts a step after another, or first when there is none, with its text, heading and tick.
-    case place(ChecklistStep, after: UUID?)
+    // Adds a step after another, or first when there is none. A step the list has already
+    // takes the properties and the place.
+    case insert(ChecklistStep, after: UUID?)
+    // Moves a step after another, or first.
+    case move(UUID, after: UUID?)
+    case update(ChecklistStepUpdate)
     case delete(UUID)
 
     // The changes that make one list of saved steps another.
     static func changes(from old: [ChecklistStep], to new: [ChecklistStep]) -> [ChecklistOperation]
     {
         let newIDs = Set(new.map(\.id))
-        let oldByID = Dictionary(uniqueKeysWithValues: old.map { ($0.id, $0) })
+        var oldByID: [UUID: ChecklistStep] = [:]
+        for step in old { oldByID[step.id] = step }
         var operations = old.filter { !newIDs.contains($0.id) }.map { delete($0.id) }
         let remaining = old.filter { newIDs.contains($0.id) }
         var before: [UUID: UUID] = [:]
@@ -99,10 +136,13 @@ nonisolated enum ChecklistOperation: Equatable, Sendable {
         }
         for (index, step) in new.enumerated() {
             let previous = index > 0 ? new[index - 1].id : nil
-            if oldByID[step.id] == nil || before[step.id] != previous {
-                operations.append(.place(step, after: previous))
-            } else if oldByID[step.id] != step {
-                operations.append(.update(step))
+            guard let saved = oldByID[step.id] else {
+                operations.append(.insert(step, after: previous))
+                continue
+            }
+            if before[step.id] != previous { operations.append(.move(step.id, after: previous)) }
+            if let update = ChecklistStepUpdate(from: saved, to: step) {
+                operations.append(.update(update))
             }
         }
         return operations
@@ -116,42 +156,76 @@ nonisolated enum ChecklistOperation: Equatable, Sendable {
         var list = steps
         var inverse: [ChecklistOperation] = []
         for operation in operations {
-            let id = operation.stepID
-            let index = list.firstIndex { $0.id == id }
+            let index = list.firstIndex { $0.id == operation.stepID }
             let old = index.map { list[$0] }
             let oldPrevious = index.flatMap { $0 > 0 ? list[$0 - 1].id : nil }
-            let undo = old.map { .place($0, after: oldPrevious) } ?? ChecklistOperation.delete(id)
-            let before = list
             switch operation {
-            case .update(let step):
-                if let index {
-                    list[index] = step
-                } else {
-                    list.append(step)
+            case .insert(let step, let after):
+                guard let index, let old else {
+                    insert(step, after: after, at: nil, in: &list)
+                    inverse.append(.delete(step.id))
+                    continue
                 }
-            case .place(let step, let after):
-                if let index { list.remove(at: index) }
-                if let after, let previous = list.firstIndex(where: { $0.id == after }) {
-                    list.insert(step, at: previous + 1)
-                } else if after == nil {
-                    list.insert(step, at: 0)
-                } else if let index {
-                    list.insert(step, at: min(index, list.count))
-                } else {
-                    list.append(step)
+                list.remove(at: index)
+                insert(step, after: after, at: index, in: &list)
+                inverse.append(contentsOf: undo(of: old, previous: oldPrevious, in: list))
+            case .move(_, let after):
+                guard let index, let old else { continue }
+                list.remove(at: index)
+                insert(old, after: after, at: index, in: &list)
+                inverse.append(contentsOf: undo(of: old, previous: oldPrevious, in: list))
+            case .update(let update):
+                guard let index, let old else { continue }
+                list[index] = update.applied(to: old)
+                if let back = ChecklistStepUpdate(from: list[index], to: old) {
+                    inverse.append(.update(back))
                 }
             case .delete:
-                if let index { list.remove(at: index) }
+                guard let index, let old else { continue }
+                list.remove(at: index)
+                inverse.append(.insert(old, after: oldPrevious))
             }
-            if list != before { inverse.append(undo) }
         }
         return (list, inverse.reversed())
     }
 
+    // What puts a step back as it was and where it was, if a change moved it or changed it.
+    private static func undo(of old: ChecklistStep, previous: UUID?, in list: [ChecklistStep])
+        -> [ChecklistOperation]
+    {
+        guard let index = list.firstIndex(where: { $0.id == old.id }) else {
+            return [.insert(old, after: previous)]
+        }
+        var operations: [ChecklistOperation] = []
+        if let back = ChecklistStepUpdate(from: list[index], to: old) {
+            operations.append(.update(back))
+        }
+        let now = index > 0 ? list[index - 1].id : nil
+        if now != previous { operations.append(.move(old.id, after: previous)) }
+        return operations
+    }
+
+    // Puts a step after another. When that step is gone, the step keeps the place it had, or
+    // goes at the end.
+    private static func insert(
+        _ step: ChecklistStep, after: UUID?, at place: Int?, in list: inout [ChecklistStep]
+    ) {
+        if let after, let previous = list.firstIndex(where: { $0.id == after }) {
+            list.insert(step, at: previous + 1)
+        } else if after == nil {
+            list.insert(step, at: 0)
+        } else if let place {
+            list.insert(step, at: min(place, list.count))
+        } else {
+            list.append(step)
+        }
+    }
+
     private var stepID: UUID {
         switch self {
-        case .update(let step), .place(let step, _): step.id
-        case .delete(let id): id
+        case .insert(let step, _): step.id
+        case .move(let id, _), .delete(let id): id
+        case .update(let update): update.id
         }
     }
 }
@@ -174,7 +248,7 @@ nonisolated struct ChecklistService: Sendable {
             _ = try JobService.requireJob(jobID, in: db)
             let now = Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
             let existing = try ChecklistQueries.ordered(for: jobID, in: db)
-            let saved = operations.map(\.saved)
+            let saved = operations.compactMap(\.saved)
             let applied = ChecklistOperation.applying(
                 saved, to: existing.map(ChecklistStep.init(record:)))
             try Self.write(
@@ -228,16 +302,22 @@ nonisolated struct ChecklistService: Sendable {
 }
 
 extension ChecklistOperation {
-    // The change with its step as it is saved, without the spaces around its text. A step
-    // whose text is gone is deleted.
-    nonisolated fileprivate var saved: ChecklistOperation {
+    // The change with its text as it is saved, without the spaces around it. A step whose text
+    // is gone is deleted, and a new step without text is not added.
+    nonisolated fileprivate var saved: ChecklistOperation? {
         switch self {
-        case .update(let step):
-            step.isBlank ? .delete(step.id) : .update(step.saved)
-        case .place(let step, let after):
-            step.isBlank ? .delete(step.id) : .place(step.saved, after: after)
-        case .delete:
-            self
+        case .insert(let step, let after):
+            if step.isBlank { return nil }
+            return .insert(step.saved, after: after)
+        case .update(var update):
+            if let text = update.text {
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty { return .delete(update.id) }
+                update.text = trimmed
+            }
+            return .update(update)
+        case .move, .delete:
+            return self
         }
     }
 }
