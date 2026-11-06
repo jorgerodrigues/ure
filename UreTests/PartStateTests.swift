@@ -42,6 +42,15 @@ struct PartStateTests {
         saved = try await stored(part.id, coordinator)
         #expect(saved.stage == .ordered && saved.orderedAt == clock.date(1_000))
 
+        // Two quick choices from the pop-up end at the last one, even when it is the state the
+        // part had before the first saved.
+        _ = await parts.setStage(.needed, of: part.id)
+        let toOrdered = Task { await parts.setStage(.ordered, of: part.id) }
+        let backToNeeded = Task { await parts.setStage(.needed, of: part.id) }
+        _ = await (toOrdered.value, backToNeeded.value)
+        #expect(try await stored(part.id, coordinator).stage == .needed)
+        _ = await parts.setStage(.ordered, of: part.id)
+
         // Two quick clicks move the part on twice, each with its own Undo step.
         async let firstClick = parts.advance(part.id, undoManager: nil)
         async let secondClick = parts.advance(part.id, undoManager: nil)

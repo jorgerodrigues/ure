@@ -233,13 +233,15 @@ final class PartState {
         Task { await setStage(stage, of: id, undoManager: undoManager) }
     }
 
-    // Moves a part to any state from its page's pop-up. ⌘Z puts back the state it had, with its
-    // dates, and Shift-⌘Z the state it was given.
+    // Moves a part to any state from its page's pop-up. Each choice waits for the changes
+    // before it, and the stored part decides whether it changes anything, so the last choice
+    // always wins. ⌘Z puts back the state it had, with its dates, and Shift-⌘Z the state it was
+    // given.
     @discardableResult
     func setStage(_ stage: PartStage, of id: UUID, undoManager: UndoManager? = nil) async
         -> Bool
     {
-        guard let existing = part(id), existing.stage != stage else { return false }
+        guard part(id) != nil else { return false }
         return await stages.perform(PartStageValue(stage: stage)) { [weak self] _ in
             await self?.changeStage(id, undoManager: undoManager) {
                 try await $0.setStage(id, to: stage)
