@@ -80,9 +80,12 @@ struct PartListView: View {
     private func newPart() { NewRecord.make(in: .parts, editing: editing, search: search) }
 }
 
-// A part in the list: its job's watch's cover, or the drawer for a spare, its name, and a line
-// such as "Grandfather's Seamaster · Full service" or "Spare".
+// A part in the list: its job's watch's cover, or the drawer for a spare, its name, a line such
+// as "Grandfather's Seamaster" or "Spare · Esslinger · 31 Oct", and on the right what it costs:
+// "from €21.40" for a part to buy, or what you paid. The list has no spend total.
 private struct PartListRowView: View {
+    @Environment(PartState.self) private var parts
+    @Environment(MoneyState.self) private var money
     let row: PartListRow
 
     var body: some View {
@@ -98,9 +101,24 @@ private struct PartListRowView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            .layoutPriority(1)
+            Spacer(minLength: 8)
+            if let price {
+                Text(price.text)
+                    .font(.subheadline)
+                    .foregroundStyle(price.isQuiet ? .secondary : .primary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .fixedSize()
+            }
         }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("partListRow-\(row.id.uuidString)")
+    }
+
+    private var price: (text: String, isQuiet: Bool)? {
+        PartListWording.price(
+            of: row.part, options: parts.options(of: row.part.id), rates: money.rates)
     }
 
     @ViewBuilder private var tile: some View {

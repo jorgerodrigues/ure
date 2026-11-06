@@ -19,7 +19,7 @@ WORKER = Path(sys.argv[1]).resolve()
 RUN = REPO / ".build/recovery-runs" / str(uuid.uuid4())
 GENERATION = "00000000-0000-4000-8000-000000000001"
 VERSIONS = ("v10-documents", "v15-part-procurement")
-CURRENT_MIGRATION = "v26-parts"
+CURRENT_MIGRATION = "v27-buying-options"
 # Columns that a later migration removes on purpose.
 REMOVED_COLUMNS = {
     "partLink": {
@@ -306,6 +306,18 @@ def parts_preserved(rows, after):
                 require(label + value in kept["notes"], f"partRequirement: {column} in notes")
 
 
+def links_preserved(rows, after):
+    options = {row["id"]: row for row in after["tables"].get("partOption", [])}
+    require(len(options) == len(rows), "partLink: every link is an option")
+    for row in rows:
+        option = options.get(row["id"])
+        require(option is not None, "partLink: option keeps the link's ID")
+        for column in ("partID", "position", "url", "createdAt", "updatedAt"):
+            require(option[column] == row[column], f"partLink: {column} kept")
+        require(option["price"] is None and option["currency"] is None, "partLink: option has no price yet")
+        require(option["supplier"].strip() != "", "partLink: option has a supplier")
+
+
 def preserved(before, after):
     require(before["originals"] == after["originals"], "Original and technical PDF bytes preserved")
     for table, rows in before["tables"].items():
@@ -326,9 +338,13 @@ def preserved(before, after):
             parts_preserved(rows, after)
             continue
         if table == "partLink":
-            # A cancelled part's links are in its job's notes.
+            # A cancelled part's links are in its job's notes, and since v27 every other link is
+            # a buying option.
             cancelled = {row["id"] for row in before["tables"].get("partRequirement", []) if row["status"] == "Cancelled"}
             rows = [row for row in rows if row["partID"] not in cancelled]
+            require(table not in after["tables"], "partLink: removed after each link became an option")
+            links_preserved(rows, after)
+            continue
         if table in REMOVED_TABLES:
             require(table not in after["tables"], f"{table}: removed after its reasons moved into notes")
             continue

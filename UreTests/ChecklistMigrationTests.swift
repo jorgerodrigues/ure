@@ -77,7 +77,7 @@ nonisolated struct ChecklistMigrationTests {
         let staged = try await coordinator.stageRestore(from: package)
         #expect(
             staged.summary.appliedMigrations == [
-                "v24-checklist-steps", "v25-jobs-without-watch", "v26-parts",
+                "v24-checklist-steps", "v25-jobs-without-watch", "v26-parts", "v27-buying-options",
             ])
         #expect(
             staged.summary.counts["checklistStep"]

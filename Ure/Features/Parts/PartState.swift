@@ -2,25 +2,41 @@ import Foundation
 import GRDB
 import Observation
 
-// Every part in the library: the parts of each job and the spares in the drawer. A part has no
-// draft. Its name, description, quantity and notes save on their own as you type. Adding a part,
-// moving its state on, using a spare and deleting a part save at once, and ⌘Z undoes each. Every
-// change goes through the library's edit queue, in the order you made it.
+// Every part in the library: the parts of each job and the spares in the drawer, with the
+// options to buy each one. A part has no draft. Its name, description, quantity and notes save on
+// their own as you type, and so do an option's supplier, price, shipping and note. Adding a
+// part, moving its state on, using a spare, deleting a part, adding or deleting an option,
+// choosing its currency and Mark as Bought save at once, and ⌘Z undoes each. Every change goes
+// through the library's edit queue, in the order you made it.
 @Observable
 final class PartState {
     static let stageActionName = "Change Part State"
     static let addActionName = "Add Part"
     static let removeActionName = "Delete Part"
     static let spareActionName = "Use Spare"
+    static let addOptionActionName = "Add Option"
+    static let removeOptionActionName = "Delete Option"
+    static let currencyActionName = "Currency"
+    static let buyActionName = "Mark as Bought"
     static let maximumSpares = 5
 
     private let service: PartService
     let queue: EditQueue
     @ObservationIgnored private let pause: (Duration) async throws -> Void
     @ObservationIgnored private var entries: [UUID: PartEntry] = [:]
+    // The home currency, which an option's amounts are in until you choose another.
+    @ObservationIgnored private let home: () -> String
     private(set) var parts: [PartRecord] = []
-    private(set) var links: [UUID: [PartLink]] = [:]
+    // Each part's buying options, in the order they were added.
+    private(set) var options: [UUID: [PartOption]] = [:]
     private(set) var facts: [UUID: PartFacts] = [:]
+    private(set) var optionFacts: [UUID: PartOptionFacts] = [:]
+    // The option whose fields show on the part's page.
+    private(set) var openOptionID: UUID?
+    // An option just added from a pasted link. Its page puts the cursor in its price.
+    private(set) var priceToFocus: UUID?
+    // Why an option could not change, such as a pasted text that is not a link.
+    private(set) var optionError: String?
     // The part whose page shows: from the Parts list, or opened from its job's line.
     private(set) var selectedID: UUID?
     private(set) var isLoading = true
@@ -31,10 +47,12 @@ final class PartState {
 
     init(
         service: PartService, queue: EditQueue,
+        home: @escaping () -> String = { CurrencyRules.regionCurrency() },
         pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.service = service
         self.queue = queue
+        self.home = home
         self.pause = pause
         queue.listen { [weak self] change, byUndo in self?.receive(change, byUndo: byUndo) }
     }
@@ -49,7 +67,16 @@ final class PartState {
 
     func facts(for id: UUID) -> PartFacts? { facts[id] }
 
-    func links(of id: UUID) -> [PartLink] { links[id] ?? [] }
+    func options(of id: UUID) -> [PartOption] { options[id] ?? [] }
+
+    func option(_ id: UUID?) -> PartOption? {
+        options.values.lazy.flatMap { $0 }.first { $0.id == id }
+    }
+
+    func facts(forOption id: UUID) -> PartOptionFacts? { optionFacts[id] }
+
+    // An option takes edits while its part does and its deletion does not wait.
+    func canEdit(_ option: PartOption) -> Bool { !queue.isEnding(.option(option.id)) }
 
     // A job's parts in the order they were added.
     func parts(on jobID: UUID) -> [PartRecord] {
@@ -113,6 +140,14 @@ final class PartState {
     func close() { select(nil) }
 
     func nameFocused() { nameToFocus = nil }
+
+    func priceFocused() { priceToFocus = nil }
+
+    // Shows an option's fields on the part's page, or hides them with nil.
+    func openOption(_ id: UUID?) {
+        openOptionID = id
+        optionError = nil
+    }
 
     // Adds a part to the end of a job's parts, Needed. ⌘Z removes it again, and the Undo is
     // registered now, so typing that follows while the part saves comes after it.
@@ -219,7 +254,7 @@ final class PartState {
         remove(id, undoManager: undoManager)
     }
 
-    // Deletes a part with its links. ⌘Z puts both back. Typing on the part saves first, so
+    // Deletes a part with its options. ⌘Z puts both back. Typing on the part saves first, so
     // Undo brings it back too. A text the part does not take, such as a quantity of 0, goes
     // with the part.
     @discardableResult
@@ -229,26 +264,187 @@ final class PartState {
             .part(.remove(id)), in: .parts, undo: Self.removeActionName, undoManager: undoManager)
     }
 
-    func openLink(_ link: PartLink) {
+    func pasteOptionCommand(_ text: String?, on partID: UUID, undoManager: UndoManager?) {
+        pasteOption(text, on: partID, undoManager: undoManager)
+    }
+
+    // A link pasted on a part adds a buying option after the others, with the link's host as
+    // its supplier, and opens it with the cursor in its price. A text that is not a link adds
+    // nothing and says so. ⌘Z removes the option again.
+    @discardableResult
+    func pasteOption(_ text: String?, on partID: UUID, undoManager: UndoManager? = nil)
+        -> EditTicket?
+    {
+        optionError = nil
+        guard part(partID) != nil, !queue.isEnding(.part(partID)) else { return nil }
+        let url: URL
+        do {
+            url = try WebLink.parse(text ?? "")
+        } catch {
+            optionError = error.localizedDescription
+            return nil
+        }
+        return queue.submit(
+            .part(.addOption(partID, url)), in: .parts, undo: Self.addOptionActionName,
+            undoManager: undoManager
+        ) { [weak self] result in
+            guard let self else { return }
+            for case .partOption(let option) in result.changes {
+                openOptionID = option.id
+                priceToFocus = option.id
+            }
+        }
+    }
+
+    func removeOptionCommand(_ id: UUID, undoManager: UndoManager?) {
+        removeOption(id, undoManager: undoManager)
+    }
+
+    // Deletes a buying option. ⌘Z puts it back with its price, shipping and note. Typing on the
+    // option saves first, so Undo brings it back too. A text the option does not take, such as
+    // a price of "abc", goes with the option.
+    @discardableResult
+    func removeOption(_ id: UUID, undoManager: UndoManager? = nil) -> EditTicket? {
+        guard let option = option(id), !queue.isEnding(.option(id)),
+            !queue.isEnding(.part(option.partID))
+        else { return nil }
+        return queue.submit(
+            .part(.removeOption(id)), in: .parts, undo: Self.removeOptionActionName,
+            undoManager: undoManager)
+    }
+
+    func chooseCurrencyCommand(_ code: String, of id: UUID, undoManager: UndoManager?) {
+        chooseCurrency(code, of: id, undoManager: undoManager)
+    }
+
+    // Chooses the currency an option's price and shipping are in, from its pop-up. The amounts
+    // keep their numbers, and ⌘Z puts back the currency they had. A currency that can't take
+    // an amount, such as the yen for 12.90, is refused at once and says so.
+    @discardableResult
+    func chooseCurrency(_ code: String, of id: UUID, undoManager: UndoManager? = nil)
+        -> EditTicket?
+    {
+        optionError = nil
+        guard let option = option(id), let fields = optionFacts[id], canEdit(option),
+            !queue.isEnding(.part(option.partID))
+        else { return nil }
+        let locale = service.locale
+        let price = try? PartOptionFacts.amount(fields.price.text, .price, fields.money, locale)
+        let shipping = try? PartOptionFacts.amount(
+            fields.shipping.text, .shipping, fields.money, locale)
+        guard PartOptionRules.fits([price, shipping], in: code) else {
+            optionError = PartOptionRules.tooPrecise(for: code)
+            return nil
+        }
+        if code == fields.money.currency, !isSaving { return nil }
+        fields.money.choose(code)
+        // A price typed with this currency's mark, refused until now, saves first, under the
+        // Undo step of its typing.
+        fields.saveAmountsNow()
+        return queue.submit(
+            .part(.setOption(id, .currency(code))), in: .parts, undo: Self.currencyActionName,
+            undoManager: undoManager
+        ) { [weak self] result in
+            if !result.isSaved { self?.showStored(id) }
+        }
+    }
+
+    // A part's options for Mark as Bought, once every change before it has saved, so it offers
+    // the prices you just typed. Nil while a save has failed, or while an option's field holds a
+    // text it does not take, because the stored price is then not the one on screen.
+    func savedOptions(of partID: UUID) async -> [PartOption]? {
+        queue.flushTyping()
+        await queue.waitUntilIdle()
+        let unsaved = options(of: partID).contains { optionFacts[$0.id]?.hasUnsavedText == true }
+        guard !queue.isStopped, !unsaved else { return nil }
+        return options(of: partID)
+    }
+
+    func markBoughtCommand(_ purchase: PartPurchase, of id: UUID, undoManager: UndoManager?) {
+        markBought(purchase, of: id, undoManager: undoManager)
+    }
+
+    // Records what was bought. A part to buy becomes Ordered from today with the supplier, the
+    // price, the shipping and what you paid, and its options stay. ⌘Z puts back the state it had
+    // with no purchase, and Shift-⌘Z marks it bought again.
+    @discardableResult
+    func markBought(_ purchase: PartPurchase, of id: UUID, undoManager: UndoManager? = nil)
+        -> EditTicket?
+    {
+        guard part(id) != nil, !queue.isEnding(.part(id)) else { return nil }
+        return queue.submit(
+            .part(.markBought(id, purchase)), in: .parts, undo: Self.buyActionName,
+            undoManager: undoManager)
+    }
+
+    // The home currency changed in Settings, so each option's fields read amounts in the new
+    // one while the option has no currency of its own.
+    func homeCurrencyChanged() {
+        for option in options.values.flatMap({ $0 }) {
+            showStored(option.id)
+            if option.currency == nil { optionFacts[option.id]?.saveAmountsNow() }
+        }
+    }
+
+    func openLink(_ url: String) {
         openError = nil
-        do { try service.open(link) } catch { openError = error.localizedDescription }
+        do { try service.open(url) } catch { openError = error.localizedDescription }
+    }
+
+    private func showStored(_ id: UUID) {
+        guard let option = option(id) else { return }
+        optionFacts[id]?.refresh(option, home: home())
     }
 
     private func receive(_ change: LibraryChange, byUndo: Bool) {
         switch change {
         case .part(let record): adopt(record, force: byUndo)
         case .partRemoved(let id): discard(id)
+        case .partOption(let option): adopt(option, force: byUndo)
+        case .partOptionRemoved(let id): discardOption(id)
         default: break
         }
     }
 
-    // A part that leaves takes its fields with it, and text they never took goes too. Undo of
-    // typing on it later comes from the stored data, so it needs no field.
+    // A part that leaves takes its fields and its options' fields with it, and text they never
+    // took goes too. Undo of typing on it later comes from the stored data, so it needs no
+    // field.
     private func discard(_ id: UUID) {
         parts.removeAll { $0.id == id }
-        links[id] = nil
+        for option in options.removeValue(forKey: id) ?? [] { dropOptionFacts(option.id) }
         facts.removeValue(forKey: id)?.discard()
         if selectedID == id { selectedID = nil }
+    }
+
+    private func discardOption(_ id: UUID) {
+        for partID in options.keys { options[partID]?.removeAll { $0.id == id } }
+        dropOptionFacts(id)
+    }
+
+    private func dropOptionFacts(_ id: UUID) {
+        optionFacts.removeValue(forKey: id)?.discard()
+        if openOptionID == id { openOptionID = nil }
+    }
+
+    private func adopt(_ option: PartOption, force: Bool) {
+        var list = options[option.partID] ?? []
+        if let index = list.firstIndex(where: { $0.id == option.id }) {
+            list[index] = option
+        } else {
+            list.append(option)
+            list.sort { $0.position < $1.position }
+        }
+        options[option.partID] = list
+        if let fields = optionFacts[option.id] {
+            fields.refresh(option, home: home(), force: force)
+        } else {
+            optionFacts[option.id] = makeOptionFacts(option)
+        }
+    }
+
+    private func makeOptionFacts(_ option: PartOption) -> PartOptionFacts {
+        PartOptionFacts(
+            option: option, home: home(), queue: queue, locale: service.locale, pause: pause)
     }
 
     private func adopt(_ record: PartRecord, force: Bool = false) {
@@ -258,14 +454,14 @@ final class PartState {
         } else {
             records.append(record)
         }
-        apply(PartLibrary(parts: records, links: links), forcing: force ? record.id : nil)
+        apply(PartLibrary(parts: records, options: options), forcing: force ? record.id : nil)
     }
 
     // The library can report a list from before an edit after the edit's own result. A part it
     // leaves out keeps fields with typing on them, which the next report brings back.
     private func apply(_ library: PartLibrary, forcing forced: UUID? = nil) {
         parts = library.parts
-        links = library.links
+        options = library.options
         let kept = Set(library.parts.map(\.id))
         for (id, fields) in facts where !kept.contains(id) && !fields.hasUnsavedText {
             facts[id] = nil
@@ -275,6 +471,20 @@ final class PartState {
                 existing.refresh(part, force: part.id == forced)
             } else {
                 facts[part.id] = PartFacts(part: part, queue: queue, pause: pause)
+            }
+        }
+        let stored = library.options.values.flatMap { $0 }
+        let keptOptions = Set(stored.map(\.id))
+        for (id, fields) in optionFacts
+        where !keptOptions.contains(id) && !fields.hasUnsavedText {
+            dropOptionFacts(id)
+        }
+        let home = home()
+        for option in stored {
+            if let existing = optionFacts[option.id] {
+                existing.refresh(option, home: home)
+            } else {
+                optionFacts[option.id] = makeOptionFacts(option)
             }
         }
     }

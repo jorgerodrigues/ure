@@ -11,13 +11,15 @@ struct FactRow: View {
     let identifier: String
     var requestsFocus = false
     var didFocus: () -> Void = {}
+    // Whether the line under the field says how typing works. A narrow field leaves it out.
+    var showsHint = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: InPlaceLayout.labelSpacing) {
             FactLabel(text: field.label, tone: FactTone(field))
             InPlaceField(
                 field: field, isEditable: isEditable, identifier: identifier,
-                requestsFocus: requestsFocus, didFocus: didFocus)
+                requestsFocus: requestsFocus, didFocus: didFocus, showsHint: showsHint)
         }
         .zIndex(field.isEditing ? 1 : 0)
     }

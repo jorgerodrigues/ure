@@ -6,6 +6,22 @@ struct SettingsView: View {
     @Environment(RestoreState.self) private var restore
 
     var body: some View {
+        VStack(spacing: 0) {
+            // A save that failed shows here too, with Try Again, because a rate typed in
+            // Settings waits behind it like any change. It is as wide as the form with its
+            // margins, so a long message wraps instead of widening the window.
+            SaveFailureBar(lines: SettingsLayout.failureLines)
+                .environment(restore.session.editing)
+                .frame(width: SettingsLayout.width)
+            form
+        }
+        .task(loadSummary)
+        // Settings follows the home currency and the rates on its own, also while the main
+        // window is closed and after a restore.
+        .task(observeMoneyEffect)
+    }
+
+    private var form: some View {
         Form {
             Section("Library") {
                 LabeledContent("Library folder") {
@@ -59,6 +75,11 @@ struct SettingsView: View {
                 )
                 .font(.callout).foregroundStyle(.secondary)
             }
+            if let money = restore.settingsMoney {
+                MoneySettingsSection().environment(money)
+            } else {
+                MoneySettingsDuringRestore()
+            }
             RestoreSectionView()
             Section("About") {
                 LabeledContent("Application", value: "Ure")
@@ -66,10 +87,11 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 620)
+        .frame(width: SettingsLayout.formWidth, height: 620)
         .scenePadding()
-        .task(loadSummary)
     }
+
+    private func observeMoneyEffect() async { await restore.observeSettingsMoney() }
 
     private var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
@@ -86,4 +108,12 @@ struct SettingsView: View {
     }
 
     private func refreshSummary() { Task { await backup.refresh() } }
+}
+
+enum SettingsLayout {
+    static let formWidth: CGFloat = 520
+    // The form with the scene's margins on both sides.
+    static let width: CGFloat = formWidth + 40
+    // The failure bar's message wraps more in Settings than in the main window.
+    static let failureLines = 6
 }

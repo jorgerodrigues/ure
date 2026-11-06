@@ -112,12 +112,12 @@ struct PartStateTests {
         #expect(parts.parts(on: job.id).map(\.id) == [mainspring.id, crystal.id])
 
         try await coordinator.mutate { db, _, _ in
-            try PartLink(
-                id: UUID(), partID: crystal.id, position: 0, url: "https://example.org/crystal",
-                createdAt: .now, updatedAt: .now
+            try PartOption(
+                id: UUID(), partID: crystal.id, position: 0, supplier: "example.org",
+                url: "https://example.org/crystal", createdAt: .now, updatedAt: .now
             ).insert(db)
         }
-        try await waitUntil { parts.links(of: crystal.id).count == 1 }
+        try await waitUntil { parts.options(of: crystal.id).count == 1 }
         parts.select(crystal.id)
         undoManager.beginUndoGrouping()
         let removing = parts.remove(crystal.id, undoManager: undoManager)
@@ -129,7 +129,7 @@ struct PartStateTests {
         undoManager.undo()
         await parts.queue.waitUntilIdle()
         try await waitUntil {
-            parts.part(crystal.id) != nil && parts.links(of: crystal.id).count == 1
+            parts.part(crystal.id) != nil && parts.options(of: crystal.id).count == 1
         }
         #expect(try await stored(crystal.id, coordinator) == crystal)
 

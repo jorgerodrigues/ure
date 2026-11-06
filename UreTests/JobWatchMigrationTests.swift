@@ -36,7 +36,10 @@ nonisolated struct JobWatchMigrationTests {
                     db, sql: "SELECT identifier FROM grdb_migrations ORDER BY rowid")
             )
         }
-        #expect(stored.migrations.suffix(2) == ["v25-jobs-without-watch", "v26-parts"])
+        #expect(
+            stored.migrations.suffix(3) == [
+                "v25-jobs-without-watch", "v26-parts", "v27-buying-options",
+            ])
         #expect(stored.watchColumn?.isNotNull == false)
         #expect(stored.jobs.count == LegacyJobWatchFixture.jobs.count)
         for (row, job) in zip(stored.jobs, LegacyJobWatchFixture.jobs.sorted { $0.id < $1.id }) {
@@ -76,7 +79,10 @@ nonisolated struct JobWatchMigrationTests {
         let package = fixture.directory.appending(path: "before-jobs-without-watch.watchbackup")
         try LegacyJobWatchFixture.package(at: package)
         let staged = try await coordinator.stageRestore(from: package)
-        #expect(staged.summary.appliedMigrations == ["v25-jobs-without-watch", "v26-parts"])
+        #expect(
+            staged.summary.appliedMigrations == [
+                "v25-jobs-without-watch", "v26-parts", "v27-buying-options",
+            ])
         #expect(staged.summary.counts["job"] == LegacyJobWatchFixture.jobs.count)
         let result = try await coordinator.activateRestore(staged)
         #expect(result.outcome == .restored)

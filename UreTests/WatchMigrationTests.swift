@@ -77,7 +77,7 @@ nonisolated struct WatchMigrationTests {
         #expect(
             staged.summary.appliedMigrations == [
                 "v22-watch-owner", "v23-job-states", "v24-checklist-steps",
-                "v25-jobs-without-watch", "v26-parts",
+                "v25-jobs-without-watch", "v26-parts", "v27-buying-options",
             ])
         #expect(staged.summary.counts["watch"] == LegacyWatchFixture.watches.count)
         #expect(staged.summary.counts["job"] == LegacyWatchFixture.jobs.count)

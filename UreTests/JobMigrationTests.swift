@@ -85,6 +85,7 @@ nonisolated struct JobMigrationTests {
         #expect(
             staged.summary.appliedMigrations == [
                 "v23-job-states", "v24-checklist-steps", "v25-jobs-without-watch", "v26-parts",
+                "v27-buying-options",
             ])
         #expect(staged.summary.counts["job"] == LegacyJobFixture.jobs.count)
         // The staged library is already upgraded, so its history is gone.

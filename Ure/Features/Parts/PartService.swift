@@ -6,12 +6,18 @@ nonisolated enum PartError: LocalizedError, Equatable {
     case missingRecord
     case spareTaken
     case invalidQuantity
+    case missingOption
+    case unknownCurrency
+    case invalidPurchase
 
     var errorDescription: String? {
         switch self {
         case .missingRecord: "This part is no longer available."
         case .spareTaken: "This spare is no longer in the drawer. Type the part to add it."
         case .invalidQuantity: "Enter a whole number above 0."
+        case .missingOption: "This option is no longer on the part."
+        case .unknownCurrency: "Choose a currency the app knows."
+        case .invalidPurchase: "Enter a price above 0 and what you were charged."
         }
     }
 }
@@ -25,18 +31,37 @@ nonisolated enum PartFact: Equatable, Sendable {
     case notes(String)
 }
 
-// A part's state with the dates that belong to it. Undo puts back exactly these.
+// One fact of a buying option, written in place on the part's page. The field reads the price
+// and the shipping as typed on a receipt, in the option's currency, and only the currency's
+// pop-up changes that currency. Nil is no amount, or no currency chosen.
+nonisolated enum PartOptionFact: Equatable, Sendable {
+    case supplier(String)
+    case price(Decimal?)
+    case shipping(Decimal?)
+    case currency(String?)
+    case note(String)
+    // The price, the shipping and the currency exactly as they were stored. Undo puts them back.
+    case money(price: Decimal?, shipping: Decimal?, currency: String?)
+}
+
+// A part's state with the dates and the purchase that belong to it. Undo puts back exactly
+// these.
 nonisolated struct PartStageValue: Equatable, Sendable {
     let stage: PartStage
     var orderedAt: Date? = nil
     var inHandAt: Date? = nil
     var fittedAt: Date? = nil
+    var purchase: PartPurchase? = nil
 
-    init(stage: PartStage, orderedAt: Date? = nil, inHandAt: Date? = nil, fittedAt: Date? = nil) {
+    init(
+        stage: PartStage, orderedAt: Date? = nil, inHandAt: Date? = nil, fittedAt: Date? = nil,
+        purchase: PartPurchase? = nil
+    ) {
         self.stage = stage
         self.orderedAt = orderedAt
         self.inHandAt = inHandAt
         self.fittedAt = fittedAt
+        self.purchase = purchase
     }
 
     init(part: PartRecord) {
@@ -44,6 +69,7 @@ nonisolated struct PartStageValue: Equatable, Sendable {
         orderedAt = part.orderedAt
         inHandAt = part.inHandAt
         fittedAt = part.fittedAt
+        purchase = part.purchase
     }
 }
 
@@ -69,10 +95,10 @@ nonisolated struct PartPlacement: Equatable, Sendable {
     }
 }
 
-// A part that was removed, with its links, so that Undo can put both back.
+// A part that was removed, with its options, so that Undo can put both back.
 nonisolated struct RemovedPart: Equatable, Sendable {
     let part: PartRecord
-    let links: [PartLink]
+    let options: [PartOption]
 }
 
 nonisolated struct PartService: Sendable {
@@ -80,6 +106,9 @@ nonisolated struct PartService: Sendable {
 
     let coordinator: LibraryCoordinator
     var openBrowser: @MainActor @Sendable (URL) -> Bool = { NSWorkspace.shared.open($0) }
+    // The currency of the Mac's region, the home currency until you choose another.
+    var region = CurrencyRules.regionCurrency()
+    var locale = Locale.current
 
     // Adds a part to the end of a job's parts, Needed, or makes a spare in the drawer, In hand
     // from today. A blank name is the name a new part starts with, and a blank description is
@@ -177,31 +206,124 @@ nonisolated struct PartService: Sendable {
         }
     }
 
-    // Removes a part with its links. The result lets Undo put both back.
+    // Removes a part with its options. The result lets Undo put both back.
     func remove(_ id: UUID) async throws -> RemovedPart {
         try await coordinator.mutate { db, _, _ in
             let part = try Self.requirePart(id, in: db)
-            let links = try PartQueries.links(of: id, in: db)
-            try db.execute(sql: "DELETE FROM partLink WHERE partID = ?", arguments: [id.uuidString])
+            let options = try PartQueries.options(of: id, in: db)
+            try db.execute(
+                sql: "DELETE FROM partOption WHERE partID = ?", arguments: [id.uuidString])
             try db.execute(sql: "DELETE FROM part WHERE id = ?", arguments: [id.uuidString])
-            return RemovedPart(part: part, links: links)
+            return RemovedPart(part: part, options: options)
         }
     }
 
-    // Puts back a removed part with its links, as they were.
+    // Puts back a removed part with its options, as they were.
     func restore(_ removed: RemovedPart) async throws -> PartRecord {
         try await coordinator.mutate { db, _, _ in
             if let jobID = removed.part.jobID { _ = try JobService.requireJob(jobID, in: db) }
             try PartQueries.insert(removed.part, in: db)
-            for link in removed.links { try link.insert(db) }
+            for option in removed.options { try option.insert(db) }
             return removed.part
         }
     }
 
+    // Adds a buying option for a pasted link, after the part's other options. Its supplier is
+    // the link's host without "www.", and it has no price until you type one.
+    func addOption(_ url: URL, to partID: UUID) async throws -> PartOption {
+        try await coordinator.mutate { db, _, dependencies in
+            _ = try Self.requirePart(partID, in: db)
+            let now = Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
+            let option = PartOption(
+                id: dependencies.makeID(), partID: partID,
+                position: try PartQueries.nextOptionPosition(on: partID, in: db),
+                supplier: WebLink.title(for: url), url: url.absoluteString, createdAt: now,
+                updatedAt: now)
+            try option.insert(db)
+            return option
+        }
+    }
+
+    // Saves one fact of an option. A value that is already saved changes nothing, not even the
+    // edit time.
+    func updateOption(_ id: UUID, _ fact: PartOptionFact) async throws -> Revision<PartOption> {
+        try await coordinator.mutate { [region] db, _, dependencies in
+            var option = try Self.requireOption(id, in: db)
+            let saved = option
+            let home = try MoneyQueries.homeCurrency(db, region: region)
+            try option.apply(fact, home: home)
+            guard option != saved else { return Revision(before: saved, after: saved) }
+            option.updatedAt = Date(
+                timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
+            try option.update(db)
+            return Revision(before: saved, after: option)
+        }
+    }
+
+    // Removes an option. Undo puts it back with restoreOption.
+    func removeOption(_ id: UUID) async throws -> PartOption {
+        try await coordinator.mutate { db, _, _ in
+            let option = try Self.requireOption(id, in: db)
+            try db.execute(sql: "DELETE FROM partOption WHERE id = ?", arguments: [id.uuidString])
+            return option
+        }
+    }
+
+    // Puts back a removed option as it was.
+    func restoreOption(_ option: PartOption) async throws -> PartOption {
+        try await coordinator.mutate { db, _, _ in
+            _ = try Self.requirePart(option.partID, in: db)
+            try option.insert(db)
+            return option
+        }
+    }
+
+    // Records what was bought. A part to buy becomes Ordered from today, and a part further
+    // along keeps its state and days. The result has the state before, so Undo puts it back
+    // with the purchase it had.
+    func markBought(_ id: UUID, _ purchase: PartPurchase) async throws -> PartStageChange {
+        try await coordinator.mutate { db, _, dependencies in
+            let existing = try Self.requirePart(id, in: db)
+            try Self.validate(purchase)
+            let now = Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
+            var next = PartStageValue(part: existing)
+            if existing.stage == .needed {
+                next = PartStageValue(stage: .ordered, orderedAt: now)
+            }
+            next.purchase = purchase
+            let part = try Self.write(next, to: existing, at: now, in: db)
+            return PartStageChange(prior: PartStageValue(part: existing), part: part)
+        }
+    }
+
     @MainActor
-    func open(_ link: PartLink) throws {
-        guard let url = WebLink.url(from: link.url) else { throw LinkError.invalidURL }
+    func open(_ link: String) throws {
+        guard let url = WebLink.url(from: link) else { throw LinkError.invalidURL }
         guard openBrowser(url) else { throw LinkError.browserUnavailable }
+    }
+
+    // A part's options as they are saved.
+    func options(of partID: UUID) async throws -> [PartOption] {
+        try await coordinator.read { try PartQueries.options(of: partID, in: $0) }
+    }
+
+    static func requireOption(_ id: UUID, in db: Database) throws -> PartOption {
+        guard let option = try PartQueries.option(id, in: db) else {
+            throw PartError.missingOption
+        }
+        _ = try requirePart(option.partID, in: db)
+        return option
+    }
+
+    // A purchase has a price above 0, shipping of 0 or more, and an amount charged above 0, in
+    // currencies the app knows.
+    private static func validate(_ purchase: PartPurchase) throws {
+        guard CurrencyRules.isKnown(purchase.price.currency),
+            CurrencyRules.isKnown(purchase.paid.currency)
+        else { throw PartError.unknownCurrency }
+        guard purchase.price.amount > 0, purchase.paid.amount > 0,
+            (purchase.shipping ?? 0) >= 0
+        else { throw PartError.invalidPurchase }
     }
 
     // A part can change while it is in the library. A part on a job also needs the job to be
@@ -219,6 +341,9 @@ nonisolated struct PartService: Sendable {
         let prior = PartStageValue(part: existing)
         guard existing.stage != stage else { return PartStageChange(prior: prior, part: existing) }
         var next = PartStageValue(stage: stage)
+        // A part that goes back to Needed is to buy again, so what was bought goes with its
+        // order day. Undo puts both back.
+        if stage != .needed { next.purchase = existing.purchase }
         if stage.hasReached(.ordered) { next.orderedAt = existing.orderedAt }
         if stage.hasReached(.inHand) { next.inHandAt = existing.inHandAt }
         switch stage {
@@ -240,6 +365,7 @@ nonisolated struct PartService: Sendable {
         part.orderedAt = value.stage.hasReached(.ordered) ? value.orderedAt : nil
         part.inHandAt = value.stage.hasReached(.inHand) ? value.inHandAt : nil
         part.fittedAt = value.stage.hasReached(.fitted) ? value.fittedAt : nil
+        part.purchase = value.stage == .needed ? nil : value.purchase
         part.updatedAt = Date(timeIntervalSince1970: time.timeIntervalSince1970)
         try PartQueries.update(part, in: db)
         return part
@@ -278,6 +404,87 @@ extension PartRecord {
         case .notes(let text):
             notes = text
         }
+    }
+}
+
+extension PartOption {
+    // A supplier is required. Only the currency's pop-up changes the option's currency, with its
+    // own Undo step. An amount is always in a currency, the home currency until you choose
+    // another, and an option with no amount left in the home currency has no currency of its own
+    // again, as it had before its first amount. Undo puts back the stored money exactly.
+    nonisolated fileprivate mutating func apply(_ fact: PartOptionFact, home: String) throws {
+        switch fact {
+        case .supplier(let text):
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                throw PartValidationError(message: "Enter a supplier.")
+            }
+            supplier = trimmed
+        case .price(let amount):
+            if let amount, amount <= 0 {
+                throw PartValidationError(message: "Enter a price above 0.")
+            }
+            try Self.check([amount], in: currency ?? home)
+            price = amount
+        case .shipping(let amount):
+            try Self.check([amount], in: currency ?? home)
+            shipping = amount
+        case .currency(let code):
+            if let code, !CurrencyRules.isKnown(code) { throw PartError.unknownCurrency }
+            try Self.check([price, shipping], in: code ?? home)
+            currency = code
+        case .note(let text):
+            note = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        case .money(let storedPrice, let storedShipping, let storedCurrency):
+            if let storedCurrency, !CurrencyRules.isKnown(storedCurrency) {
+                throw PartError.unknownCurrency
+            }
+            price = storedPrice
+            shipping = storedShipping
+            currency = storedCurrency
+            return
+        }
+        if price != nil || shipping != nil, currency == nil { currency = home }
+        if price == nil, shipping == nil, currency == home { currency = nil }
+    }
+
+    // An amount is 0 or more, with no more decimals than its currency takes.
+    nonisolated private static func check(_ amounts: [Decimal?], in code: String) throws {
+        guard amounts.compactMap({ $0 }).allSatisfy({ $0 >= 0 }) else {
+            throw PartValidationError(message: "Enter an amount of 0 or more.")
+        }
+        guard PartOptionRules.fits(amounts, in: code) else {
+            throw PartValidationError(message: PartOptionRules.tooPrecise(for: code))
+        }
+    }
+}
+
+// The rules an option's price and shipping follow, which its fields and the service both
+// check. They share one currency, which only the currency's pop-up changes.
+nonisolated enum PartOptionRules {
+    // A currency typed with an amount must be the option's, so typing never relabels an
+    // amount or changes the currency outside its own Undo step.
+    static func conflict(typed: String?, current: String) -> String? {
+        guard let typed, typed != current else { return nil }
+        return "Choose \(typed) in the currency menu first. This option is in \(current)."
+    }
+
+    // Whether no amount has more decimals than the currency takes, so 12.90 does not fit the
+    // yen.
+    static func fits(_ amounts: [Decimal?], in code: String) -> Bool {
+        let digits = CurrencyRules.fractionDigits(of: code)
+        return amounts.compactMap { $0 }.allSatisfy { decimals(of: $0) <= digits }
+    }
+
+    static func tooPrecise(for code: String) -> String {
+        "The price or the shipping has more decimals than \(code) takes. Change it first."
+    }
+
+    private static func decimals(of amount: Decimal) -> Int {
+        let text = NSDecimalNumber(decimal: amount).description(
+            withLocale: Locale(identifier: "en_US_POSIX"))
+        guard let dot = text.firstIndex(of: ".") else { return 0 }
+        return text[text.index(after: dot)...].count
     }
 }
 

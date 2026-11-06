@@ -782,6 +782,11 @@ nonisolated enum LibrarySchema {
             try PartMigration.turnRequirementsIntoParts(
                 in: db, locale: .current, timeZone: .current)
         }
+        migrator.registerMigration("v27-buying-options", foreignKeyChecks: .immediate) { db in
+            // Each saved link becomes a buying option without a price. A part keeps what was
+            // bought for it, and the library keeps the home currency and the rates you set.
+            try BuyingMigration.turnLinksIntoOptions(in: db)
+        }
         return migrator
     }
 }

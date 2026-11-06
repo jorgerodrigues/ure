@@ -145,6 +145,91 @@ struct RestoreStateTests {
         try await library.coordinator.close()
     }
 
+    @Test(.timeLimit(.minutes(1)))
+    func settingsShowTheRestoredLibrarysCurrencyAndRates() async throws {
+        let fixture = ActivationFixture()
+        defer { fixture.files.remove() }
+        let coordinator = LibraryCoordinator(root: fixture.files.root)
+        try await Self.seedMoney(coordinator, package: fixture.package)
+        let library = LibraryState(coordinator: coordinator)
+        await library.open()
+        let state = RestoreState(
+            library: library, configuration: AppConfiguration(libraryRoot: fixture.files.root))
+        // Only Settings is open, so nothing else observes the money settings.
+        let observation = Task { await state.observeSettingsMoney() }
+        try await waitUntil { state.settingsMoney?.settings.homeCurrency == "CHF" }
+        #expect(state.settingsMoney?.rates.rates == ["USD": Self.amount("0.88")])
+        state.stage(from: fixture.package)
+        await state.waitForCompletion()
+        state.requestConfirmation()
+        state.confirm()
+        await state.waitForCompletion()
+        #expect(state.message?.contains("Library restored") == true)
+        let money = try #require(state.settingsMoney)
+        try await waitUntil { money.settings.homeCurrency == "GBP" }
+        #expect(money.rates.rates == ["USD": Self.amount("0.79")])
+        // Settings follows the restored library from now on, so a later change shows too.
+        #expect(await money.setHomeCurrency("SEK").saved)
+        try await waitUntil { money.home == "SEK" }
+        #expect(money.rates.rates.isEmpty)
+        observation.cancel()
+        await observation.value
+        try await library.coordinator.close()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func settingsTakeNoMoneyEditsWhileARestoreReplacesTheLibrary() async throws {
+        let fixture = ActivationFixture()
+        defer { fixture.files.remove() }
+        let coordinator = LibraryCoordinator(root: fixture.files.root)
+        try await Self.seedMoney(coordinator, package: fixture.package)
+        let library = LibraryState(coordinator: coordinator)
+        await library.open()
+        let state = RestoreState(
+            library: library, configuration: AppConfiguration(libraryRoot: fixture.files.root))
+        state.stage(from: fixture.package)
+        await state.waitForCompletion()
+        let replaced = try #require(state.settingsMoney)
+        state.requestConfirmation()
+        state.confirm()
+        // While the restore runs, Settings has no money settings to edit, so no edit goes to the
+        // library that is being replaced.
+        #expect(state.isActivating)
+        #expect(state.settingsMoney == nil)
+        await state.waitForCompletion()
+        // Afterwards Settings edits the restored library, and what you set there is kept.
+        let restored = try #require(state.settingsMoney)
+        #expect(restored !== replaced)
+        #expect(await restored.setHomeCurrency("SEK").saved)
+        #expect(try await library.coordinator.read { try MoneyQueries.homeCurrency($0) } == "SEK")
+        try await library.coordinator.close()
+    }
+
+    // A backup whose home currency is GBP with a USD rate, and a current library that has since
+    // changed to CHF with another USD rate.
+    private static func seedMoney(_ coordinator: LibraryCoordinator, package: URL) async throws {
+        _ = try await coordinator.open()
+        let money = MoneyService(
+            coordinator: coordinator, region: "DKK", locale: Locale(identifier: "en_US_POSIX"))
+        try await money.setHomeCurrency("GBP")
+        _ = try await money.setRate(amount("0.79"), for: "USD", home: "GBP")
+        _ = try await coordinator.exportBackup(to: package, applicationVersion: "fixture")
+        try await money.setHomeCurrency("CHF")
+        _ = try await money.setRate(amount("0.88"), for: "USD", home: "CHF")
+    }
+
+    private static func amount(_ text: String) -> Decimal {
+        Decimal(string: text, locale: Locale(identifier: "en_US_POSIX")) ?? .nan
+    }
+
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        for _ in 0..<500 {
+            if condition() { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        throw RestoreWaitTimeout()
+    }
+
     @Test
     func explicitConfirmationReplacesAllFeatureStateAndClearsOpenReferenceState() async throws {
         let fixture = ActivationFixture()
@@ -204,3 +289,5 @@ struct RestoreStateTests {
         try await library.coordinator.close()
     }
 }
+
+nonisolated private struct RestoreWaitTimeout: Error {}

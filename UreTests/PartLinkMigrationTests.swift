@@ -21,13 +21,14 @@ nonisolated struct PartLinkMigrationTests {
             for (position, url) in [
                 "https://example.org/parts/0012?variant=A", "https://example.net/alternate",
             ].enumerated() {
-                try PartLink(
-                    id: UUID(), partID: ordered.id, position: position, url: url,
-                    createdAt: clock, updatedAt: clock
+                try PartOption(
+                    id: UUID(), partID: ordered.id, position: position,
+                    supplier: BuyingMigration.supplier(for: url), url: url, createdAt: clock,
+                    updatedAt: clock
                 ).insert(db)
             }
         }
-        let links = try await coordinator.read { try PartQueries.links(of: ordered.id, in: $0) }
+        let links = try await coordinator.read { try PartQueries.options(of: ordered.id, in: $0) }
         let snapshot =
             #"{"currency":"DKK","price":"12.3400","supplierName":"Supplier Å時計","supplierStockCode":"STOCK-77","url":"https://example.org/parts/0012?variant=A"}"#
         try await coordinator.mutate { db, _, _ in
@@ -70,7 +71,9 @@ nonisolated struct PartLinkMigrationTests {
         var kept = ordered
         kept.notes = "From the old record\n\nOrder reference: PO-1"
         #expect(try await reopened.read(PartQueries.fetchAll) == [kept])
-        #expect(try await reopened.read { try PartQueries.links(of: ordered.id, in: $0) } == links)
+        // v27 then makes each link an option again, without a price.
+        #expect(
+            try await reopened.read { try PartQueries.options(of: ordered.id, in: $0) } == links)
         // v23 then removes the history. The order reference stays with the part, so only the
         // supplier copy that v18 removed is gone.
         #expect(try await reopened.read { try $0.tableExists("activityEvent") } == false)
@@ -78,16 +81,18 @@ nonisolated struct PartLinkMigrationTests {
             try await RecordNotesService(coordinator: reopened).text(for: .job(job.id)).isEmpty)
         let schema = try await reopened.read { db in
             (
-                links: try db.columns(in: "partLink").map(\.name),
-                linkIndexes: try db.indexes(on: "partLink").map(\.name).filter {
+                links: try db.columns(in: "partOption").map(\.name),
+                linkIndexes: try db.indexes(on: "partOption").map(\.name).filter {
                     !$0.hasPrefix("sqlite_")
                 },
                 parts: try db.columns(in: "part").map(\.name)
             )
         }
         #expect(
-            schema.links == ["id", "partID", "position", "url", "createdAt", "updatedAt"]
-                && schema.linkIndexes == ["partLink_partID_position"])
+            schema.links == [
+                "id", "partID", "position", "supplier", "url", "price", "shipping", "currency",
+                "note", "createdAt", "updatedAt",
+            ] && schema.linkIndexes == ["partOption_partID_position"])
         #expect(!schema.parts.contains("supplierSnapshot"))
         #expect(try await reopened.read { try SearchQueries.fetch("stock-77", in: $0) }.isEmpty)
         #expect(

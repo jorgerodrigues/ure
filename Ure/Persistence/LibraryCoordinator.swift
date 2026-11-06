@@ -425,6 +425,12 @@ actor LibraryCoordinator {
         return ValueObservation.tracking(PartQueries.library).values(in: database)
     }
 
+    // The home currency, the rates you set and the currencies the library's prices use.
+    func moneyValues() throws -> AsyncValueObservation<MoneySettings> {
+        guard let database else { throw LibraryError.notOpen }
+        return ValueObservation.tracking(MoneyQueries.settings).values(in: database)
+    }
+
     func materialValues() throws -> AsyncValueObservation<[MaterialRecord]> {
         guard let database else { throw LibraryError.notOpen }
         return ValueObservation.tracking(MaterialQueries.fetchAll).values(in: database)
