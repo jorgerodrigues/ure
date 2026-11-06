@@ -3,7 +3,7 @@ import Testing
 
 @testable import Ure
 
-// Tests of the five rules of the edit queue's design, with the queue stopping at the first failed
+// Tests of the six rules of the edit queue's design, with the queue stopping at the first failed
 // save. Each rule comes from a group of review findings, listed in
 // docs/planning/edit-queue-verification.md, and each test checks its rule in more than one way.
 struct EditRuleTests {
@@ -477,6 +477,74 @@ struct EditRuleTests {
         #expect(jobs.openOpenJob(of: watch.id, discardingBlank: blank)?.id == open.id)
         await editing.queue.waitUntilIdle()
         #expect(try await stored(blank) == nil)
+        observations.forEach { $0.cancel() }
+        for observation in observations { await observation.value }
+        try await coordinator.close()
+    }
+
+    // Rule 6: while the queue is stopped and a change waits that the screen does not show yet,
+    // such as a deletion or an archive, no record page takes edits. During normal saving there is
+    // no hold, so a field keeps the cursor while a command saves.
+    @Test(.timeLimit(.minutes(1)))
+    func recordPagesTakeNoEditsWhileACommandWaitsBehindAFailure() async throws {
+        let fixture = WatchFixture()
+        defer { fixture.remove() }
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let job = try await JobTaskFixture.job(coordinator)
+        let watchID = try #require(job.watchID)
+        let caliber = try await CaliberService(coordinator: coordinator).create(named: "552")
+        let editing = EditingFixture.make(coordinator, pause: PauseGate().pause)
+        let observations = [
+            Task { await editing.watches.observe() }, Task { await editing.jobs.observe() },
+            Task { await editing.parts.observe() }, Task { await editing.calibers.observe() },
+        ]
+        defer { observations.forEach { $0.cancel() } }
+        try await waitUntil {
+            !editing.watches.isLoading && !editing.jobs.isLoading && !editing.parts.isLoading
+                && !editing.calibers.isLoading
+        }
+        let part = try #require(await editing.parts.add(named: "Mainspring", to: job.id)?.part)
+        func pagesTakeEdits() -> [Bool] {
+            [
+                editing.canWrite(.watch(watchID)), editing.canWrite(.job(job.id)),
+                editing.canWrite(.caliber(caliber.id)), editing.canWrite(part),
+            ]
+        }
+
+        // Normal saving: a command waits behind a slow write, and every page takes edits.
+        let (hold, holding) = try await LibraryHold.start(on: coordinator)
+        editing.jobs.open(job)
+        #expect(editing.jobs.setStage(.waiting) != nil)
+        #expect(editing.queue.isBusy && !editing.queue.isStopped)
+        #expect(pagesTakeEdits() == [true, true, true, true])
+        hold.release()
+        _ = try await holding.value
+        await editing.queue.waitUntilIdle()
+
+        // A failed save with only typing behind it holds nothing, because typing shows.
+        try await JobTaskFixture.failWrites(coordinator, on: "job")
+        let title = try #require(editing.jobs.facts(for: job.id)?.title)
+        title.beginEditing()
+        title.change(to: "Overhaul", undoManager: nil)
+        title.endEditing()
+        #expect(await editing.queue.waitUntilStopped())
+        #expect(pagesTakeEdits() == [true, true, true, true])
+
+        // A deletion and an archive wait behind it, and then no page takes edits.
+        #expect(editing.parts.remove(part.id) != nil)
+        editing.watches.select(watchID)
+        #expect(editing.watches.toggleArchive() != nil)
+        #expect(pagesTakeEdits() == [false, false, false, false] && editing.isSaving)
+
+        try await JobTaskFixture.allowWrites(coordinator, on: "job")
+        editing.tryAgain()
+        #expect(await !editing.queue.waitUntilStopped())
+        #expect(editing.canWrite(.job(job.id)) && editing.canWrite(.caliber(caliber.id)))
+        #expect(editing.parts.part(part.id) == nil)
+        #expect(
+            try await coordinator.read { try JobQueries.fetch(job.id, in: $0) }?.title == "Overhaul"
+        )
         observations.forEach { $0.cancel() }
         for observation in observations { await observation.value }
         try await coordinator.close()

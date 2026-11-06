@@ -142,9 +142,11 @@ final class PartState {
         undoManager: UndoManager? = nil
     ) -> EditTicket? {
         if let spare { return useSpare(spare, on: entry.jobID, undoManager: undoManager) }
+        entry.keepWaiting(typed)
         return add(
             named: typed.name, description: typed.description, to: entry.jobID,
-            undoManager: undoManager)
+            undoManager: undoManager
+        ) { [weak entry] _ in entry?.finishWaiting(typed) }
     }
 
     // ⌘N in Parts makes a spare named "New Part", in hand, selects it, and puts the cursor in
@@ -309,6 +311,16 @@ final class PartEntry {
     }
 
     var spares: [PartRecord] { isEditing ? findSpares(text) : [] }
+
+    // The parts typed on this line that have not saved yet, in the order they were typed. They
+    // show under the line while a failed save holds them.
+    private(set) var waiting: [PartEntryText] = []
+
+    func keepWaiting(_ typed: PartEntryText) { waiting.append(typed) }
+
+    func finishWaiting(_ typed: PartEntryText) {
+        if let index = waiting.firstIndex(of: typed) { waiting.remove(at: index) }
+    }
 
     // No name typed and no spare highlighted, so Return has nothing to add.
     var isBlank: Bool {

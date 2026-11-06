@@ -26,7 +26,10 @@ final class WorkshopEditing {
         self.parts = parts
     }
 
+    // Whether a record page takes edits. While the queue is stopped with a change waiting that
+    // the screen does not show yet, no page does.
     func canWrite(_ owner: LibraryItemOwner) -> Bool {
+        guard !queue.holdsRecords else { return false }
         switch owner {
         case .watch(let id):
             return !watches.isLoading && watches.loadError == nil
@@ -48,7 +51,7 @@ final class WorkshopEditing {
 
     // A part on a job can change while its job can. A spare in the drawer always can.
     func canWrite(_ part: PartRecord) -> Bool {
-        guard !parts.isLoading, parts.loadError == nil else { return false }
+        guard !queue.holdsRecords, !parts.isLoading, parts.loadError == nil else { return false }
         guard let jobID = part.jobID else { return true }
         return canWrite(.job(jobID))
     }

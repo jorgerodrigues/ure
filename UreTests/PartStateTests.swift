@@ -269,12 +269,24 @@ struct PartStateTests {
         #expect(entry.text == "Crys")
         #expect(parts.submit(PartEntryText(name: "Gasket"), spare: nil, on: entry) != nil)
         #expect(await parts.queue.saveEverything() == .stopped)
+        // The names that wait stay under the line while the failure holds them.
+        #expect(entry.waiting.map(\.name) == ["Crystal", "Gasket"])
         try await JobTaskFixture.allowWrites(coordinator, on: "part")
         // Two Try Agains at once add each name once.
         parts.queue.retry()
         parts.queue.retry()
         #expect(await parts.queue.saveEverything() == .saved)
+        #expect(entry.waiting.isEmpty)
         #expect(parts.parts(on: job.id).map(\.name) == ["Mainspring", "Crystal", "Gasket"])
+
+        // A name dropped with Discard leaves the line too.
+        try await JobTaskFixture.failWrites(coordinator, on: "part")
+        #expect(parts.submit(PartEntryText(name: "Hands"), spare: nil, on: entry) != nil)
+        #expect(await parts.queue.waitUntilStopped())
+        #expect(entry.waiting.map(\.name) == ["Hands"])
+        parts.queue.discardUnsaved()
+        #expect(entry.waiting.isEmpty)
+        try await JobTaskFixture.allowWrites(coordinator, on: "part")
         #expect(parts.parts(on: job.id).map(\.description) == [nil, "Sapphire 30.0 mm", nil])
         entry.endEditing()
         observation.cancel()

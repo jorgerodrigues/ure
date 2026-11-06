@@ -194,6 +194,13 @@ final class EditQueue {
     // An edit failed, and the edits after it wait.
     var isStopped: Bool { failure != nil }
 
+    // The queue stopped while a change waits that the screen does not show until it saves, such
+    // as a deletion or an archive. The record pages take no edits then, because an edit made on
+    // them could depend on a change that is not there yet. During normal saving there is no
+    // hold, because nothing can be done in the moment before the change saves, and a field that
+    // has the cursor keeps it.
+    var holdsRecords: Bool { failure != nil && pending.contains(where: \.holdsScreen) }
+
     // A change you made, other than typing, is still saving. Lists and record buttons wait.
     var isBusy: Bool { pending.contains(where: \.holdsScreen) }
 

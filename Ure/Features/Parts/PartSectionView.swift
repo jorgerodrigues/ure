@@ -61,6 +61,7 @@ private struct PartLines: View {
                 if entry.isTyping {
                     PartKeyHints().padding(.top, PartLineLayout.hintsTop)
                 }
+                PartWaitingNames(entry: entry)
             } else if lines.isEmpty {
                 Text("No parts")
                     .foregroundStyle(.secondary)
@@ -372,6 +373,26 @@ private struct PartKeyHint: View {
             Text(meaning)
                 .font(.system(size: ChecklistLayout.meaningSize))
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+// The parts typed on the line that have not saved, while a failed save holds them. The failure
+// bar has Try Again and Discard.
+private struct PartWaitingNames: View {
+    @Environment(WorkshopEditing.self) private var editing
+    let entry: PartEntry
+
+    var body: some View {
+        if editing.failure != nil, !entry.waiting.isEmpty {
+            Label {
+                Text("Not saved yet: \(entry.waiting.map(\.name).joined(separator: ", "))")
+            } icon: {
+                Image(systemName: "exclamationmark.circle.fill")
+            }
+            .font(.system(size: NotesLayout.failureSize))
+            .foregroundStyle(.red)
+            .padding(.top, PartLineLayout.messageTop)
         }
     }
 }
