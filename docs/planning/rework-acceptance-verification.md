@@ -138,7 +138,21 @@ Codex ran with its default model through `codex exec review --ignore-user-config
 
 1. Round one, on the fixes before the records, found nothing.
 2. Round two found two problems that normal use hits, and both are fixed. Material titles are renamed in place, but they were not stops, so Tab passed them; they are now stops, and Tab in one moves on in reading order. The test is `ReadingOrderTests.aMaterialTitleIsAStopAndTabInItMovesOn`, and the window check's Tab now goes through each title on the watch page. A caliber's watch detail used `.fixedSize()`, which can push a row past a narrow page; it now takes the room it needs first and still truncates when the pane runs out.
-3. Round three ran on the final code. Its result is in the PR.
+3. Round three ran on the final code and found nothing. No finding was declined, and none was a corner case.
+
+## Executed checks
+
+| Check | Result |
+| --- | --- |
+| `make check` | Passed formatting, the unsigned Debug build and 346 unit tests in 60 suites |
+| `make release` | Passed |
+| `make recovery` | Passed all 58 scenarios |
+| `make performance` and a second run on its fixture | Passed, with the numbers above |
+| `ReadingOrderTests` and `LongValueTests` | Passed, 7 tests |
+| Unsigned `build-for-testing` with the native UI tests | Compiled; the tests did not run |
+| Local window check, fresh library | Passed, with the renders and field readings in the test-assets folder |
+| Local window check, upgraded library | Passed |
+| Debug app on a copy of the W031 library | Upgraded it and started; quit by its PID |
 
 ## Not verified
 

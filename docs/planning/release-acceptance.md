@@ -8,7 +8,7 @@ The base was `072e09c` on `w002-recoverable-library`, after W033 to W041 and the
 
 | Check | Result |
 | --- | --- |
-| `make check` | Passed formatting, the unsigned Debug build and every unit test; the final count is in the PR |
+| `make check` | Passed formatting, the unsigned Debug build and 346 unit tests in 60 suites |
 | `make release` | Passed on the final commit |
 | `make recovery` | Passed all 58 scenarios |
 | `make performance` | Every list as fast as W031 or faster; the "ÜHREN" search about 1.5 ms slower, near 22 ms |
