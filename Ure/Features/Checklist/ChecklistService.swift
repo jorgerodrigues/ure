@@ -87,7 +87,8 @@ nonisolated enum ChecklistOperation: Equatable, Sendable {
     case delete(UUID)
 
     // The changes that make one list of saved steps another.
-    static func changes(from old: [ChecklistStep], to new: [ChecklistStep]) -> [ChecklistOperation] {
+    static func changes(from old: [ChecklistStep], to new: [ChecklistStep]) -> [ChecklistOperation]
+    {
         let newIDs = Set(new.map(\.id))
         let oldByID = Dictionary(uniqueKeysWithValues: old.map { ($0.id, $0) })
         var operations = old.filter { !newIDs.contains($0.id) }.map { delete($0.id) }
