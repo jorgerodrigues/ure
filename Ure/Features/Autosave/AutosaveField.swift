@@ -106,7 +106,7 @@ final class AutosaveField {
             isTyping = true
             if unsavedChange == nil {
                 let before = text
-                unsavedChange = queue.beginTyping(
+                unsavedChange = queue.registerStep(
                     actionName, in: scope, undoManager: undoManager,
                     owner: UndoOwner(
                         undo: { [weak self] undone, back in

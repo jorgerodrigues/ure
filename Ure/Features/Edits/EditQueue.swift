@@ -227,37 +227,33 @@ final class EditQueue {
     // Submits an edit you made now, after the typing on screen. With an undo manager and an
     // action name, ⌘Z undoes it, registered now. A precondition runs when the edit's turn comes;
     // a message from it refuses the edit. A failure shows in the scope unless the edit is one
-    // you did not ask for, such as removing a job left blank, or its submitter shows it. An
-    // edit holds the screen while it saves, unless it is as quick and local as a tick. When the
-    // edit changes the screen before it saves, as a tick does, its Undo and Redo go to the owner
-    // first.
+    // you did not ask for, such as removing a job left blank, or its submitter shows it. The
+    // edit holds the screen while it saves.
     @discardableResult
     func submit(
         _ edit: LibraryEdit, in scope: EditScope, undo actionName: String? = nil,
-        undoManager: UndoManager? = nil, holdsScreen: Bool = true, reportsFailure: Bool = true,
-        requires: EditCheck? = nil, then: ((EditResult) -> Void)? = nil,
-        owner: UndoOwner? = nil
+        undoManager: UndoManager? = nil, reportsFailure: Bool = true,
+        requires: EditCheck? = nil, then: ((EditResult) -> Void)? = nil
     ) -> EditTicket {
         flushTyping()
         var change: EditChange?
         if let actionName, let undoManager {
             let step = EditUndoStep(
-                change: makeChange(), actionName: actionName, scope: scope,
-                holdsScreen: holdsScreen)
+                change: makeChange(), actionName: actionName, scope: scope, holdsScreen: true)
             register(step, on: undoManager)
             change = step.change
-            owners[step.change] = owner
         }
         if reportsFailure { failures[scope] = nil }
         return enqueue(
             QueuedEdit(
-                work: .edit(edit), change: change, scope: scope, holdsScreen: holdsScreen,
+                work: .edit(edit), change: change, scope: scope, holdsScreen: true,
                 isUndo: false, reportsFailure: reportsFailure, requires: requires, then: then))
     }
 
-    // Starts a burst of typing: one Undo step, registered now, whose edit comes once the typing
-    // pauses or focus leaves. Its Undo and Redo go to the owner first.
-    func beginTyping(
+    // Registers one Undo step, now, for a change that its owner shows at once and saves itself,
+    // such as a burst of typing, whose edit comes once the typing pauses, or a checklist's tick.
+    // Its Undo and Redo go to the owner first.
+    func registerStep(
         _ actionName: String, in scope: EditScope, undoManager: UndoManager?,
         owner: UndoOwner
     ) -> EditChange? {

@@ -13,15 +13,16 @@ struct StepFocus: Equatable {
     let cursor: StepCursor
 }
 
-// One job's checklist as you type it. The steps on screen are the ones you see, and they save
-// on their own, as changes of the steps that changed, on the library's queue: a change of text
-// half a second after typing stops and when you leave the step, and a tick, a heading, a move
-// or a removal at once. Each burst of typing in a step and each other change is one Undo step,
-// which the queue undoes from the stored steps. The stored steps show with the changes made here
-// that have not saved on top, so an Undo and a change made while it waits keep each other. A
-// change that did not save stays on screen until Try Again saves it, under its own Undo step, or
-// Undo takes back just that change. A step without text stays on screen while you type in it and
-// is never saved. When you leave it, it goes.
+// One job's checklist as you type it. The steps on screen are what you see, and the screen is
+// what counts: each save sends what the screen shows that the library will not hold, as changes
+// of the steps and properties that differ, on the library's queue. Typing saves half a second
+// after it stops and when you leave the step, and a tick, a heading, a move or a removal saves
+// at once. A save that fails leaves the screen as it is, with Try Again, and the next save sends
+// it too, as the whole list did before the queue. Each burst of typing in a step and each other
+// change is one Undo step, which keeps what the change did on screen. Undo puts back the steps
+// as they showed before it, and Redo as they showed after it, and either then saves like any
+// change. A step without text stays on screen while you type in it and is never saved. When you
+// leave it, it goes.
 //
 // The row after the last step adds a step. Typing in it makes a step there, and a new row to
 // add one comes after it.
@@ -37,9 +38,8 @@ final class ChecklistEditor {
     private(set) var savedSteps: [ChecklistStep]
     // An edit of this checklist is still waiting in the queue.
     private(set) var isSaving = false
+    // Why the latest save failed, until the next save goes or nothing is left unsaved.
     private var ownError: String?
-    // Changes that did not save, in the order they were made.
-    private var failed: [ChecklistSubmission] = []
     // The step whose text has the cursor.
     private(set) var editingID: UUID?
     // The row after the last step that adds a step.
@@ -49,25 +49,17 @@ final class ChecklistEditor {
     @ObservationIgnored private let queue: EditQueue
     @ObservationIgnored private let pause: (Duration) async throws -> Void
     @ObservationIgnored private var scheduledSave: Task<Void, Never>?
-    // The step that the burst of typing going on is in. Its Undo is already registered.
+    // The step that the burst of typing going on is in, its Undo step, and the steps as they
+    // showed when the typing began.
     @ObservationIgnored private var typingID: UUID?
-    // That step as it showed when the typing began. A step typed in the row that adds one did
-    // not show yet.
-    @ObservationIgnored private var typingStart: ChecklistStep?
-    // Typing that saved as nothing, such as a space at the end, under its Undo step: the step
-    // it was in and how that step showed before.
-    @ObservationIgnored private var typedAsNothing: [EditChange: TypedStep] = [:]
-    // The Undo step that the steps on screen belong to while they have not saved.
-    @ObservationIgnored private var unsavedChange: EditChange?
+    @ObservationIgnored private var typingChange: EditChange?
+    @ObservationIgnored private var typingBefore: [ChecklistStep] = []
+    // What each of this checklist's Undo and Redo steps did on screen.
+    @ObservationIgnored private var screenChanges: [EditChange: ScreenChange] = [:]
     // What the library holds, as far as this checklist knows.
     @ObservationIgnored private var storedSteps: [ChecklistStep]
-    // This checklist's changes still on their way to the library, in the order they went.
+    // This checklist's saves still on their way to the library, in the order they went.
     @ObservationIgnored private var inFlight: [ChecklistSubmission] = []
-    // What each of this checklist's Undo and Redo steps does to the steps.
-    @ObservationIgnored private var undoOperations: [EditChange: [ChecklistOperation]] = [:]
-    // Changes taken back by Undo while they were still on their way. If one then fails, it is
-    // gone already.
-    @ObservationIgnored private var undoneChanges: Set<EditChange> = []
     @ObservationIgnored private var lastNumber = 0
     @ObservationIgnored private var textBeforeEditing: String?
     @ObservationIgnored private var isTracked = false
@@ -88,7 +80,7 @@ final class ChecklistEditor {
     var hasUnsavedChanges: Bool { hasUnsavedSteps || isSaving }
 
     // Steps on screen that the library does not hold and no edit on its way will give it.
-    private var hasUnsavedSteps: Bool { !failed.isEmpty || !unsubmitted().isEmpty }
+    private var hasUnsavedSteps: Bool { !unsubmitted().isEmpty }
     // A save of this checklist failed, here or in an Undo of it.
     var saveError: String? { ownError ?? queue.failure(in: .checklist(jobID)) }
 
@@ -110,8 +102,8 @@ final class ChecklistEditor {
     // MARK: Typing
 
     func beginEditing(_ id: UUID) {
+        if typingID != nil { submitTyping() }
         editingID = id
-        typingID = nil
         textBeforeEditing = step(id)?.text ?? ""
         editingChanged(id)
     }
@@ -157,10 +149,10 @@ final class ChecklistEditor {
         guard let textBeforeEditing,
             steps.contains(where: { $0.id == id && $0.text != textBeforeEditing })
         else { return }
-        beginChange()
+        let before = beginChange()
         guard let index = steps.firstIndex(where: { $0.id == id }) else { return }
         steps[index].text = textBeforeEditing
-        commit("Typing", undoManager: undoManager)
+        commit("Typing", from: before, undoManager: undoManager)
     }
 
     // MARK: Keys
@@ -233,36 +225,36 @@ final class ChecklistEditor {
 
     func toggleTick(_ id: UUID, undoManager: UndoManager?) {
         guard canTick(id) else { return }
-        beginChange()
+        let before = beginChange()
         guard let index = steps.firstIndex(where: { $0.id == id }) else { return }
         let actionName = steps[index].isTicked ? "Untick Step" : "Tick Step"
         steps[index].isTicked.toggle()
-        commit(actionName, undoManager: undoManager)
+        commit(actionName, from: before, undoManager: undoManager)
     }
 
     func toggleHeading(_ id: UUID, undoManager: UndoManager?) {
         guard canChange(id) else { return }
-        beginChange()
+        let before = beginChange()
         guard let index = steps.firstIndex(where: { $0.id == id }) else { return }
         let actionName = steps[index].isHeading ? "Make Step" : "Make Heading"
         steps[index].isHeading.toggle()
         steps[index].isTicked = false
-        commit(actionName, undoManager: undoManager)
+        commit(actionName, from: before, undoManager: undoManager)
     }
 
     // Moves a step one place up or down. A step you are typing in keeps the cursor.
     func move(_ id: UUID, by offset: Int, undoManager: UndoManager?) {
         guard canMove(id, by: offset) else { return }
-        beginChange()
+        let before = beginChange()
         guard let index = steps.firstIndex(where: { $0.id == id }) else { return }
         steps.swapAt(index, index + offset)
         if editingID == id { focusRequest = StepFocus(id: id, cursor: .end) }
-        commit("Move Step", undoManager: undoManager)
+        commit("Move Step", from: before, undoManager: undoManager)
     }
 
     func delete(_ id: UUID, undoManager: UndoManager?) {
         guard let step = step(id) else { return }
-        beginChange()
+        let before = beginChange()
         guard let index = steps.firstIndex(where: { $0.id == id }) else { return }
         if editingID == id, index > 0 {
             focusRequest = StepFocus(id: steps[index - 1].id, cursor: .end)
@@ -271,7 +263,7 @@ final class ChecklistEditor {
         if step.isBlank {
             submitTyping()
         } else {
-            commit("Delete Step", undoManager: undoManager)
+            commit("Delete Step", from: before, undoManager: undoManager)
         }
     }
 
@@ -279,73 +271,21 @@ final class ChecklistEditor {
 
     // Shows the stored steps once this checklist's own changes have saved. The library's
     // reports can come from before a change, so they wait while a step has the cursor. What the
-    // queue reports after an edit, Undo included, shows at once.
+    // queue reports after an edit, Undo included, shows at once. What the screen shows that the
+    // library will not hold stays on top.
     func refresh(_ stored: [ChecklistStep], fromQueue: Bool = false) {
         guard fromQueue || (!isSaving && editingID == nil) else { return }
-        let local = ChecklistOperation.changes(from: base(), to: steps.filter { !$0.isBlank })
+        let local = ChecklistOperation.changes(from: savedSteps, to: steps.filter { !$0.isBlank })
         storedSteps = Self.kept(stored)
         savedSteps = expectedSteps()
-        show(ChecklistOperation.applying(local, to: base()).steps)
+        show(ChecklistOperation.applying(local, to: savedSteps).steps)
     }
 
-    // Try Again: the typing on screen goes first, on top of the changes that did not save. Then
-    // an Undo of the checklist that failed runs once more, and the changes that did not save go
-    // again, each under its own Undo step, with only what the screen still shows of them. A
-    // later change to the same property took over the rest.
+    // Try Again, and saving everything before quitting: an Undo of the checklist that failed
+    // runs once more, and then the screen saves, typing included.
     func saveNow() {
-        submitTyping()
         queue.retryUndo(in: scope)
-        let retrying = failed
-        failed = []
-        var resubmitted = false
-        for entry in retrying {
-            let operations = stillShown(entry.operations)
-            guard !operations.isEmpty else { continue }
-            resubmitted = true
-            let retried = ChecklistSubmission(
-                number: entry.number, change: entry.change, operations: operations,
-                undo: entry.undo)
-            inFlight.append(retried)
-            queue.submitTyping(.checklist(jobID, operations), in: scope, as: entry.change) {
-                [weak self] result in self?.finished(entry.number, result: result)
-            }
-        }
-        // Nothing that failed is still on screen, so its error goes too.
-        if !resubmitted { ownError = nil }
-        isSaving = !inFlight.isEmpty
-        savedSteps = expectedSteps()
-        track()
-    }
-
-    // The part of a change that did not save that the screen still shows.
-    private func stillShown(_ operations: [ChecklistOperation]) -> [ChecklistOperation] {
-        let shown = Self.kept(steps)
-        return operations.compactMap { operation in
-            let index = shown.firstIndex { $0.id == operation.stepID }
-            let previous = index.flatMap { $0 > 0 ? shown[$0 - 1].id : nil }
-            switch operation {
-            case .insert:
-                return index.map { .insert(shown[$0], after: previous) }
-            case .move(_, let after):
-                guard index != nil, previous == after else { return nil }
-                return operation
-            case .update(var update):
-                guard let index else { return nil }
-                let step = shown[index]
-                if update.text != nil, update.text != step.text { update.text = nil }
-                if update.isHeading != nil, update.isHeading != step.isHeading {
-                    update.isHeading = nil
-                }
-                if update.isTicked != nil, update.isTicked != step.isTicked {
-                    update.isTicked = nil
-                }
-                guard update.text != nil || update.isHeading != nil || update.isTicked != nil
-                else { return nil }
-                return .update(update)
-            case .delete:
-                return index == nil ? operation : nil
-            }
-        }
+        submitTyping()
     }
 
     // The steps as they are saved: those with text, without the spaces around it.
@@ -353,27 +293,24 @@ final class ChecklistEditor {
         steps.filter { !$0.isBlank }.map(\.saved)
     }
 
-    // Submits the typing on screen, as the typing pause does, when you leave a step, and before
-    // any other edit.
+    // Ends the burst of typing, as the typing pause does, when you leave a step, and before any
+    // other edit, and saves the screen.
     private func submitTyping() {
-        scheduledSave?.cancel()
-        scheduledSave = nil
-        let typed = typingID
-        typingID = nil
-        defer { track() }
-        let base = base()
-        let operations = ChecklistOperation.changes(from: base, to: Self.kept(steps))
-        guard !operations.isEmpty else {
-            // Undo can still take typing that saves as nothing off the screen.
-            if let unsavedChange, let typed {
-                typedAsNothing[unsavedChange] = TypedStep(id: typed, start: typingStart)
-            }
-            settle()
-            return
-        }
-        let change = unsavedChange
-        unsavedChange = nil
-        let number = send(operations, from: base, as: change)
+        save(as: endTyping())
+        track()
+    }
+
+    // Sends what the screen shows that the library will not hold, under an Undo step's number.
+    // With nothing to send, nothing is left unsaved, so an earlier failure is gone too.
+    private func save(as change: EditChange?) {
+        ownError = nil
+        let operations = unsubmitted()
+        guard !operations.isEmpty else { return }
+        lastNumber += 1
+        let number = lastNumber
+        inFlight.append(ChecklistSubmission(number: number, operations: operations))
+        isSaving = true
+        savedSteps = expectedSteps()
         queue.submitTyping(.checklist(jobID, operations), in: scope, as: change) {
             [weak self] result in self?.finished(number, result: result)
         }
@@ -384,14 +321,9 @@ final class ChecklistEditor {
         ChecklistOperation.applying(inFlight.flatMap(\.operations), to: storedSteps).steps
     }
 
-    // The steps on screen without the typing that has not gone yet: what the library will hold,
-    // with the changes that did not save on top.
-    private func base() -> [ChecklistStep] {
-        ChecklistOperation.applying(failed.flatMap(\.operations), to: savedSteps).steps
-    }
-
+    // What the screen shows that the library will not hold.
     private func unsubmitted() -> [ChecklistOperation] {
-        ChecklistOperation.changes(from: base(), to: Self.kept(steps))
+        ChecklistOperation.changes(from: savedSteps, to: Self.kept(steps))
     }
 
     // Shows steps with text, and keeps each empty step on screen after the step before it.
@@ -407,41 +339,13 @@ final class ChecklistEditor {
         steps = shown
     }
 
-    // Records a change on its way. What takes it back comes from the steps it changes, or is
-    // given, as for an Undo.
-    private func send(
-        _ operations: [ChecklistOperation], from base: [ChecklistStep], as change: EditChange?,
-        undo given: [ChecklistOperation]? = nil
-    ) -> Int {
-        lastNumber += 1
-        let undo = given ?? ChecklistOperation.applying(operations, to: base).inverse
-        inFlight.append(
-            ChecklistSubmission(
-                number: lastNumber, change: change, operations: operations, undo: undo))
-        if let change { undoOperations[change] = undo }
-        isSaving = true
-        savedSteps = expectedSteps()
-        return lastNumber
-    }
-
-    // A change that did not save stays on screen as not saved, also when a later change saved.
+    // A save that failed leaves the screen as it is. What it did not save stays unsaved, with
+    // Try Again, and the next save sends it too.
     private func finished(_ number: Int, result: EditResult) {
-        guard let index = inFlight.firstIndex(where: { $0.number == number }) else { return }
-        let entry = inFlight.remove(at: index)
+        inFlight.removeAll { $0.number == number }
         isSaving = !inFlight.isEmpty
-        if case .failed(let error) = result {
-            if let change = entry.change, undoneChanges.remove(change) != nil {
-                // Undo took it back already.
-            } else {
-                ownError = error.localizedDescription
-                failed.append(entry)
-                failed.sort { $0.number < $1.number }
-            }
-        } else if let change = entry.change {
-            undoneChanges.remove(change)
-        }
         savedSteps = expectedSteps()
-        if failed.isEmpty { ownError = nil }
+        if let error = result.error { ownError = error.localizedDescription }
         track()
     }
 
@@ -455,36 +359,26 @@ final class ChecklistEditor {
         }
     }
 
-    private func settle() { unsavedChange = nil }
-
     // MARK: Changes other than typing
 
     // Typing on screen, here and elsewhere, submits before a change, so the change and its
-    // Undo come after it.
-    private func beginChange() {
-        scheduledSave?.cancel()
-        scheduledSave = nil
+    // Undo come after it. The steps as they show then are what the change starts from.
+    private func beginChange() -> [ChecklistStep] {
         if typingID != nil { submitTyping() }
         queue.flushTyping()
+        return steps
     }
 
-    // Submits the changed steps as one change with its own Undo step, registered now.
-    private func commit(_ actionName: String, undoManager: UndoManager?) {
-        let base = base()
-        let operations = ChecklistOperation.changes(from: base, to: Self.kept(steps))
-        guard !operations.isEmpty else { return }
-        let number = send(operations, from: base, as: nil)
-        let ticket = queue.submit(
-            .checklist(jobID, operations), in: scope, undo: actionName,
-            undoManager: undoManager, holdsScreen: false, reportsFailure: false,
-            then: { [weak self] result in self?.finished(number, result: result) },
-            owner: undoOwner)
-        if let index = inFlight.firstIndex(where: { $0.number == number }),
-            let change = ticket.change
-        {
-            inFlight[index].change = change
-            undoOperations[change] = inFlight[index].undo
-        }
+    // Registers the change on screen as one Undo step, now, and saves the screen.
+    private func commit(
+        _ actionName: String, from before: [ChecklistStep], undoManager: UndoManager?
+    ) {
+        let forward = ChecklistOperation.changes(from: before, to: steps)
+        guard !forward.isEmpty else { return }
+        let change = queue.registerStep(
+            actionName, in: scope, undoManager: undoManager, owner: undoOwner)
+        if let change { screenChanges[change] = ScreenChange(forward, from: before) }
+        save(as: change)
         track()
     }
 
@@ -496,86 +390,45 @@ final class ChecklistEditor {
         guard typingID != id else { return }
         if typingID != nil { submitTyping() }
         typingID = id
-        typingStart = step(id)
-        guard unsavedChange == nil else { return }
-        unsavedChange = queue.beginTyping(
+        typingBefore = steps
+        typingChange = queue.registerStep(
             "Typing", in: scope, undoManager: undoManager, owner: undoOwner)
+    }
+
+    // Ends the burst of typing going on. Its Undo step keeps what the typing did to its step on
+    // screen, spaces and all.
+    private func endTyping() -> EditChange? {
+        scheduledSave?.cancel()
+        scheduledSave = nil
+        guard let id = typingID else { return nil }
+        let change = typingChange
+        typingID = nil
+        typingChange = nil
+        if let change {
+            let forward = ChecklistOperation.changes(from: typingBefore, to: steps)
+                .filter { $0.stepID == id }
+            screenChanges[change] = ScreenChange(forward, from: typingBefore)
+        }
+        typingBefore = []
+        return change
     }
 
     private var undoOwner: UndoOwner {
         UndoOwner(
             undo: { [weak self] undone, back in self?.undo(undone, back: back) ?? .notMine },
-            forget: { [weak self] change in
-                self?.undoOperations[change] = nil
-                self?.typedAsNothing[change] = nil
-            })
+            forget: { [weak self] change in self?.screenChanges[change] = nil })
     }
 
-    // Undo of typing that has not gone yet, or that saved as nothing, puts back the step as it
-    // showed when the typing began, spaces and all, or takes away a step typed in the row that
-    // adds one. Nothing saves. Redo brings back the typing as it saves, so there is no Redo for
-    // typing that saves as nothing, such as a space at the end.
-    private func undoTyping(in id: UUID, from start: ChecklistStep?, back: EditChange)
-        -> UndoHandling
-    {
-        scheduledSave?.cancel()
-        scheduledSave = nil
-        typingID = nil
-        unsavedChange = nil
-        typingStart = nil
-        let typed = Self.kept(steps)
-        if let start, let index = steps.firstIndex(where: { $0.id == id }) {
-            steps[index] = start
-        } else {
-            steps.removeAll { $0.id == id }
-        }
-        let redo = ChecklistOperation.changes(from: Self.kept(steps), to: typed)
-        if !redo.isEmpty { undoOperations[back] = redo }
-        track()
-        return .done(canRedo: !redo.isEmpty)
-    }
-
-    // Undo or Redo of one of this checklist's changes takes it back on screen at once, step by
-    // step and property by property, and saves that after everything before it, under the way
-    // back's number. A change that did not save, such as a tick that failed, goes from the
-    // screen and saves only what the library then needs, such as when a later Undo saved the
-    // failed tick after all. Redo puts the change back and saves it then.
+    // Undo or Redo of one of this checklist's changes puts back the steps on screen at once, as
+    // they showed before the change, step by step and property by property, also when the change
+    // never saved. Then the screen saves after everything before it, under the way back's
+    // number. Redo puts back what the change did.
     private func undo(_ change: EditChange, back: EditChange) -> UndoHandling {
-        if unsavedChange == change, let typingID {
-            return undoTyping(in: typingID, from: typingStart, back: back)
-        }
-        if let typed = typedAsNothing.removeValue(forKey: change) {
-            return undoTyping(in: typed.id, from: typed.start, back: back)
-        }
-        let operations: [ChecklistOperation]
-        var saves = true
-        if let index = failed.firstIndex(where: { $0.change == change }) {
-            operations = failed.remove(at: index).undo
-            undoOperations[change] = nil
-            saves = false
-        } else if let stored = undoOperations.removeValue(forKey: change) {
-            operations = stored
-            if inFlight.contains(where: { $0.change == change }) { undoneChanges.insert(change) }
-        } else {
-            return .notMine
-        }
-        let base = base()
-        let undone = ChecklistOperation.applying(operations, to: steps.filter { !$0.isBlank })
-        show(undone.steps)
-        var saved = operations
-        if !saves {
-            let ids = Set(operations.map(\.stepID))
-            saved = unsubmitted().filter { ids.contains($0.stepID) }
-        }
-        if saved.isEmpty {
-            undoOperations[back] = undone.inverse
-        } else {
-            let number = send(saved, from: base, as: back, undo: undone.inverse)
-            queue.submitTyping(.checklist(jobID, saved), in: scope, as: back) {
-                [weak self] result in self?.finished(number, result: result)
-            }
-        }
-        if failed.isEmpty { ownError = nil }
+        if typingChange == change { _ = endTyping() }
+        guard let recorded = screenChanges.removeValue(forKey: change) else { return .notMine }
+        steps = ChecklistOperation.applying(recorded.inverse, to: steps).steps
+        screenChanges[back] = recorded.reversed
+        save(as: back)
         track()
         return .done(canRedo: true)
     }
@@ -595,7 +448,7 @@ final class ChecklistEditor {
             TypingSource(
                 began: { [weak self] in
                     guard let self, typingID != nil else { return nil }
-                    return unsavedChange
+                    return typingChange
                 },
                 submit: { [weak self] in
                     guard let self, typingID != nil else { return }
@@ -606,17 +459,27 @@ final class ChecklistEditor {
     }
 }
 
-// A step that typing changed only on screen, and how it showed before.
-private struct TypedStep {
-    let id: UUID
-    let start: ChecklistStep?
+// What one change did to the steps on screen, and what takes it back.
+private struct ScreenChange {
+    let forward: [ChecklistOperation]
+    let inverse: [ChecklistOperation]
+
+    init(_ forward: [ChecklistOperation], from before: [ChecklistStep]) {
+        self.forward = forward
+        inverse = ChecklistOperation.applying(forward, to: before).inverse
+    }
+
+    private init(forward: [ChecklistOperation], inverse: [ChecklistOperation]) {
+        self.forward = forward
+        self.inverse = inverse
+    }
+
+    // The change that Redo makes after Undo.
+    var reversed: ScreenChange { ScreenChange(forward: inverse, inverse: forward) }
 }
 
-// One change of a checklist on its way to the library: its Undo step, its operations, and the
-// operations that take it back from the screen if it does not save.
+// One save of a checklist on its way to the library.
 private struct ChecklistSubmission {
     let number: Int
-    var change: EditChange?
     let operations: [ChecklistOperation]
-    let undo: [ChecklistOperation]
 }

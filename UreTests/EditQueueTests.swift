@@ -382,13 +382,18 @@ struct EditQueueTests {
         undo.endUndoGrouping()
         await library.queue.waitUntilIdle()
 
-        // A space at the end saves as nothing, but ⌘Z still takes it off the screen.
+        // A space at the end saves as nothing, but ⌘Z still takes it off the screen, and ⇧⌘Z
+        // puts it back.
         editor.beginEditing(step.id)
         undo.beginUndoGrouping()
         editor.change(step.id, to: "Clean ", undoManager: undo)
         undo.endUndoGrouping()
         undo.undo()
-        #expect(editor.step(step.id)?.text == "Clean" && !undo.canRedo)
+        #expect(editor.step(step.id)?.text == "Clean" && undo.canRedo)
+        undo.redo()
+        #expect(editor.step(step.id)?.text == "Clean ")
+        undo.undo()
+        #expect(editor.step(step.id)?.text == "Clean")
         // The next ⌘Z reaches the tick before the typing.
         undo.undo()
         await library.queue.waitUntilIdle()
@@ -427,7 +432,7 @@ struct EditQueueTests {
         try await Task.sleep(for: .milliseconds(100))
         await library.queue.waitUntilIdle()
         undo.undo()
-        #expect(editor.step(step.id)?.text == "Clean" && !undo.canRedo)
+        #expect(editor.step(step.id)?.text == "Clean" && undo.canRedo)
         editor.endEditing(step.id)
 
         let add = editor.addID
