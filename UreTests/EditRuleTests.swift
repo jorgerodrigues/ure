@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import Testing
 
 @testable import Ure
@@ -340,6 +341,14 @@ struct EditRuleTests {
         editor.beginEditing(step)
         grouped(undo) { editor.change(step, to: "Clean all parts", undoManager: undo) }
         #expect(await editing.saveAllFields() == .stopped)
+        // The bar says what went wrong in words, never in SQL. The help tag keeps the details.
+        #expect(editing.failure == "The library couldn’t be written to.")
+        #expect(editing.queue.failureDetails?.contains("fixture disk failure") == true)
+        #expect(
+            EditQueue.reason(for: DatabaseError(resultCode: .SQLITE_FULL)) == "The disk is full.")
+        #expect(
+            EditQueue.reason(for: ArchiveError.archived)
+                == ArchiveError.archived.localizedDescription)
         grouped(undo) { title.change(to: "Failed title, then more", undoManager: undo) }
         #expect(editing.hasUnsavedFields && undo.canUndo)
 

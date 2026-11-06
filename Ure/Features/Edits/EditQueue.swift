@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import Observation
 
 // Where an edit's failure shows, and which part of the app waits while the edit saves.
@@ -151,8 +152,11 @@ struct TypingSource {
 @Observable
 final class EditQueue {
     let coordinator: LibraryCoordinator
-    // Why the queue stopped: the error of the edit that failed. Nil while edits run.
+    // Why the queue stopped, in one plain sentence, such as "The disk is full." Nil while edits
+    // run.
     private(set) var failure: String?
+    // The failed edit's error as the library gave it, for the help tag of the failure bar.
+    private(set) var failureDetails: String?
     // A rule that a change broke when you made it, such as a second open job for a watch, in
     // the scope where it shows, until the next change there.
     private(set) var refusals: [EditScope: String] = [:]
@@ -256,6 +260,7 @@ final class EditQueue {
     func retry() {
         guard failure != nil else { return }
         failure = nil
+        failureDetails = nil
         startWorker()
     }
 
@@ -268,6 +273,7 @@ final class EditQueue {
         let dropped = pending
         pending = []
         failure = nil
+        failureDetails = nil
         for source in typing.values { source.discard() }
         let result = EditResult.failed(EditDiscarded())
         for item in dropped {
@@ -394,6 +400,17 @@ final class EditQueue {
         }
         if failure != nil { return .stopped }
         return hasUnsavedTyping ? .textNotValid : .saved
+    }
+
+    // One plain sentence for why an edit failed. A database error never shows its SQL: it says
+    // what went wrong in words. A rule of the app already says it in words.
+    nonisolated static func reason(for error: any Error) -> String {
+        guard let error = error as? DatabaseError else { return error.localizedDescription }
+        switch error.resultCode {
+        case .SQLITE_FULL: return "The disk is full."
+        case .SQLITE_BUSY, .SQLITE_LOCKED: return "The library was busy."
+        default: return "The library couldn’t be written to."
+        }
     }
 
     private func resumeIdleWaiters() {
@@ -545,7 +562,8 @@ final class EditQueue {
         while failure == nil, let item = pending.first {
             let result = await run(item)
             if let error = result.error, !(error is CancellationError) {
-                failure = error.localizedDescription
+                failure = Self.reason(for: error)
+                failureDetails = String(describing: error)
                 break
             }
             pending.removeFirst()

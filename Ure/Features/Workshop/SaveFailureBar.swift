@@ -10,17 +10,13 @@ struct SaveFailureBar: View {
     var body: some View {
         if let failure = editing.failure {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Label {
-                    Text(
-                        "Your changes are not saving. They are still on screen and will save in order once Try Again works. \(failure)"
-                    )
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                    .accessibilityHidden(true)
+                message(failure)
+                    .font(.system(size: NotesLayout.failureSize))
                     .lineLimit(SaveFailureLayout.lines)
-                    .help(failure)
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                }
-                .font(.system(size: NotesLayout.failureSize))
-                .foregroundStyle(.red)
+                    .help(editing.queue.failureDetails ?? failure)
                 Spacer(minLength: 8)
                 Button("Try Again", action: editing.tryAgain)
                     .controlSize(.small)
@@ -47,6 +43,16 @@ struct SaveFailureBar: View {
     }
 
     private func askToDiscard() { asksToDiscard = true }
+
+    // The first sentence in the label colour and semibold, then the rest and the reason in gray.
+    private func message(_ reason: String) -> Text {
+        let lead = Text("Your changes are not saving.").fontWeight(.semibold)
+        let rest = Text(
+            "They are still on screen and will save in order once Try Again works. \(reason)"
+        )
+        .foregroundStyle(.secondary)
+        return Text("\(lead) \(rest)")
+    }
 }
 
 enum SaveFailureLayout {
