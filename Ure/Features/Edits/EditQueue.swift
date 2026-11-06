@@ -375,14 +375,10 @@ final class EditQueue {
 
     // MARK: Undo
 
-    // Forgets every Undo step, such as before a restore replaces the library.
+    // Forgets every Undo step, such as before a restore replaces the library. Every Undo step of
+    // the window comes from the queue, so the whole list goes, with the groups the steps were in.
     func discardUndo() {
-        for undoManager in undoManagers.allObjects {
-            undoManager.removeAllActions(withTarget: self)
-            for typing in localTyping.values {
-                undoManager.removeAllActions(withTarget: typing)
-            }
-        }
+        for undoManager in undoManagers.allObjects { undoManager.removeAllActions() }
         for (change, owner) in owners { owner.forget(change) }
         inverses = [:]
         owners = [:]
