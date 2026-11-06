@@ -72,7 +72,7 @@ struct MaterialViewerView: View {
 
     private func remove() {
         guard let record = material.presentedRecord else { return }
-        Task { await material.remove(record, on: page, undoManager: undoManager) }
+        material.remove(record, on: page, undoManager: undoManager)
     }
 
     private func exportOriginal() {
@@ -118,7 +118,7 @@ private struct MaterialViewerContent: View {
                     "Original unavailable", systemImage: "exclamationmark.triangle",
                     description: Text("This material's original file is missing."))
             }
-            if let error = material.errors[page] {
+            if let error = material.error(for: page) {
                 Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
             }
         }

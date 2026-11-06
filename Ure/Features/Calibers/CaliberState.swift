@@ -3,19 +3,19 @@ import GRDB
 import Observation
 
 // The calibers in the library and the page you write each one on. A caliber page has no
-// draft: each fact saves on its own as you type, like notes.
+// draft: each fact saves on its own as you type, like notes. Every change goes through the
+// library's edit queue.
 @Observable
 final class CaliberState {
-    private let service: CaliberService
+    static let unsavedFacts = "A fact on this page did not save. Correct it or undo it first."
+
+    let queue: EditQueue
     @ObservationIgnored private let locale: Locale
     @ObservationIgnored private let pause: (Duration) async throws -> Void
-    @ObservationIgnored private let archiving = ChangeUndo<Bool>()
     private(set) var calibers: [CaliberRecord] = []
     private(set) var selectedID: UUID?
     private(set) var isLoading = true
-    private(set) var isSaving = false
     private(set) var loadError: String?
-    private(set) var saveError: String?
     private(set) var facts: [UUID: CaliberFacts] = [:]
     // A caliber just made with ⌘N. Its page puts the cursor in its name.
     private(set) var nameToFocus: UUID?
@@ -24,13 +24,21 @@ final class CaliberState {
     var showsArchived = false
 
     init(
-        service: CaliberService, locale: Locale = .autoupdatingCurrent,
+        queue: EditQueue, locale: Locale = .autoupdatingCurrent,
         pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
-        self.service = service
+        self.queue = queue
         self.locale = locale
         self.pause = pause
+        queue.listen { [weak self] change, byUndo in
+            guard case .caliber(let record) = change else { return }
+            self?.adopt(record, force: byUndo)
+        }
     }
+
+    // A caliber change, such as ⌘N or an archive, is still saving.
+    var isSaving: Bool { queue.isBusy(.calibers) }
+    var refusal: String? { queue.refusal(in: .calibers) }
 
     var selectedCaliber: CaliberRecord? { calibers.first { $0.id == selectedID } }
 
@@ -83,13 +91,11 @@ final class CaliberState {
         }
     }
 
-    var hasUnsavedFacts: Bool { facts.values.contains { $0.hasUnsavedChanges } }
-
     func observe() async {
         isLoading = true
         loadError = nil
         do {
-            let values = try await service.coordinator.caliberValues()
+            let values = try await queue.coordinator.caliberValues()
             for try await records in values {
                 apply(records)
                 isLoading = false
@@ -108,114 +114,66 @@ final class CaliberState {
     }
 
     // ⌘N makes a caliber and puts the cursor in its name.
-    func createCommand() { Task { await create() } }
+    func createCommand() { create() }
 
     @discardableResult
-    func create() async -> Bool {
-        guard !isSaving else { return false }
-        isSaving = true
-        saveError = nil
-        defer { isSaving = false }
-        do {
-            let record = try await service.create()
-            if !calibers.contains(where: { $0.id == record.id }) {
-                apply(calibers + [record])
+    func create() -> EditTicket? {
+        guard !isSaving else { return nil }
+        return queue.submit(.caliber(.create), in: .calibers) { [weak self] result in
+            guard let self else { return }
+            for case .caliber(let record) in result.changes {
+                searchText = ""
+                selectedID = record.id
+                nameToFocus = record.id
             }
-            searchText = ""
-            selectedID = record.id
-            nameToFocus = record.id
-            return true
-        } catch {
-            saveError = error.localizedDescription
-            return false
         }
     }
 
     func nameFocused() { nameToFocus = nil }
 
-    func toggleArchiveCommand(undoManager: UndoManager?) {
-        Task { await toggleArchive(undoManager: undoManager) }
-    }
+    func toggleArchiveCommand(undoManager: UndoManager?) { toggleArchive(undoManager: undoManager) }
 
-    // Archives the selected caliber, or unarchives it. Undo puts it back as it was.
+    // Archives the selected caliber, or unarchives it. Undo puts it back as it was. Typing on
+    // the page saves first. A fact that does not save stops the archive, because an archived
+    // caliber's facts can't be corrected.
     @discardableResult
-    func toggleArchive(undoManager: UndoManager? = nil) async -> Bool {
-        guard !isSaving, let record = selectedCaliber else { return false }
+    func toggleArchive(undoManager: UndoManager? = nil) -> EditTicket? {
+        guard !isSaving, let record = selectedCaliber else { return nil }
         let id = record.id
         let archived = record.archivedAt == nil
-        let write: ChangeUndo<Bool>.Write = { [weak self] archived in
-            await self?.writeArchive(id, archived: archived) ?? false
+        queue.flushTyping()
+        if archived, facts[id]?.hasRefusedText == true {
+            queue.report(Self.unsavedFacts, in: .calibers)
+            return nil
         }
-        guard await archiving.perform(archived, write: write) else { return false }
-        archiving.registerUndo(
-            setting: !archived, redoing: archived,
-            actionName: archived ? "Archive Caliber" : "Unarchive Caliber",
-            undoManager: undoManager, write: write)
-        return true
+        return queue.submit(
+            .caliber(.archive(id, archived)), in: .calibers,
+            undo: archived ? "Archive Caliber" : "Unarchive Caliber", undoManager: undoManager,
+            requires: EditCheck { [weak self] in
+                archived && self?.facts[id]?.hasUnsavedText == true ? Self.unsavedFacts : nil
+            })
     }
 
-    // Waits for an archive change that Undo or Redo started.
-    func waitForArchiveChanges() async { await archiving.wait() }
-
-    // Facts still saving finish first. A fact that does not save stops the archive, because
-    // an archived caliber's facts can't be corrected.
-    private func writeArchive(_ id: UUID, archived: Bool) async -> Bool {
-        isSaving = true
-        saveError = nil
-        defer { isSaving = false }
-        if archived, let facts = facts[id] {
-            for field in facts.all where field.hasUnsavedChanges {
-                guard await field.flush() else {
-                    saveError = "A fact on this page did not save. Correct it or undo it first."
-                    return false
-                }
-            }
+    private func adopt(_ record: CaliberRecord, force: Bool) {
+        var records = calibers
+        if let index = records.firstIndex(where: { $0.id == record.id }) {
+            records[index] = record
+        } else {
+            records.append(record)
         }
-        do {
-            let saved = try await ArchiveService(coordinator: service.coordinator).setCaliber(
-                id, archived: archived)
-            if let index = calibers.firstIndex(where: { $0.id == saved.id }) {
-                calibers[index] = saved
-            }
-            if saved.archivedAt != nil, saved.id == selectedID { showsArchived = true }
-            return true
-        } catch {
-            saveError = error.localizedDescription
-            return false
-        }
+        apply(records, forcing: force ? record.id : nil)
+        if record.archivedAt != nil, record.id == selectedID { showsArchived = true }
     }
 
-    func saveFactsNow() {
-        for field in unsavedFields { field.saveNow() }
-    }
-
-    func saveAllFacts() async -> Bool {
-        var succeeded = true
-        for field in unsavedFields {
-            if await !field.flush() { succeeded = false }
-        }
-        return succeeded
-    }
-
-    func discardUndo() {
-        for facts in facts.values {
-            for field in facts.all { field.discardUndo() }
-        }
-        archiving.discardUndo()
-    }
-
-    private var unsavedFields: [FactField] {
-        facts.values.flatMap(\.all).filter(\.hasUnsavedChanges)
-    }
-
-    private func apply(_ records: [CaliberRecord]) {
+    // Undo and Redo of a caliber's fact show the stored value also in a field with the cursor.
+    private func apply(_ records: [CaliberRecord], forcing forced: UUID? = nil) {
         calibers = records
         for record in records {
             if let existing = facts[record.id] {
-                existing.refresh(record, locale: locale)
+                existing.refresh(record, locale: locale, force: record.id == forced)
             } else {
                 facts[record.id] = CaliberFacts(
-                    caliber: record, service: service, locale: locale,
+                    caliber: record, queue: queue, locale: locale,
                     makers: { [weak self] in self?.makers ?? [] }, pause: pause)
             }
         }

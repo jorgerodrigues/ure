@@ -38,13 +38,17 @@ struct ChildRemovalStateTests {
                     "CREATE TRIGGER failRemoval BEFORE DELETE ON libraryItem BEGIN SELECT RAISE(ABORT, 'injected'); END"
             )
         }
-        #expect(!(await editing.material.remove(record, on: owners[0], undoManager: nil)))
+        // A removal that fails stops the queue, and the viewer and the pin stay until Try Again
+        // removes the file.
+        let removing = editing.material.remove(record, on: owners[0], undoManager: nil)
+        #expect(await editing.queue.waitUntilStopped())
         #expect(editing.material.presented?.itemID == photo.id)
-        #expect(editing.material.errors[owners[0]] != nil)
+        #expect(editing.queue.failure != nil)
         #expect(bench.pinnedID == photo.id)
         try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failRemoval") }
-        #expect(await editing.material.remove(record, on: owners[0], undoManager: nil))
-        #expect(editing.material.presented == nil && editing.material.errors[owners[0]] == nil)
+        editing.queue.retry()
+        #expect(await removing.didSave)
+        #expect(editing.material.presented == nil && editing.material.error(for: owners[0]) == nil)
         try await SearchEditingFixture.waitUntil { bench.pinnedID == nil }
         #expect(bench.reference == nil && preferences.store.value.itemID == nil)
         observations.forEach { $0.cancel() }

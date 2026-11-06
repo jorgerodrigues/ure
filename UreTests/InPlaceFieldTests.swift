@@ -140,21 +140,22 @@ struct FactFieldTests {
     @Test(.timeLimit(.minutes(1)))
     func invalidNumberShowsAsNotValidOnLeaveAndTheRecordKeepsTheLastGoodValue() async throws {
         let gate = PauseGate()
-        let store = SavedTexts()
-        let field = beatRate(store: store, gate: gate)
+        let library = try await FieldLibrary.make()
+        let field = beatRate(in: library, gate: gate)
         field.beginEditing()
         field.change(to: "19,8x", undoManager: nil)
         #expect(field.problem == nil && field.hasUnsavedChanges)
         try await gate.elapse()
-        #expect(await !field.flush())
-        #expect(field.problem == nil && store.texts.isEmpty)
+        field.saveNow()
+        await library.queue.waitUntilIdle()
+        #expect(field.problem == nil && field.hasUnsavedText)
+        #expect(try await library.stored().beatRate == 19_800)
 
         field.endEditing()
         #expect(field.problem == "Enter a number, such as 28,800 vph.")
         #expect(field.text == "19,8x" && field.editor.savedText == "19,800 vph")
-        #expect(await !field.flush())
         field.refresh("21,600 vph")
-        #expect(field.text == "19,8x" && store.texts.isEmpty)
+        #expect(field.text == "19,8x" && library.queue.hasUnsavedTyping)
 
         field.beginEditing()
         #expect(field.problem != nil)
@@ -162,14 +163,15 @@ struct FactFieldTests {
         #expect(field.problem == nil)
         field.endEditing()
         try await waitUntil { field.text == "21,600 vph" && !field.hasUnsavedChanges }
-        #expect(store.texts == ["21600"] && field.problem == nil)
+        #expect(try await library.stored().beatRate == 21_600 && field.problem == nil)
+        try await library.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
     func undoAfterSaveBringsBackSavedValuesAndNeverAnInvalidText() async throws {
         let gate = PauseGate()
-        let store = SavedTexts()
-        let field = beatRate(store: store, gate: gate)
+        let library = try await FieldLibrary.make()
+        let field = beatRate(in: library, gate: gate)
         let undo = UndoManager()
         undo.groupsByEvent = false
         field.beginEditing()
@@ -193,22 +195,24 @@ struct FactFieldTests {
         undo.undo()
         try await waitUntil { field.text == "19,800 vph" && !field.hasUnsavedChanges }
         #expect(!undo.canUndo)
+        #expect(try await library.stored().beatRate == 19_800)
         undo.redo()
         try await waitUntil { field.text == "28,800 vph" && !field.hasUnsavedChanges }
-        #expect(store.texts == ["28800", "19,800 vph", "28,800 vph"])
+        #expect(try await library.stored().beatRate == 28_800)
+        try await library.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
     func matchesFromTheLibraryFinishTheTypingAndTakingOnePutsItAllInTheField() async throws {
-        let store = SavedTexts()
+        let library = try await FieldLibrary.make()
         let makers = [
             FactSuggestion(text: "Omega", detail: "4 calibers"),
             FactSuggestion(text: "Orient", detail: "1 caliber"), FactSuggestion(text: "Oris"),
             FactSuggestion(text: "Zénith"),
         ]
-        let field = FactField(
-            label: "Maker", prompt: "Add maker", actionName: "Maker", text: "", rule: .anyText,
-            suggestions: { makers }, save: store.save, pause: PauseGate().pause)
+        let field = library.field(
+            "Maker", text: "", suggestions: { makers }, fact: CaliberFact.maker,
+            shown: { $0.manufacturer ?? "" })
         field.beginEditing()
         field.change(to: "o", undoManager: nil)
         #expect(field.matches.map(\.text) == ["Omega", "Orient", "Oris"])
@@ -237,34 +241,36 @@ struct FactFieldTests {
         field.endEditing()
         #expect(field.matches.isEmpty)
         try await waitUntil { !field.hasUnsavedChanges }
-        #expect(store.texts == ["M"])
+        #expect(try await library.stored().manufacturer == "M")
+        try await library.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
     func aChoiceFromAPopUpSavesAtOnceAndUndoesInOneStep() async throws {
-        let store = SavedTexts()
-        let field = FactField(
-            label: "Winding", prompt: "Add winding", actionName: "Winding", text: "Manual",
-            rule: .anyText, save: store.save, pause: PauseGate().pause)
+        let library = try await FieldLibrary.make(winding: .manual)
+        let field = library.field(
+            "Winding", text: "Manual", fact: { .winding(Winding(written: $0)) },
+            shown: { $0.winding?.rawValue ?? "" })
         let undo = UndoManager()
         undo.groupsByEvent = false
         undo.beginUndoGrouping()
         field.choose("Quartz", undoManager: undo)
         undo.endUndoGrouping()
         try await waitUntil { !field.hasUnsavedChanges }
-        #expect(store.texts == ["Quartz"] && !field.isEditing && undo.undoActionName == "Winding")
+        #expect(try await library.stored().winding == .quartz)
+        #expect(!field.isEditing && undo.undoActionName == "Winding")
         undo.undo()
         try await waitUntil { field.text == "Manual" && !field.hasUnsavedChanges }
-        #expect(store.texts == ["Quartz", "Manual"])
+        #expect(try await library.stored().winding == .manual)
+        try await library.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
     func undoDropsASuggestionMadeForTheTextItTookAway() async throws {
-        let store = SavedTexts()
-        let field = FactField(
-            label: "Winding", prompt: "Manual, Automatic or Quartz", actionName: "Winding",
-            text: "", rule: .anyText, suggestions: { Self.windings },
-            save: store.save, pause: PauseGate().pause)
+        let library = try await FieldLibrary.make()
+        let field = library.field(
+            "Maker", text: "", suggestions: { Self.windings }, fact: CaliberFact.maker,
+            shown: { $0.manufacturer ?? "" })
         let undo = UndoManager()
         undo.groupsByEvent = false
         field.beginEditing()
@@ -273,41 +279,47 @@ struct FactFieldTests {
         undo.endUndoGrouping()
         #expect(field.suggestion == "Automatic")
         undo.undo()
+        await library.queue.waitUntilIdle()
         #expect(field.text.isEmpty && field.suggestion == nil)
         #expect(!field.acceptSuggestion(undoManager: undo))
         undo.redo()
+        await library.queue.waitUntilIdle()
         #expect(field.text == "Au" && field.suggestion == "Automatic")
         field.endEditing()
         try await waitUntil { !field.hasUnsavedChanges }
-        #expect(store.texts.last == "Au")
+        #expect(try await library.stored().manufacturer == "Au")
+        try await library.close()
     }
 
     @Test(.timeLimit(.minutes(1)))
     func aBlankNameIsNotValidAndTheRecordKeepsItsName() async throws {
-        let store = SavedTexts()
-        let field = FactField(
-            label: "Name", prompt: "Name", actionName: "Name", text: "552",
-            rule: .required("Enter a name."), save: store.save,
-            pause: PauseGate().pause)
+        let library = try await FieldLibrary.make()
+        let field = library.field(
+            "Name", text: "552", rule: .required("Enter a name."), fact: CaliberFact.name,
+            shown: \.designation)
         field.beginEditing()
         field.change(to: "  ", undoManager: nil)
         field.endEditing()
         #expect(field.problem == "Enter a name.")
-        #expect(await !field.flush())
+        field.saveNow()
+        #expect(field.hasUnsavedText && library.queue.isIdle)
         field.beginEditing()
         field.change(to: " 552 Elaboré ", undoManager: nil)
         field.endEditing()
         try await waitUntil { field.text == "552 Elaboré" && !field.hasUnsavedChanges }
-        #expect(store.texts == [" 552 Elaboré "])
+        #expect(try await library.stored().designation == "552 Elaboré")
+        try await library.close()
     }
 
     private static let windings = ["Manual", "Automatic", "Quartz"].map { FactSuggestion(text: $0) }
 
-    private func beatRate(store: SavedTexts, gate: PauseGate) -> FactField {
-        FactField(
-            label: "Beat rate", prompt: "Add beat rate", actionName: "Beat Rate",
-            text: "19,800 vph", rule: .number(CaliberNumbers.beatRate, locale: unitedStates),
-            save: store.save, pause: gate.pause)
+    private func beatRate(in library: FieldLibrary, gate: PauseGate) -> FactField {
+        let entry = CaliberNumbers.beatRate
+        let locale = unitedStates
+        return library.field(
+            "Beat Rate", text: "19,800 vph", rule: .number(entry, locale: locale),
+            fact: { .beatRate(try entry.value(from: $0, locale: locale)) },
+            shown: { entry.text(for: $0.beatRate, locale: locale) }, pause: gate.pause)
     }
 
     private func waitUntil(_ condition: () -> Bool) async throws {
@@ -316,6 +328,63 @@ struct FactFieldTests {
             try await Task.sleep(for: .milliseconds(10))
         }
         throw FactFieldTimeout()
+    }
+}
+
+// A library with one caliber, "552" at 19,800 vph, whose facts a field types through the
+// library's queue. What each edit leaves in the library reaches the field, as a caliber page
+// shows it.
+final class FieldLibrary {
+    let fixture: WatchFixture
+    let coordinator: LibraryCoordinator
+    let queue: EditQueue
+    let caliberID: UUID
+
+    private init(fixture: WatchFixture, coordinator: LibraryCoordinator, caliberID: UUID) {
+        self.fixture = fixture
+        self.coordinator = coordinator
+        self.caliberID = caliberID
+        queue = EditQueue(coordinator: coordinator)
+    }
+
+    static func make(winding: Winding? = nil) async throws -> FieldLibrary {
+        let fixture = WatchFixture()
+        let coordinator = fixture.coordinator()
+        _ = try await coordinator.open()
+        let service = CaliberService(coordinator: coordinator)
+        let caliber = try await service.create(named: "552")
+        _ = try await service.update(caliber.id, .beatRate(19_800))
+        _ = try await service.update(caliber.id, .winding(winding))
+        return FieldLibrary(fixture: fixture, coordinator: coordinator, caliberID: caliber.id)
+    }
+
+    func field(
+        _ actionName: String, text: String, rule: FactRule = .anyText,
+        suggestions: @escaping () -> [FactSuggestion] = { [] },
+        fact: @escaping (String) throws -> CaliberFact,
+        shown: @escaping (CaliberRecord) -> String,
+        pause: @escaping (Duration) async throws -> Void = PauseGate().pause
+    ) -> FactField {
+        let id = caliberID
+        let field = FactField(
+            label: actionName, prompt: actionName, actionName: actionName, text: text,
+            rule: rule, suggestions: suggestions, queue: queue, scope: .calibers,
+            edit: { .caliber(.set(id, try fact($0))) }, pause: pause)
+        queue.listen { [weak field] change, byUndo in
+            guard case .caliber(let record) = change else { return }
+            field?.refresh(shown(record), force: byUndo)
+        }
+        return field
+    }
+
+    func stored() async throws -> CaliberRecord {
+        let id = caliberID
+        return try #require(try await coordinator.read { try CaliberQueries.fetch(id, in: $0) })
+    }
+
+    func close() async throws {
+        try await coordinator.close()
+        fixture.remove()
     }
 }
 

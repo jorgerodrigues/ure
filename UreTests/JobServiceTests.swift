@@ -47,21 +47,21 @@ nonisolated struct JobServiceTests {
         clock.withLock { $0 = edited }
         _ = try await service.update(job.id, .title("  Full service  "))
         let problem = "Loses about two minutes a day.\nThe crown feels gritty when winding."
-        let saved = try await service.update(job.id, .problem("\n\(problem)  \n"))
+        let saved = try await service.update(job.id, .problem("\n\(problem)  \n")).after
         #expect(saved.title == "Full service" && saved.problem == problem)
         #expect(saved.updatedAt == edited && saved.createdAt == created)
         #expect(try await coordinator.read { try JobQueries.fetch(job.id, in: $0) } == saved)
 
         clock.withLock { $0 = edited.addingTimeInterval(60) }
-        #expect(try await service.update(job.id, .problem(problem)) == saved)
+        #expect(try await service.update(job.id, .problem(problem)).after == saved)
         await #expect(throws: JobValidationError(message: "Write a title for this job.")) {
             try await service.update(job.id, .title(" \n "))
         }
         await #expect(throws: JobError.notWaiting) {
             try await service.update(job.id, .waitingFor("A mainspring"))
         }
-        #expect(try await service.update(job.id, .waitingFor("  ")) == saved)
-        let cleared = try await service.update(job.id, .problem(" \n "))
+        #expect(try await service.update(job.id, .waitingFor("  ")).after == saved)
+        let cleared = try await service.update(job.id, .problem(" \n ")).after
         #expect(cleared.problem == nil)
         await #expect(throws: JobError.missingRecord) {
             try await service.update(UUID(), .title("Missing"))
@@ -185,14 +185,14 @@ nonisolated struct JobServiceTests {
         let done = try await service.setStage(job.id, to: .done).job
         #expect(done.stage == .done)
 
-        let renamed = try await service.update(job.id, .title("Full service and crystal"))
+        let renamed = try await service.update(job.id, .title("Full service and crystal")).after
         #expect(renamed.stage == .done && renamed.doneAt == done.doneAt)
         _ = try await service.update(job.id, .problem("Crystal cracked at the bench."))
         var ticked = first
         ticked.isTicked = true
         let second = ChecklistStep(id: UUID(), text: "Pressure test")
         #expect(
-            try await checklist.save([second, ticked], for: job.id).map(\.isTicked)
+            try await checklist.save([second, ticked], for: job.id).after.map(\.isTicked)
                 == [false, true])
         #expect(try await parts.advance(part.id).part.stage == .ordered)
         try await RecordNotesService(coordinator: coordinator).save(
@@ -200,7 +200,7 @@ nonisolated struct JobServiceTests {
         let link = try await MaterialService(coordinator: coordinator).addLink(
             try #require(URL(string: "https://example.org/crystal")), for: .job(job.id))
         #expect(link.jobID == job.id)
-        #expect(try await checklist.save([second], for: job.id).map(\.id) == [second.id])
+        #expect(try await checklist.save([second], for: job.id).after.map(\.id) == [second.id])
         let saved = try #require(
             try await coordinator.read { try JobQueries.fetch(job.id, in: $0) })
         #expect(saved.stage == .done && saved.problem == "Crystal cracked at the bench.")
@@ -238,7 +238,7 @@ nonisolated struct JobServiceTests {
         #expect(try await coordinator.read(JobQueries.fetchAll) == [first])
         try await coordinator.mutate { db, _, _ in try db.execute(sql: "DROP TRIGGER failJobUpdate")
         }
-        let last = try await service.update(first.id, .title("Committed edit"))
+        let last = try await service.update(first.id, .title("Committed edit")).after
         #expect(try await iterator.next() == [last])
         try await coordinator.close()
     }

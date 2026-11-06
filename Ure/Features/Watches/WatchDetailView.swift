@@ -18,7 +18,7 @@ struct WatchDetailView: View {
             ContentUnavailableView {
                 Label("Select a watch", systemImage: "watch.analog")
             } description: {
-                Text(watches.saveError ?? "Choose a watch or add a new one.")
+                Text(watches.refusal ?? "Choose a watch or add a new one.")
             }
         }
     }
@@ -43,7 +43,7 @@ private struct WatchPage: View {
                     WatchHeader(watch: watch, facts: facts)
                     WatchFactGrid(watch: watch, facts: facts).zIndex(1)
                 }
-                if let error = watches.saveError {
+                if let error = watches.refusal {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                 }
                 WatchJobs(watch: watch)
@@ -332,7 +332,7 @@ private struct WatchJobs: View {
                         .disabled(editing.isSaving)
                         .accessibilityIdentifier("startWatchJob")
                 }
-                if let error = jobs.saveError, jobs.selectedID == nil {
+                if let error = jobs.refusal, jobs.selectedID == nil {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                 }
             }

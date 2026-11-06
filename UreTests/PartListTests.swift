@@ -20,7 +20,8 @@ struct PartListTests {
         let mainspring = try await service.add(named: "Mainspring", to: open.id)
         let crystal = try await service.add(named: "Crystal", to: unwatched.id)
         let gaskets = try await service.update(
-            try await service.add(named: "Gaskets", to: open.id).id, .quantity("3"))
+            try await service.add(named: "Gaskets", to: open.id).id, .quantity("3")
+        ).after
         _ = try await service.setStage(gaskets.id, to: .ordered)
         let crown = try await service.add(named: "Crown", to: open.id)
         _ = try await service.setStage(crown.id, to: .inHand)

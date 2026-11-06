@@ -44,6 +44,7 @@ struct PartSectionView: View {
 
 private struct PartLines: View {
     @Environment(PartState.self) private var state
+    @Environment(WorkshopEditing.self) private var editing
     let jobID: UUID
     let lines: [PartRecord]
     let isEditable: Bool
@@ -52,7 +53,8 @@ private struct PartLines: View {
         VStack(alignment: .leading, spacing: 0) {
             Divider()
             ForEach(lines) { part in
-                PartLine(part: part, isEditable: isEditable)
+                // A part whose deletion waits or runs takes no edits, also on its job's page.
+                PartLine(part: part, isEditable: isEditable && editing.canWrite(part))
                 Divider()
             }
             if isEditable {
@@ -61,13 +63,15 @@ private struct PartLines: View {
                 if entry.isTyping {
                     PartKeyHints().padding(.top, PartLineLayout.hintsTop)
                 }
-                PartUnsavedNames(entry: entry)
             } else if lines.isEmpty {
                 Text("No parts")
                     .foregroundStyle(.secondary)
                     .frame(height: PartLineLayout.entryHeight)
             }
-            if let error = state.saveError {
+            // The names that wait show also while the page takes no edits, which is when a
+            // failed save holds them.
+            PartWaitingNames(entry: state.entry(for: jobID))
+            if let error = state.refusal {
                 Label(error, systemImage: "exclamationmark.circle.fill")
                     .font(.system(size: NotesLayout.failureSize))
                     .foregroundStyle(.red)
@@ -292,7 +296,7 @@ private struct PartEntryLine: View {
     private func use(_ spare: PartRecord) {
         entry.clear()
         let jobID = entry.jobID
-        Task { await parts.useSpare(spare.id, on: jobID, undoManager: undoManager) }
+        parts.useSpare(spare.id, on: jobID, undoManager: undoManager)
     }
 }
 
@@ -377,33 +381,24 @@ private struct PartKeyHint: View {
     }
 }
 
-// The parts typed on the line that did not save, with Try Again. They stay while you type the
-// next part.
-private struct PartUnsavedNames: View {
-    @Environment(PartState.self) private var parts
-    @Environment(\.undoManager) private var undoManager
+// The parts typed on the line that have not saved, while a failed save holds them. The failure
+// bar has Try Again and Discard.
+private struct PartWaitingNames: View {
+    @Environment(WorkshopEditing.self) private var editing
     let entry: PartEntry
 
     var body: some View {
-        if !entry.unsaved.isEmpty {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Label {
-                    Text(
-                        "Not saved yet: \(entry.unsaved.map(\.name).joined(separator: ", "))")
-                } icon: {
-                    Image(systemName: "exclamationmark.circle.fill")
-                }
-                .font(.system(size: NotesLayout.failureSize))
-                .foregroundStyle(.red)
-                Button("Try Again", action: retry)
-                    .controlSize(.small)
+        if editing.failure != nil, !entry.waiting.isEmpty {
+            Label {
+                Text("Not saved yet: \(entry.waiting.map(\.name).joined(separator: ", "))")
+            } icon: {
+                Image(systemName: "exclamationmark.circle.fill")
             }
+            .font(.system(size: NotesLayout.failureSize))
+            .foregroundStyle(.red)
             .padding(.top, PartLineLayout.messageTop)
-            .accessibilityElement(children: .contain)
         }
     }
-
-    private func retry() { parts.retryUnsavedCommand(entry, undoManager: undoManager) }
 }
 
 // The spares in hand whose name has what you typed, under the line you type in. The Down arrow

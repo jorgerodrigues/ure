@@ -12,7 +12,8 @@ struct WatchStateTests {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
-        let state = WatchState(service: WatchService(coordinator: coordinator))
+        let queue = EditQueue(coordinator: coordinator)
+        let state = WatchState(queue: queue)
         await state.observe()
         #expect(!state.isLoading && state.loadError != nil)
         _ = try await coordinator.open()
@@ -31,12 +32,13 @@ struct WatchStateTests {
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
-        let state = WatchState(service: WatchService(coordinator: coordinator))
+        let queue = EditQueue(coordinator: coordinator)
+        let state = WatchState(queue: queue)
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { !state.isLoading }
         state.searchText = "Nothing matches"
-        #expect(await state.create())
+        #expect(await state.create().didSave)
         let watch = try #require(state.selectedWatch)
         #expect(watch.name == "New Watch" && state.nameToFocus == watch.id)
         #expect(state.searchText.isEmpty && state.filteredWatches == [watch])
@@ -59,7 +61,8 @@ struct WatchStateTests {
         let caliber = try await CaliberService(coordinator: coordinator).create(named: "552")
         let service = WatchService(coordinator: coordinator)
         let watch = try await service.create(named: "Seamaster")
-        let state = WatchState(service: service, locale: unitedStates, pause: PauseGate().pause)
+        let queue = EditQueue(coordinator: coordinator)
+        let state = WatchState(queue: queue, locale: unitedStates, pause: PauseGate().pause)
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { state.watches == [watch] }
@@ -76,7 +79,7 @@ struct WatchStateTests {
         for (field, text, shown) in typed {
             field.beginEditing()
             field.change(to: text, undoManager: nil)
-            #expect(state.hasUnsavedFacts)
+            #expect(queue.hasUnsavedTyping)
             field.endEditing()
             try await waitUntil { field.text == shown && !field.hasUnsavedChanges }
         }
@@ -110,7 +113,8 @@ struct WatchStateTests {
         _ = try await coordinator.open()
         let service = WatchService(coordinator: coordinator)
         let watch = try await service.create(named: "Seamaster")
-        let state = WatchState(service: service, locale: unitedStates, pause: PauseGate().pause)
+        let queue = EditQueue(coordinator: coordinator)
+        let state = WatchState(queue: queue, locale: unitedStates, pause: PauseGate().pause)
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { state.watches == [watch] }
@@ -145,7 +149,8 @@ struct WatchStateTests {
         let job = try await JobTaskFixture.job(coordinator)
         let watchID = try #require(job.watchID)
         let other = try await WatchService(coordinator: coordinator).create(named: "Another watch")
-        let state = WatchState(service: WatchService(coordinator: coordinator))
+        let queue = EditQueue(coordinator: coordinator)
+        let state = WatchState(queue: queue)
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { state.watches.count == 2 }
@@ -154,7 +159,7 @@ struct WatchStateTests {
         let undo = UndoManager()
         undo.groupsByEvent = false
         undo.beginUndoGrouping()
-        #expect(await state.toggleArchive(undoManager: undo))
+        #expect(await state.toggleArchive(undoManager: undo).didSave)
         undo.endUndoGrouping()
         #expect(state.selectedWatch?.archivedAt != nil && state.selectedID == job.watchID)
         #expect(state.filteredWatches.map(\.id) == [other.id])
@@ -164,17 +169,17 @@ struct WatchStateTests {
         #expect(try await archivedAt(watchID, coordinator) != nil)
 
         undo.undo()
-        await state.waitForArchiveChanges()
+        await queue.waitUntilIdle()
         #expect(try await archivedAt(watchID, coordinator) == nil)
         #expect(state.filteredWatches.count == 2 && state.archivedWatches.isEmpty)
         #expect(undo.redoMenuItemTitle == "Redo Archive Watch")
         undo.redo()
-        await state.waitForArchiveChanges()
+        await queue.waitUntilIdle()
         #expect(try await archivedAt(watchID, coordinator) != nil)
         #expect(undo.undoMenuItemTitle == "Undo Archive Watch")
 
         undo.beginUndoGrouping()
-        #expect(await state.toggleArchive(undoManager: undo))
+        #expect(await state.toggleArchive(undoManager: undo).didSave)
         undo.endUndoGrouping()
         #expect(try await archivedAt(watchID, coordinator) == nil)
         #expect(undo.undoMenuItemTitle == "Undo Unarchive Watch")
@@ -182,7 +187,7 @@ struct WatchStateTests {
         #expect(
             try await coordinator.read { try JobListQueries.fetch($0, doneSince: .distantPast) }
                 .map(\.id) == [job.id])
-        state.discardUndo()
+        queue.discardUndo()
         #expect(!undo.canUndo)
         observation.cancel()
         await observation.value
@@ -197,7 +202,8 @@ struct WatchStateTests {
         _ = try await coordinator.open()
         let service = WatchService(coordinator: coordinator)
         let watch = try await service.create(named: "Seamaster")
-        let state = WatchState(service: service, locale: unitedStates, pause: PauseGate().pause)
+        let queue = EditQueue(coordinator: coordinator)
+        let state = WatchState(queue: queue, locale: unitedStates, pause: PauseGate().pause)
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { state.watches == [watch] }
@@ -205,25 +211,25 @@ struct WatchStateTests {
         let facts = try #require(state.facts(for: watch.id))
         facts.brand.beginEditing()
         facts.brand.change(to: "Omega", undoManager: nil)
-        #expect(await state.toggleArchive())
+        #expect(await state.toggleArchive().didSave)
         let archived = try #require(try await coordinator.read(WatchQueries.fetchAll).first)
         #expect(archived.brand == "Omega" && archived.archivedAt != nil)
-        #expect(!facts.brand.hasUnsavedChanges && facts.brand.saveError == nil)
+        #expect(!facts.brand.hasUnsavedChanges)
         await #expect(throws: ArchiveError.archived) {
             try await service.update(watch.id, .brand("Changed while archived"))
         }
-        #expect(await state.toggleArchive())
+        #expect(await state.toggleArchive().didSave)
         facts.lugWidth.beginEditing()
         facts.lugWidth.change(to: "wide", undoManager: nil)
         facts.lugWidth.endEditing()
-        #expect(await !state.toggleArchive())
-        #expect(state.saveError != nil && facts.lugWidth.text == "wide")
+        #expect(await !state.toggleArchive().didSave)
+        #expect(state.refusal != nil && facts.lugWidth.text == "wide")
         #expect(try await coordinator.read(WatchQueries.fetchAll).first?.archivedAt == nil)
         facts.lugWidth.beginEditing()
         facts.lugWidth.change(to: "20", undoManager: nil)
-        #expect(await state.toggleArchive())
+        #expect(await state.toggleArchive().didSave)
         let saved = try #require(try await coordinator.read(WatchQueries.fetchAll).first)
-        #expect(saved.lugWidth == 20 && saved.archivedAt != nil && state.saveError == nil)
+        #expect(saved.lugWidth == 20 && saved.archivedAt != nil && state.refusal == nil)
         observation.cancel()
         await observation.value
         try await coordinator.close()

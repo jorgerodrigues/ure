@@ -56,11 +56,12 @@ struct MaterialSectionView: View {
                     style: style, choose: chooseFiles, drop: addDropped, paste: paste
                 )
                 .disabled(editing.isSaving)
-            } else {
+            } else if !editing.queue.holdsRecords {
+                // While a failed save holds the page, the failure bar says why instead.
                 Text(readOnlyMessage).foregroundStyle(.secondary)
             }
             MaterialImportProgress(owner: owner)
-            if let error = material.errors[owner] {
+            if let error = material.error(for: owner) {
                 Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
             }
             if let caliber {
@@ -85,12 +86,12 @@ struct MaterialSectionView: View {
 
     private func addDropped(_ urls: [URL]) {
         guard editing.canWrite(owner), !editing.isSaving else { return }
-        Task { await material.add(urls, for: owner) }
+        material.add(urls, for: owner)
     }
 
     private func paste(_ text: String?) {
         guard editing.canWrite(owner), !editing.isSaving else { return }
-        Task { await material.paste(text, for: owner) }
+        material.paste(text, for: owner)
     }
 
     private func retry() { Task { await material.observe() } }
@@ -100,6 +101,7 @@ struct MaterialSectionView: View {
 // "4 Watch" artboard, and fewer in a narrower window.
 private struct MaterialTiles: View {
     @Environment(MaterialState.self) private var material
+    @Environment(WorkshopEditing.self) private var editing
     let owner: LibraryItemOwner
     let isEditable: Bool
     let style: RecordSectionStyle
@@ -129,7 +131,10 @@ private struct MaterialTiles: View {
         } else {
             LazyVGrid(columns: columns, alignment: .leading, spacing: MaterialLayout.tileSpacing) {
                 ForEach(records) { record in
-                    MaterialTile(record: record, page: owner, isEditable: isEditable, style: style)
+                    MaterialTile(
+                        record: record, page: owner,
+                        isEditable: isEditable && !editing.queue.isEnding(.material(record.id)),
+                        style: style)
                 }
             }
             .padding(.vertical, style == .form ? 4 : 0)
@@ -167,9 +172,6 @@ private struct MaterialTile: View {
                 MaterialTitleView(
                     field: field, text: field.text, isEditable: isEditable,
                     endEditing: material.endEditingTitle)
-                if let error = field.saveError {
-                    MaterialTitleFailure(message: error, retry: field.saveNow)
-                }
             }
             Text(record.item.detailLine())
                 .font(style == .page ? .system(size: MaterialLayout.detailSize) : .caption)
@@ -220,7 +222,7 @@ private struct MaterialTileMenu: View {
     private func open() { editing.requestNavigation { material.open(record, on: page) } }
 
     private func remove() {
-        Task { await material.remove(record, on: page, undoManager: undoManager) }
+        material.remove(record, on: page, undoManager: undoManager)
     }
 
     private func copyLink() {
@@ -248,20 +250,6 @@ private struct MaterialPreview: View {
                     .font(.system(size: 30, weight: .light))
                     .foregroundStyle(.secondary)
             }
-        }
-    }
-}
-
-private struct MaterialTitleFailure: View {
-    let message: String
-    let retry: () -> Void
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Label("The title did not save. \(message)", systemImage: "exclamationmark.circle.fill")
-                .font(.caption)
-                .foregroundStyle(.red)
-            Button("Try Again", action: retry).controlSize(.mini)
         }
     }
 }

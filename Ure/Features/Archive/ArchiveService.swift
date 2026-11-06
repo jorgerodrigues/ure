@@ -42,31 +42,37 @@ nonisolated enum RecordAccess {
 nonisolated struct ArchiveService: Sendable {
     let coordinator: LibraryCoordinator
 
-    func setWatch(_ id: UUID, archived: Bool) async throws -> WatchRecord {
+    func setWatch(_ id: UUID, archived: Bool) async throws -> Revision<WatchRecord> {
         try await coordinator.mutate { db, _, dependencies in
             guard var watch = try WatchQueries.fetch(id, in: db) else {
                 throw ArchiveError.missingRecord
             }
-            guard (watch.archivedAt != nil) != archived else { return watch }
+            let saved = watch
+            guard (watch.archivedAt != nil) != archived else {
+                return Revision(before: saved, after: saved)
+            }
             watch.archivedAt =
                 archived
                 ? Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970) : nil
             try WatchQueries.update(watch, in: db)
-            return watch
+            return Revision(before: saved, after: watch)
         }
     }
 
-    func setCaliber(_ id: UUID, archived: Bool) async throws -> CaliberRecord {
+    func setCaliber(_ id: UUID, archived: Bool) async throws -> Revision<CaliberRecord> {
         try await coordinator.mutate { db, _, dependencies in
             guard var caliber = try CaliberQueries.fetch(id, in: db) else {
                 throw ArchiveError.missingRecord
             }
-            guard (caliber.archivedAt != nil) != archived else { return caliber }
+            let saved = caliber
+            guard (caliber.archivedAt != nil) != archived else {
+                return Revision(before: saved, after: saved)
+            }
             caliber.archivedAt =
                 archived
                 ? Date(timeIntervalSince1970: dependencies.now().timeIntervalSince1970) : nil
             try CaliberQueries.update(caliber, in: db)
-            return caliber
+            return Revision(before: saved, after: caliber)
         }
     }
 }

@@ -13,7 +13,7 @@ struct CaliberDetailView: View {
             ContentUnavailableView {
                 Label("Select a caliber", systemImage: "gearshape.2")
             } description: {
-                Text(calibers.saveError ?? "Choose a caliber or add a new one.")
+                Text(calibers.refusal ?? "Choose a caliber or add a new one.")
             }
         }
     }
@@ -37,7 +37,7 @@ private struct CaliberPage: View {
                     CaliberHeader(caliber: caliber, facts: facts)
                     CaliberFactGrid(caliberID: caliber.id, facts: facts).zIndex(1)
                 }
-                if let error = calibers.saveError {
+                if let error = calibers.refusal {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                 }
                 CaliberWatches(caliberID: caliber.id)

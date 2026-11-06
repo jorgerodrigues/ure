@@ -38,28 +38,31 @@ struct WorkshopView: View {
             }
             .navigationSplitViewColumnWidth(min: 260, ideal: UreLayout.listWidth, max: 400)
         } detail: {
-            GeometryReader { geometry in
-                HStack(spacing: 0) {
-                    detail.frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .safeAreaInset(edge: .bottom) {
-                            if hasActiveJob, bench.reference != nil, bench.showsPane,
-                                !BenchLayout.showsPane(
-                                    availableWidth: geometry.size.width, requested: true)
-                            {
-                                HStack {
-                                    Text("Widen the window to show the pinned reference.")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                    Spacer()
-                                    Button("Open Reference Window", action: openReference)
-                                }.padding()
+            VStack(spacing: 0) {
+                SaveFailureBar()
+                GeometryReader { geometry in
+                    HStack(spacing: 0) {
+                        detail.frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .safeAreaInset(edge: .bottom) {
+                                if hasActiveJob, bench.reference != nil, bench.showsPane,
+                                    !BenchLayout.showsPane(
+                                        availableWidth: geometry.size.width, requested: true)
+                                {
+                                    HStack {
+                                        Text("Widen the window to show the pinned reference.")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                        Spacer()
+                                        Button("Open Reference Window", action: openReference)
+                                    }.padding()
+                                }
                             }
+                        if hasActiveJob
+                            && BenchLayout.showsPane(
+                                availableWidth: geometry.size.width, requested: bench.showsPane)
+                        {
+                            Divider()
+                            BenchPaneView().frame(width: BenchLayout.referenceWidth)
                         }
-                    if hasActiveJob
-                        && BenchLayout.showsPane(
-                            availableWidth: geometry.size.width, requested: bench.showsPane)
-                    {
-                        Divider()
-                        BenchPaneView().frame(width: BenchLayout.referenceWidth)
                     }
                 }
             }
@@ -114,7 +117,7 @@ struct WorkshopView: View {
                     ContentUnavailableView(
                         "Select a job", systemImage: WorkshopSection.jobs.symbol,
                         description: Text(
-                            jobs.saveError ?? "Choose a job, or start one with New Job."))
+                            jobs.refusal ?? "Choose a job, or start one with New Job."))
                 } else {
                     JobDetailView()
                 }
@@ -138,7 +141,7 @@ struct WorkshopView: View {
                 ContentUnavailableView(
                     "Select a part", systemImage: WorkshopSection.parts.symbol,
                     description: Text(
-                        parts.saveError ?? "Choose a part, or make a spare with New Part."))
+                        parts.refusal ?? "Choose a part, or make a spare with New Part."))
             }
         } else if navigation.selectedSection == .watches {
             WatchDetailView()

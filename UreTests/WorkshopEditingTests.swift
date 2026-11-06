@@ -12,14 +12,12 @@ struct WorkshopEditingTests {
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let parts = PartState(
-            service: PartService(coordinator: coordinator), pause: PauseGate().pause)
-        let jobs = JobState(service: JobService(coordinator: coordinator))
-        let editing = MaterialEditingFixture.editing(coordinator, jobs: jobs, parts: parts)
+        let editing = EditingFixture.make(coordinator, pause: PauseGate().pause)
+        let parts = editing.parts
         let observation = Task { await parts.observe() }
         defer { observation.cancel() }
         try await waitUntil { !parts.isLoading }
-        let part = try #require(await parts.add(named: "Mainspring", to: job.id))
+        let part = try #require(await parts.add(named: "Mainspring", to: job.id)?.part)
         let facts = try #require(parts.facts(for: part.id))
         facts.name.beginEditing()
         facts.name.change(to: "Mainspring 1.10", undoManager: nil)
@@ -30,7 +28,7 @@ struct WorkshopEditingTests {
         try await waitUntil { !facts.name.hasUnsavedChanges }
         facts.notes.beginEditing()
         facts.notes.change(to: "From Cousins, 3 November", undoManager: nil)
-        #expect(await editing.saveAllFields())
+        #expect(await editing.saveAllFields() == .saved)
         #expect(!editing.hasUnsavedFields)
         let saved = try #require(
             try await coordinator.read { try PartQueries.fetch(part.id, in: $0) })
@@ -47,8 +45,8 @@ struct WorkshopEditingTests {
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let jobs = JobState(service: JobService(coordinator: coordinator), pause: PauseGate().pause)
-        let editing = MaterialEditingFixture.editing(coordinator, jobs: jobs)
+        let editing = EditingFixture.make(coordinator, pause: PauseGate().pause)
+        let jobs = editing.jobs
         let observation = Task { await jobs.observe() }
         defer { observation.cancel() }
         try await waitUntil { jobs.jobs.count == 1 }
@@ -62,7 +60,7 @@ struct WorkshopEditingTests {
         try await waitUntil { !facts.title.hasUnsavedChanges }
         facts.problem.beginEditing()
         facts.problem.change(to: "Stops overnight.", undoManager: nil)
-        #expect(await editing.saveAllFields())
+        #expect(await editing.saveAllFields() == .saved)
         #expect(!editing.hasUnsavedFields)
         let saved = try #require(
             try await coordinator.read { try JobQueries.fetch(job.id, in: $0) })
@@ -95,7 +93,7 @@ struct WorkshopEditingTests {
         #expect(navigated)
         try await waitUntil { !editor.hasUnsavedChanges }
         editor.change(step, to: "Clean all parts twice", undoManager: nil)
-        #expect(await editing.saveAllFields())
+        #expect(await editing.saveAllFields() == .saved)
         #expect(!editing.hasUnsavedFields)
         #expect(
             try await coordinator.read(ChecklistQueries.fetchAll).map(\.text) == [
@@ -113,17 +111,9 @@ struct WorkshopEditingTests {
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let job = try await JobTaskFixture.job(coordinator)
-        let watches = WatchState(
-            service: WatchService(coordinator: coordinator), pause: PauseGate().pause)
-        let jobs = JobState(service: JobService(coordinator: coordinator))
-        let editing = WorkshopEditing(
-            watches: watches,
-            calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
-            jobs: jobs,
-            notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
-            material: MaterialState(service: MaterialService(coordinator: coordinator)),
-            checklist: ChecklistState(service: ChecklistService(coordinator: coordinator)),
-            parts: PartState(service: PartService(coordinator: coordinator)))
+        let editing = EditingFixture.make(coordinator, pause: PauseGate().pause)
+        let watches = editing.watches
+        let jobs = editing.jobs
         let observations = [Task { await watches.observe() }, Task { await jobs.observe() }]
         defer { observations.forEach { $0.cancel() } }
         try await waitUntil { !watches.isLoading && !jobs.isLoading }
@@ -139,7 +129,7 @@ struct WorkshopEditingTests {
         #expect(try await owner(of: watchID, coordinator) == "Ana Ribeiro")
         facts.contact.beginEditing()
         facts.contact.change(to: "ana@example.pt", undoManager: nil)
-        #expect(await editing.saveAllFields())
+        #expect(await editing.saveAllFields() == .saved)
         #expect(!editing.hasUnsavedFields)
         #expect(
             try await coordinator.read { try WatchQueries.fetch(watchID, in: $0)?.contact }
@@ -147,7 +137,7 @@ struct WorkshopEditingTests {
 
         // An archived watch can't change, but its open job still can.
         watches.select(watchID)
-        #expect(await watches.toggleArchive())
+        #expect(await watches.toggleArchive().didSave)
         try await waitUntil { watches.selectedWatch?.archivedAt != nil }
         #expect(!editing.canWrite(.watch(watchID)))
         #expect(editing.canWrite(.job(job.id)))

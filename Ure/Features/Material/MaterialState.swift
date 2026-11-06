@@ -10,44 +10,43 @@ nonisolated struct MaterialPresentation: Equatable, Sendable {
     let page: LibraryItemOwner
 }
 
+// The material of every record: photos, PDFs and links. Every change, such as an import, a new
+// title or a removal, goes through the library's edit queue, in the order you made it.
 @Observable
 final class MaterialState {
     var reader: ReferenceReader { ReferenceReader(coordinator: service.coordinator) }
     private let service: MaterialService
+    let queue: EditQueue
     @ObservationIgnored private let pause: (Duration) async throws -> Void
     private(set) var records: [MaterialRecord] = []
     private(set) var isLoading = true
     private(set) var loadError: String?
     private(set) var titleFields: [UUID: AutosaveField] = [:]
-    private(set) var errors: [LibraryItemOwner: String] = [:]
+    // Problems that are not edits, such as a link that does not read or a file that won't open.
+    private var problems: [LibraryItemOwner: String] = [:]
     private(set) var presented: MaterialPresentation?
-    private(set) var isChanging = false
-    private(set) var pendingChanges = 0
     private(set) var isExporting = false
     private(set) var importOwner: LibraryItemOwner?
     private(set) var importResults: [FileImportResult<MaterialRecord>] = []
-    private(set) var isImporting = false
-    @ObservationIgnored private var importTask: Task<Void, Never>?
-    @ObservationIgnored private var changeTask: Task<Void, Never>?
-    // The latest removal of each material, so Undo restores what that removal took away.
-    @ObservationIgnored private var removals: [UUID: RemovedMaterial] = [:]
-    @ObservationIgnored private weak var undoManager: UndoManager?
+    private var importTicket: EditTicket?
 
     init(
-        service: MaterialService,
+        service: MaterialService, queue: EditQueue,
         pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.service = service
+        self.queue = queue
         self.pause = pause
+        queue.listen { [weak self] change, byUndo in self?.receive(change, byUndo: byUndo) }
     }
 
-    var isBusy: Bool { isChanging || pendingChanges > 0 || isExporting || isImporting }
-    // Titles of material on screen that still have to save. A removed material's title does not
-    // count, because nothing shows it until Undo brings the material back.
-    var hasUnsavedTitles: Bool { !unsavedTitleFields.isEmpty }
+    // A material change is still saving, or a file is being copied out. Material buttons wait.
+    var isBusy: Bool { queue.isBusyWithMaterial || isExporting }
+    var isImporting: Bool { importTicket != nil }
 
-    private var unsavedTitleFields: [AutosaveField] {
-        records.compactMap { titleFields[$0.id] }.filter(\.hasUnsavedChanges)
+    // What went wrong on a record's page: a change that did not save, or another problem.
+    func error(for page: LibraryItemOwner) -> String? {
+        problems[page] ?? queue.refusal(in: .material(page))
     }
 
     // Material in the order it was added.
@@ -70,7 +69,7 @@ final class MaterialState {
         isLoading = true
         loadError = nil
         do {
-            for try await values in try await service.coordinator.materialValues() {
+            for try await values in try await queue.coordinator.materialValues() {
                 apply(values)
                 isLoading = false
             }
@@ -89,8 +88,32 @@ final class MaterialState {
         }
     }
 
-    // Keeps one autosave field per material. A field stays after its material is removed, so
-    // Undo of a rename still works once Undo brings the material back.
+    private func receive(_ change: LibraryChange, byUndo: Bool) {
+        switch change {
+        case .material(let record):
+            insert(record)
+        case .materialItem(let item):
+            if let index = records.firstIndex(where: { $0.id == item.id }) {
+                records[index] = MaterialRecord(item: item, asset: records[index].asset)
+            }
+            titleFields[item.id]?.refresh(item.title, force: byUndo)
+        case .materialRemoved(let id):
+            records.removeAll { $0.id == id }
+            if presented?.itemID == id { presented = nil }
+            // Its title goes with it, and text that did not save there no longer counts.
+            titleFields.removeValue(forKey: id)?.discard()
+        case .imported(_, let results):
+            for result in results {
+                if case .success(let record) = result.outcome { insert(record) }
+            }
+            importResults = results
+        default:
+            break
+        }
+    }
+
+    // Keeps one autosave field per material, made the first time the material shows. Undo of a
+    // rename comes from the stored title, so removed material needs no field.
     private func adoptTitle(of record: MaterialRecord) {
         if let field = titleFields[record.id] {
             field.refresh(record.item.title)
@@ -99,9 +122,9 @@ final class MaterialState {
         guard let owner = record.item.owner else { return }
         let id = record.id
         titleFields[id] = AutosaveField(
-            text: record.item.title, actionName: "Rename",
-            save: { [service] title in try await service.rename(id, to: title, for: owner) },
-            pause: pause, accepts: Self.isTitle)
+            text: record.item.title, actionName: "Rename", queue: queue,
+            scope: .material(owner), edit: { .material(.rename(id, $0, owner)) }, pause: pause,
+            accepts: Self.isTitle, putsBackRefusedText: true)
     }
 
     private static func isTitle(_ text: String) -> Bool {
@@ -114,73 +137,53 @@ final class MaterialState {
         field.endEditing()
     }
 
-    func saveTitlesNow() {
-        for field in unsavedTitleFields { field.saveNow() }
-    }
-
-    // A blank title never saves, so quitting puts back the title it had instead of asking.
-    func saveAllTitles() async -> Bool {
-        var succeeded = true
-        for field in unsavedTitleFields {
-            if !Self.isTitle(field.text) { field.revert(undoManager: nil) }
-            if await !field.flush() { succeeded = false }
-        }
-        return succeeded
-    }
-
-    func discardUndo() {
-        for field in titleFields.values { field.discardUndo() }
-        undoManager?.removeAllActions(withTarget: self)
-    }
-
     func importFiles(_ sources: [URL], for owner: LibraryItemOwner) {
         guard !isImporting, !sources.isEmpty else { return }
-        isImporting = true
         importOwner = owner
         importResults = []
-        errors[owner] = nil
-        importTask = Task {
-            let results = await service.importFiles(sources, for: owner)
-            for result in results {
-                if case .success(let record) = result.outcome { insert(record) }
+        problems[owner] = nil
+        importTicket = queue.submit(.material(.importFiles(sources, owner)), in: .material(owner)) {
+            [weak self] result in
+            guard let self else { return }
+            importTicket = nil
+            if result.error is CancellationError {
+                importResults = sources.map { source in
+                    FileImportResult(source: source, outcome: .failure(FileImportError.cancelled))
+                }
             }
-            importResults = results
-            isImporting = false
-            importTask = nil
         }
     }
 
-    func cancelImport() { importTask?.cancel() }
+    func cancelImport() {
+        if let importTicket { queue.cancel(importTicket) }
+    }
 
-    func reportError(_ message: String, on page: LibraryItemOwner) { errors[page] = message }
+    func reportError(_ message: String, on page: LibraryItemOwner) { problems[page] = message }
 
     // Dropped files import. Dropped web addresses become links.
-    func add(_ urls: [URL], for owner: LibraryItemOwner) async {
+    func add(_ urls: [URL], for owner: LibraryItemOwner) {
         let files = urls.filter(\.isFileURL)
         if !files.isEmpty { importFiles(files, for: owner) }
         for url in urls where !url.isFileURL {
-            await addLink(url.absoluteString, for: owner)
+            addLink(url.absoluteString, for: owner)
         }
     }
 
+    // A pasted web address becomes a link. Nil when the text is not one.
     @discardableResult
-    func paste(_ text: String?, for owner: LibraryItemOwner) async -> Bool {
-        await addLink(text ?? "", for: owner)
+    func paste(_ text: String?, for owner: LibraryItemOwner) -> EditTicket? {
+        addLink(text ?? "", for: owner)
     }
 
     @discardableResult
-    private func addLink(_ text: String, for owner: LibraryItemOwner) async -> Bool {
-        errors[owner] = nil
+    private func addLink(_ text: String, for owner: LibraryItemOwner) -> EditTicket? {
+        problems[owner] = nil
         do {
             let url = try WebLink.parse(text)
-            isChanging = true
-            defer { isChanging = false }
-            let item = try await service.addLink(url, for: owner)
-            insert(MaterialRecord(item: item, asset: nil))
-            return true
+            return queue.submit(.material(.addLink(url, owner)), in: .material(owner))
         } catch {
-            errors[owner] = error.localizedDescription
-            return false
+            problems[owner] = error.localizedDescription
+            return nil
         }
     }
 
@@ -194,10 +197,10 @@ final class MaterialState {
 
     // Links open in the browser. Photos and PDFs open in the viewer on the page they came from.
     func open(_ record: MaterialRecord, on page: LibraryItemOwner) {
-        errors[page] = nil
+        problems[page] = nil
         guard record.item.kind != .link else {
             do { try service.openLink(record.item) } catch {
-                errors[page] = error.localizedDescription
+                problems[page] = error.localizedDescription
             }
             return
         }
@@ -239,117 +242,37 @@ final class MaterialState {
     func export(_ assetID: UUID, to destination: URL, from page: LibraryItemOwner) {
         guard !isExporting else { return }
         isExporting = true
-        errors[page] = nil
+        problems[page] = nil
         Task {
             defer { isExporting = false }
             do { try await service.export(assetID, to: destination) } catch {
-                errors[page] = error.localizedDescription
+                problems[page] = error.localizedDescription
             }
         }
     }
 
-    func setCover(_ photoID: UUID?, for watchID: UUID) {
-        guard !isChanging else { return }
-        isChanging = true
-        errors[.watch(watchID)] = nil
-        Task {
-            defer { isChanging = false }
-            do { try await service.setCover(photoID, for: watchID) } catch {
-                errors[.watch(watchID)] = error.localizedDescription
-            }
-        }
+    @discardableResult
+    func setCover(_ photoID: UUID?, for watchID: UUID) -> EditTicket? {
+        guard !queue.isBusyWithMaterial else { return nil }
+        return queue.submit(
+            .material(.setCover(photoID, watch: watchID)), in: .material(.watch(watchID)))
     }
 
     // Material can be removed only on its own page, not where it shows from its caliber.
     func canRemove(_ record: MaterialRecord, on page: LibraryItemOwner) -> Bool {
-        record.item.belongs(to: page) && !isChanging
+        record.item.belongs(to: page) && !queue.isBusyWithMaterial
     }
 
-    // Removes material. Undo puts it back, and Redo removes it again.
+    // Removes material. Undo puts it back, and Redo removes it again. A title still being typed
+    // saves first, so Undo brings the material back with it.
     @discardableResult
     func remove(_ record: MaterialRecord, on page: LibraryItemOwner, undoManager: UndoManager?)
-        async -> Bool
+        -> EditTicket?
     {
-        guard canRemove(record, on: page) else { return false }
-        isChanging = true
-        defer { isChanging = false }
-        errors[page] = nil
-        await changeTask?.value
-        // A title still being typed saves first, so Undo brings the material back with it.
-        if let field = titleFields[record.id] { _ = await field.flush() }
-        do {
-            let removed = try await service.remove(record.id, from: page)
-            removals[record.id] = removed
-            records.removeAll { $0.id == record.id }
-            if presented?.itemID == record.id { presented = nil }
-            registerRestore(removed, page: page, undoManager: undoManager)
-            return true
-        } catch {
-            errors[page] = error.localizedDescription
-            return false
-        }
+        guard canRemove(record, on: page) else { return nil }
+        problems[page] = nil
+        return queue.submit(
+            .material(.remove(record.id, page)), in: .material(page),
+            undo: "Remove \(record.item.kind.title)", undoManager: undoManager)
     }
-
-    // Undo and Redo register their opposite while they run, then save in order.
-    private func registerRestore(
-        _ removed: RemovedMaterial, page: LibraryItemOwner, undoManager: UndoManager?
-    ) {
-        guard let undoManager else { return }
-        self.undoManager = undoManager
-        undoManager.registerUndo(withTarget: self) { [weak undoManager] state in
-            MainActor.assumeIsolated {
-                state.restore(removed, page: page, undoManager: undoManager)
-            }
-        }
-        undoManager.setActionName("Remove \(removed.item.kind.title)")
-    }
-
-    private func registerRemoval(
-        _ removed: RemovedMaterial, page: LibraryItemOwner, undoManager: UndoManager?
-    ) {
-        guard let undoManager else { return }
-        undoManager.registerUndo(withTarget: self) { [weak undoManager] state in
-            MainActor.assumeIsolated {
-                state.removeAgain(removed, page: page, undoManager: undoManager)
-            }
-        }
-        undoManager.setActionName("Remove \(removed.item.kind.title)")
-    }
-
-    private func restore(
-        _ removed: RemovedMaterial, page: LibraryItemOwner, undoManager: UndoManager?
-    ) {
-        registerRemoval(removed, page: page, undoManager: undoManager)
-        enqueue(page: page) { [service] in
-            try await service.restore(self.removals[removed.item.id] ?? removed)
-        }
-    }
-
-    private func removeAgain(
-        _ removed: RemovedMaterial, page: LibraryItemOwner, undoManager: UndoManager?
-    ) {
-        registerRestore(removed, page: page, undoManager: undoManager)
-        if presented?.itemID == removed.item.id { presented = nil }
-        enqueue(page: page) { [service] in
-            self.removals[removed.item.id] = try await service.remove(removed.item.id, from: page)
-        }
-    }
-
-    private func enqueue(
-        page: LibraryItemOwner, _ change: @escaping () async throws -> Void
-    ) {
-        let previous = changeTask
-        errors[page] = nil
-        pendingChanges += 1
-        changeTask = Task {
-            await previous?.value
-            do { try await change() } catch {
-                errors[page] = error.localizedDescription
-            }
-            pendingChanges -= 1
-        }
-    }
-
-    // Waits for Undo and Redo changes that are still saving.
-    func waitForChanges() async { await changeTask?.value }
 }

@@ -1,155 +1,279 @@
 import Foundation
 import Observation
 
-// One text field that saves as you type. A change saves after a pause in typing, when focus
-// leaves, and when the app asks for every field to save. Each burst of typing is one Undo step,
-// and Undo and Redo save again. Esc puts back the text the field had when focus entered it.
-// A text the field does not accept, such as a blank title or a number it cannot read, stays on
-// screen but never saves, so the record keeps the last text it accepted. Undo never offers it back.
+// One text field that saves as you type. The field only holds the typing: its text goes to the
+// library's edit queue as an edit after a pause in typing, when focus leaves, before any other
+// edit, and when the app asks every field to save. Each burst of typing is one Undo step. Undo
+// and Redo put back the text at once and save it in order, as typing does. When the field is
+// gone, the queue undoes the change from the stored data. Esc puts back the text the field had
+// when focus entered it. A text the field does not accept, such as a blank title or a number it
+// cannot read, stays on screen but never saves, so the record keeps the last text it accepted.
 @Observable
 final class AutosaveField {
     static let typingPause: Duration = .milliseconds(500)
 
     private(set) var text: String
+    // What the library holds, or will hold once this field's edits have run.
     private(set) var savedText: String
     private(set) var isEditing = false
+    // An edit of this field is still waiting in the queue.
     private(set) var isSaving = false
-    private(set) var saveError: String?
     @ObservationIgnored private let actionName: String
-    @ObservationIgnored private let save: (String) async throws -> Void
+    @ObservationIgnored private let queue: EditQueue
+    @ObservationIgnored private let scope: EditScope
+    @ObservationIgnored private let edit: (String) throws -> LibraryEdit
     @ObservationIgnored private let pause: (Duration) async throws -> Void
     @ObservationIgnored private let accepts: (String) -> Bool
-    @ObservationIgnored private var scheduledSave: Task<Void, Never>?
-    @ObservationIgnored private var runningSave: Task<Bool, Never>?
+    @ObservationIgnored private let normalized: (String) -> String
+    // Saving everything, such as before quitting, puts back the stored text in place of text the
+    // field does not take, such as a blank material title, instead of keeping it as unsaved.
+    @ObservationIgnored private let putsBackRefusedText: Bool
+    @ObservationIgnored private var scheduledSubmit: Task<Void, Never>?
     @ObservationIgnored private var textBeforeEditing: String?
-    @ObservationIgnored private var textBeforeChange: String?
-    @ObservationIgnored private weak var undoManager: UndoManager?
+    // A burst of typing is going on. It ends when its text submits.
+    @ObservationIgnored private var isTyping = false
+    // The Undo step that the text on screen belongs to while it has not saved.
+    @ObservationIgnored private var unsavedChange: EditChange?
+    // What the library holds, as far as this field knows.
+    @ObservationIgnored private var storedText: String
+    @ObservationIgnored private var latest: EditTicket?
+    // The text each of this field's Undo and Redo steps puts back.
+    @ObservationIgnored private var undoTexts: [EditChange: String] = [:]
+    // The text each step submitted, which Redo brings back once Undo has taken it back. Another
+    // change, such as a job going Done, can change the text on screen in between.
+    @ObservationIgnored private var submittedTexts: [EditChange: String] = [:]
+    @ObservationIgnored private var isTracked = false
 
     init(
-        text: String, actionName: String, save: @escaping (String) async throws -> Void,
+        text: String, actionName: String, queue: EditQueue, scope: EditScope,
+        edit: @escaping (String) throws -> LibraryEdit,
         pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
-        accepts: @escaping (String) -> Bool = { _ in true }
+        accepts: @escaping (String) -> Bool = { _ in true },
+        normalized: @escaping (String) -> String = { $0 }, putsBackRefusedText: Bool = false
     ) {
         self.text = text
         savedText = text
+        storedText = text
         self.actionName = actionName
-        self.save = save
+        self.queue = queue
+        self.scope = scope
+        self.edit = edit
         self.pause = pause
         self.accepts = accepts
+        self.normalized = normalized
+        self.putsBackRefusedText = putsBackRefusedText
     }
 
+    // Text on screen that has not saved, or an edit of it still waiting.
     var hasUnsavedChanges: Bool { text != savedText || isSaving }
+
+    // Text on screen that no edit will give the library: typing that has not submitted, and
+    // text the field does not take.
+    var hasUnsavedText: Bool { text != savedText }
+
+    // Text the field does not take, such as a blank name. It never saves.
+    var isRefused: Bool { text != savedText && !accepts(text) }
 
     func beginEditing() {
         isEditing = true
         textBeforeEditing = text
-        textBeforeChange = nil
     }
 
     func endEditing() {
         isEditing = false
         textBeforeEditing = nil
-        textBeforeChange = nil
         saveNow()
+        showSavedText()
     }
 
     func change(to newText: String, undoManager: UndoManager?) {
         guard newText != text else { return }
-        if textBeforeChange == nil {
-            textBeforeChange = text
-            registerUndo(restoring: text, with: undoManager)
+        if !isTyping {
+            isTyping = true
+            if unsavedChange == nil {
+                let before = text
+                unsavedChange = queue.registerStep(
+                    actionName, in: scope, undoManager: undoManager,
+                    owner: UndoOwner(
+                        undo: { [weak self] undone, back in
+                            self?.undo(undone, back: back) ?? .notMine
+                        },
+                        forget: { [weak self] change in self?.forget(change) }))
+                if let unsavedChange, accepts(before) { undoTexts[unsavedChange] = before }
+            }
         }
         text = newText
-        scheduleSave()
+        track()
+        scheduleSubmit()
     }
 
+    // Esc puts back the text from when focus entered the field. The typing before it submits
+    // first, so Esc is an Undo step of its own and ⌘Z brings the typing back.
     func revert(undoManager: UndoManager?) {
         guard let textBeforeEditing, textBeforeEditing != text else { return }
-        textBeforeChange = nil
+        if isTyping { saveNow() }
         change(to: textBeforeEditing, undoManager: undoManager)
-        textBeforeChange = nil
         saveNow()
     }
 
-    // Adopts a stored value when nothing typed here is waiting to save.
-    func refresh(_ stored: String) {
-        guard !isEditing, !hasUnsavedChanges, saveError == nil else { return }
+    // Adopts a stored value when nothing typed here is waiting. After Undo and Redo it does so
+    // also while the field has the cursor, because Undo is what changed it.
+    func refresh(_ stored: String, force: Bool = false) {
+        guard force || !isEditing, !isTyping, !isSaving, text == savedText else { return }
         text = stored
         savedText = stored
+        storedText = stored
     }
 
-    func saveNow() {
-        scheduledSave?.cancel()
-        scheduledSave = nil
-        Task { await flush() }
-    }
+    // Submits the text now, if it changed and the field takes it.
+    func saveNow() { submit() }
 
-    @discardableResult
-    func flush() async -> Bool {
-        scheduledSave?.cancel()
-        scheduledSave = nil
-        while true {
-            while let runningSave { _ = await runningSave.value }
-            guard text != savedText else {
-                saveError = nil
-                return true
-            }
-            guard accepts(text) else { return false }
-            let value = text
-            let task = Task {
-                let succeeded = await write(value)
-                runningSave = nil
-                return succeeded
-            }
-            runningSave = task
-            guard await task.value else { return false }
+    // Submits the text if the field takes it. Undo submits it also when it is the text the
+    // library holds now, because a change before it in the queue can still change that.
+    private func submit(always: Bool = false) {
+        scheduledSubmit?.cancel()
+        scheduledSubmit = nil
+        isTyping = false
+        defer { track() }
+        guard always || text != savedText else {
+            settle()
+            return
         }
-    }
-
-    func discardUndo() {
-        undoManager?.removeAllActions(withTarget: self)
-    }
-
-    private func write(_ value: String) async -> Bool {
+        guard accepts(text), let submitted = try? edit(text) else { return }
+        let value = text
+        let change = unsavedChange
+        unsavedChange = nil
+        if let change { submittedTexts[change] = value }
+        savedText = value
         isSaving = true
-        defer { isSaving = false }
-        do {
-            try await save(value)
-            savedText = value
-            saveError = nil
-            return true
-        } catch {
-            saveError = error.localizedDescription
-            return false
+        latest = queue.submitTyping(submitted, in: scope, as: change) { [weak self] result in
+            self?.finished(value, result: result)
         }
     }
 
-    private func scheduleSave() {
-        scheduledSave?.cancel()
-        scheduledSave = Task { [weak self, pause] in
+    // The field goes, such as with its part, and its text no longer counts as unsaved.
+    func discard() {
+        scheduledSubmit?.cancel()
+        scheduledSubmit = nil
+        isTyping = false
+        unsavedChange = nil
+        text = savedText
+        track()
+    }
+
+    // An edit of this field saved, or it was dropped with every change that did not save. Then
+    // the field shows what the library holds, and the typing on screen goes too.
+    private func finished(_ value: String, result: EditResult) {
+        if latest?.isPending != true {
+            isSaving = false
+            latest = nil
+        }
+        if result.isSaved {
+            storedText = value
+            showSavedText()
+        } else {
+            putBackStoredText()
+        }
+        track()
+    }
+
+    private func putBackStoredText() {
+        scheduledSubmit?.cancel()
+        scheduledSubmit = nil
+        isTyping = false
+        unsavedChange = nil
+        text = storedText
+        savedText = storedText
+    }
+
+    // Once saved, a field without the cursor shows its text the way it shows a stored value,
+    // such as "28.800 vph" for "28800vph".
+    private func showSavedText() {
+        guard !isEditing, !isTyping, !isSaving, text == savedText else { return }
+        let shown = normalized(text)
+        guard shown != text else { return }
+        text = shown
+        savedText = shown
+        storedText = shown
+    }
+
+    // Undo or Redo of one of this field's changes puts back its text at once. Typing of the step
+    // that has not submitted submits first, so the library holds every step. Then the text saves
+    // after everything before it, under the way back's number, also when it is the text the field
+    // shows as saved. The text the step submitted is what Redo puts back, unless the field does
+    // not take it.
+    private func undo(_ change: EditChange, back: EditChange) -> UndoHandling {
+        guard let restored = undoTexts.removeValue(forKey: change) else { return .notMine }
+        if unsavedChange == change { saveNow() }
+        let redone = submittedTexts.removeValue(forKey: change) ?? text
+        scheduledSubmit?.cancel()
+        scheduledSubmit = nil
+        isTyping = false
+        let canRedo = accepts(redone)
+        if canRedo { undoTexts[back] = redone }
+        text = restored
+        unsavedChange = canRedo ? back : nil
+        submit(always: true)
+        return .done(canRedo: canRedo)
+    }
+
+    private func forget(_ change: EditChange) {
+        undoTexts[change] = nil
+        submittedTexts[change] = nil
+    }
+
+    private func putBackSavedText() {
+        scheduledSubmit?.cancel()
+        scheduledSubmit = nil
+        isTyping = false
+        unsavedChange = nil
+        text = savedText
+        track()
+    }
+
+    private func saveEverything() {
+        if putsBackRefusedText, isRefused { putBackSavedText() }
+        saveNow()
+    }
+
+    private func settle() { unsavedChange = nil }
+
+    private func scheduleSubmit() {
+        scheduledSubmit?.cancel()
+        scheduledSubmit = Task { [weak self, pause] in
             do { try await pause(Self.typingPause) } catch { return }
             guard !Task.isCancelled, let self else { return }
-            scheduledSave = nil
-            textBeforeChange = nil
-            await flush()
+            scheduledSubmit = nil
+            saveNow()
         }
     }
 
-    private func registerUndo(restoring value: String, with undoManager: UndoManager?) {
-        guard let undoManager, accepts(value) else { return }
-        self.undoManager = undoManager
-        undoManager.registerUndo(withTarget: self) { [weak undoManager] field in
-            MainActor.assumeIsolated {
-                field.restore(value, undoManager: undoManager)
-            }
+    // The queue asks the field to submit before other edits, and before quitting.
+    private func track() {
+        let unsaved = text != savedText || isTyping
+        guard unsaved != isTracked else { return }
+        isTracked = unsaved
+        let key = ObjectIdentifier(self)
+        guard unsaved else {
+            queue.untrack(key)
+            return
         }
-        undoManager.setActionName(actionName)
-    }
-
-    private func restore(_ value: String, undoManager: UndoManager?) {
-        textBeforeChange = nil
-        registerUndo(restoring: text, with: undoManager)
-        text = value
-        saveNow()
+        queue.track(
+            key,
+            TypingSource(
+                began: { [weak self] in
+                    guard let self, isTyping else { return nil }
+                    return unsavedChange
+                },
+                submit: { [weak self] in
+                    guard let self, isTyping else { return }
+                    saveNow()
+                },
+                saveAll: { [weak self] in self?.saveEverything() },
+                isUnsaved: { [weak self] in self?.hasUnsavedText ?? false },
+                discard: { [weak self] in
+                    self?.putBackStoredText()
+                    self?.track()
+                }))
     }
 }

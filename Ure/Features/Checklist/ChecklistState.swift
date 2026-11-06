@@ -7,7 +7,7 @@ import Observation
 // progress on a watch page.
 @Observable
 final class ChecklistState {
-    private let service: ChecklistService
+    let queue: EditQueue
     @ObservationIgnored private let pause: (Duration) async throws -> Void
     private(set) var records: [ChecklistStepRecord] = []
     private(set) var isLoading = true
@@ -17,21 +17,23 @@ final class ChecklistState {
     @ObservationIgnored private var editors: [UUID: ChecklistEditor] = [:]
 
     init(
-        service: ChecklistService,
+        queue: EditQueue,
         pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
-        self.service = service
+        self.queue = queue
         self.pause = pause
+        queue.listen { [weak self] change, _ in
+            guard case .checklist(let jobID, let steps) = change else { return }
+            self?.adopt(steps, for: jobID)
+        }
     }
 
     // The editor of a job's checklist, made with its stored steps the first time it is asked
     // for.
     func editor(for jobID: UUID) -> ChecklistEditor {
         if let editor = editors[jobID] { return editor }
-        let service = service
         let editor = ChecklistEditor(
-            jobID: jobID, steps: stored(for: jobID),
-            save: { steps in _ = try await service.save(steps, for: jobID) }, pause: pause)
+            jobID: jobID, steps: stored(for: jobID), queue: queue, pause: pause)
         editor.editingChanged = { [weak self] id in self?.editingChanged(jobID, id) }
         editors[jobID] = editor
         return editor
@@ -50,13 +52,11 @@ final class ChecklistState {
         return ChecklistProgress(stored(for: jobID))
     }
 
-    var hasUnsavedChanges: Bool { editors.values.contains { $0.hasUnsavedChanges } }
-
     func observe() async {
         isLoading = true
         loadError = nil
         do {
-            let values = try await service.coordinator.checklistValues()
+            let values = try await queue.coordinator.checklistValues()
             for try await stored in values {
                 records = stored
                 for editor in editors.values { editor.refresh(self.stored(for: editor.jobID)) }
@@ -69,20 +69,11 @@ final class ChecklistState {
         }
     }
 
-    func saveNow() {
-        for editor in editors.values where editor.hasUnsavedChanges { editor.saveNow() }
-    }
-
-    func saveAll() async -> Bool {
-        var succeeded = true
-        for editor in editors.values where editor.hasUnsavedChanges {
-            if await !editor.flush() { succeeded = false }
-        }
-        return succeeded
-    }
-
-    func discardUndo() {
-        for editor in editors.values { editor.discardUndo() }
+    // A job's saved steps after an edit, Undo and Redo included. They show also while a step
+    // has the cursor.
+    private func adopt(_ steps: [ChecklistStepRecord], for jobID: UUID) {
+        records = records.filter { $0.jobID != jobID } + steps
+        editors[jobID]?.refresh(stored(for: jobID), fromQueue: true)
     }
 
     private func stored(for jobID: UUID) -> [ChecklistStep] {

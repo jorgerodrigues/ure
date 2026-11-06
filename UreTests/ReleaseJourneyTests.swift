@@ -46,10 +46,11 @@ nonisolated struct ReleaseJourneyTests {
         try await notes.save("Finding: unknown specifications. Keep 00042-A/7.", for: .job(job.id))
         let parts = PartService(coordinator: coordinator)
         let initialPart = try await parts.add(named: "Mainspring", to: job.id)
-        let describedPart = try await parts.update(initialPart.id, .description("0012-A"))
+        let describedPart = try await parts.update(initialPart.id, .description("0012-A")).after
         #expect(describedPart.description == "0012-A" && describedPart.stage == .needed)
         _ = try await jobs.setStage(job.id, to: .waiting)
-        #expect(try await jobs.update(job.id, .waitingFor("A spring")).waitingFor == "A spring")
+        #expect(
+            try await jobs.update(job.id, .waitingFor("A spring")).after.waitingFor == "A spring")
         let checklist = ChecklistService(coordinator: coordinator)
         #expect(try await progress(job.id, coordinator).summary == "No steps yet")
         // The checklist is typed by hand. Nothing ticks a step for you, not even a part that
@@ -59,7 +60,7 @@ nonisolated struct ReleaseJourneyTests {
             ChecklistStep(id: UUID(), text: "Assembly", isHeading: true), fit,
             ChecklistStep(id: UUID(), text: "Regulate"),
         ]
-        let saved = try await checklist.save(steps, for: job.id)
+        let saved = try await checklist.save(steps, for: job.id).after
         _ = try await parts.setStage(describedPart.id, to: .inHand)
         #expect(
             try await coordinator.read { try ChecklistQueries.ordered(for: job.id, in: $0) }

@@ -47,7 +47,12 @@ struct RestoreSectionView: View {
                     .disabled(!restore.canRestore)
                     .accessibilityIdentifier("restoreLibraryBackup")
             }
-            if restore.session.editing.hasUnsavedFields || restore.session.editing.isSaving {
+            if restore.session.editing.failure != nil {
+                Text(
+                    "A change did not save. In the main window, choose Try Again or Discard Unsaved Changes before restoring."
+                )
+                .foregroundStyle(.secondary)
+            } else if restore.session.editing.hasUnsavedFields || restore.session.editing.isSaving {
                 Text("Wait for your typing, pending saves and imports to finish before restoring.")
                     .foregroundStyle(.secondary)
             }

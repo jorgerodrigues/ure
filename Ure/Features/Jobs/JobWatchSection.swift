@@ -96,7 +96,7 @@ private struct WatchPickerField: View {
                         y: InPlaceLayout.boxHeight + JobWatchLayout.listGap)
                 }
             }
-            if let error = jobs.saveError, picker.isEditing {
+            if let error = jobs.refusal, picker.isEditing {
                 Text(error)
                     .font(.system(size: InPlaceLayout.messageSize))
                     .foregroundStyle(.red)
@@ -148,7 +148,7 @@ private struct WatchPickerField: View {
         let editing = editing
         let undoManager = undoManager
         editing.requestNavigation {
-            Task { await picker.pick(item, editing: editing, undoManager: undoManager) }
+            picker.pick(item, editing: editing, undoManager: undoManager)
         }
     }
 }

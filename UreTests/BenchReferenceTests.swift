@@ -176,14 +176,14 @@ struct BenchReferenceTests {
         bench.apply(try await coordinator.read(BenchSnapshot.fetch))
         let job = try #require(bench.snapshot.jobs.first)
         bench.selectJob(job.id)
-        let editing = MaterialEditingFixture.editing(coordinator)
+        let editing = EditingFixture.make(coordinator)
         let observation = Task { await editing.jobs.observe() }
         defer { observation.cancel() }
         let partObservation = Task { await editing.parts.observe() }
         defer { partObservation.cancel() }
         try await waitUntil { !editing.jobs.isLoading && !editing.parts.isLoading }
         editing.jobs.open(try #require(editing.jobs.jobs.first { $0.id == job.id }))
-        let part = try #require(await editing.parts.add(named: "Bench part", to: job.id))
+        let part = try #require(await editing.parts.add(named: "Bench part", to: job.id)?.part)
         let facts = try #require(editing.parts.facts(for: part.id))
         facts.name.beginEditing()
         facts.name.change(to: "Unfinished bench part", undoManager: nil)

@@ -23,7 +23,7 @@ nonisolated struct JobTransitionTests {
         clock.withLock { $0 = first }
         var prior = try await service.setStage(job.id, to: from).job
         if from == .waiting {
-            prior = try await service.update(job.id, .waitingFor("A mainspring"))
+            prior = try await service.update(job.id, .waitingFor("A mainspring")).after
         }
         let second = first.addingTimeInterval(60)
         clock.withLock { $0 = second }
@@ -66,18 +66,19 @@ nonisolated struct JobTransitionTests {
         let reopened = try await service.setStage(job.id, to: .inProgress)
         #expect(reopened.prior == JobStageValue(stage: .done, doneAt: doneDay))
         #expect(reopened.job.doneAt == nil)
-        let undone = try await service.restoreStage(job.id, to: reopened.prior)
+        let undone = try await service.restoreStage(job.id, to: reopened.prior).job
         #expect(undone.stage == .done && undone.doneAt == doneDay && undone.updatedAt == later)
 
         _ = try await service.restoreStage(job.id, to: JobStageValue(stage: .waiting))
         let waiting = try await service.update(job.id, .waitingFor(" A crystal from Cousins "))
+            .after
         #expect(waiting.waitingFor == "A crystal from Cousins")
         let moved = try await service.setStage(job.id, to: .inProgress)
         #expect(moved.job.waitingFor == nil)
         #expect(moved.prior == JobStageValue(stage: .waiting, waitingFor: "A crystal from Cousins"))
-        let back = try await service.restoreStage(job.id, to: moved.prior)
+        let back = try await service.restoreStage(job.id, to: moved.prior).job
         #expect(back.stage == .waiting && back.waitingFor == "A crystal from Cousins")
-        #expect(try await service.restoreStage(job.id, to: moved.prior) == back)
+        #expect(try await service.restoreStage(job.id, to: moved.prior).job == back)
         try await coordinator.close()
     }
 
@@ -122,7 +123,7 @@ nonisolated struct JobTransitionTests {
         let service = JobService(coordinator: coordinator)
         _ = try await ArchiveService(coordinator: coordinator).setWatch(watch.id, archived: true)
         let done = try await service.setStage(job.id, to: .done)
-        let undone = try await service.restoreStage(job.id, to: done.prior)
+        let undone = try await service.restoreStage(job.id, to: done.prior).job
         #expect(undone.stage == .inProgress && undone.doneAt == nil)
         try await coordinator.mutate { db, _, _ in
             try db.execute(sql: "UPDATE job SET archivedAt = 1")

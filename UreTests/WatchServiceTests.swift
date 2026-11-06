@@ -43,8 +43,8 @@ nonisolated struct WatchServiceTests {
 
         let cleared = created.addingTimeInterval(120)
         clock.withLock { $0 = cleared }
-        #expect(try await service.update(watch.id, .serial("000042.7-A")) == saved)
-        let withoutOwner = try await service.update(watch.id, .owner("  "))
+        #expect(try await service.update(watch.id, .serial("000042.7-A")).after == saved)
+        let withoutOwner = try await service.update(watch.id, .owner("  ")).after
         #expect(withoutOwner.owner == nil && withoutOwner.updatedAt == cleared)
         _ = try await service.update(watch.id, .caliber(nil))
         try await coordinator.close()
@@ -114,7 +114,7 @@ nonisolated struct WatchServiceTests {
         try await coordinator.mutate { db, _, _ in
             try db.execute(sql: "DROP TRIGGER failWatchUpdate")
         }
-        let last = try await service.update(first.id, .name("Final name"))
+        let last = try await service.update(first.id, .name("Final name")).after
         #expect(try await iterator.next() == [last])
         try await coordinator.close()
     }
@@ -179,7 +179,7 @@ nonisolated struct WatchFixture: Sendable {
             WatchFact.model("Å 001"), .reference("0012–Å/3"), .serial("000042.7-A"),
             .year("circa 1960–1965"), .caseMaterial("Steel"), .diameter(36.5), .lugWidth(18),
         ] {
-            watch = try await service.update(watch.id, fact)
+            watch = try await service.update(watch.id, fact).after
         }
         return watch
     }
@@ -191,8 +191,8 @@ extension WatchService {
         _ name: String, brand: String? = nil, caliberID: UUID? = nil
     ) async throws -> WatchRecord {
         var watch = try await create(named: name)
-        if let brand { watch = try await update(watch.id, .brand(brand)) }
-        if let caliberID { watch = try await update(watch.id, .caliber(caliberID)) }
+        if let brand { watch = try await update(watch.id, .brand(brand)).after }
+        if let caliberID { watch = try await update(watch.id, .caliber(caliberID)).after }
         return watch
     }
 }

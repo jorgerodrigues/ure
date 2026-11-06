@@ -91,20 +91,25 @@ nonisolated struct MaterialService: Sendable {
     }
 
     // A blank title keeps the saved one, so clearing the field never leaves material untitled.
-    func rename(_ id: UUID, to title: String, for owner: LibraryItemOwner) async throws {
+    @discardableResult
+    func rename(_ id: UUID, to title: String, for owner: LibraryItemOwner) async throws
+        -> Revision<LibraryItem>
+    {
         try await coordinator.mutate { db, _, dependencies in
             try RecordAccess.requireOwner(owner, in: db)
             guard var item = try LibraryItemQueries.fetch(id, in: db) else {
                 throw MaterialError.missingMaterial
             }
             guard item.belongs(to: owner) else { throw MaterialError.ownerMismatch }
+            let saved = item
             guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 title != item.title
-            else { return }
+            else { return Revision(before: saved, after: saved) }
             item.title = title
             item.updatedAt = Date(
                 timeIntervalSince1970: dependencies.now().timeIntervalSince1970)
             try LibraryItemQueries.update(item, in: db)
+            return Revision(before: saved, after: item)
         }
     }
 
@@ -134,15 +139,19 @@ nonisolated struct MaterialService: Sendable {
 
     // Puts removed material back with its file, and makes it the cover again where no other
     // cover was chosen since.
-    func restore(_ removed: RemovedMaterial) async throws {
+    @discardableResult
+    func restore(_ removed: RemovedMaterial) async throws -> MaterialRecord {
         try await coordinator.mutate { db, _, _ in
             guard let owner = removed.item.owner else { throw MaterialError.missingMaterial }
             try RecordAccess.requireOwner(owner, in: db)
-            guard try LibraryItemQueries.fetch(removed.item.id, in: db) == nil else { return }
+            let asset = try removed.item.fileAssetID.flatMap {
+                try FileAssetQueries.fetch($0, in: db)
+            }
+            if let existing = try LibraryItemQueries.fetch(removed.item.id, in: db) {
+                return MaterialRecord(item: existing, asset: asset)
+            }
             if let assetID = removed.item.fileAssetID {
-                guard try FileAssetQueries.fetch(assetID, in: db) != nil else {
-                    throw MaterialError.missingMaterial
-                }
+                guard asset != nil else { throw MaterialError.missingMaterial }
                 try MaterialQueries.unmarkRemoved(assetID, in: db)
             }
             try LibraryItemQueries.insert(removed.item, in: db)
@@ -151,6 +160,7 @@ nonisolated struct MaterialService: Sendable {
                     sql: "UPDATE watch SET coverPhotoID = ? WHERE id = ? AND coverPhotoID IS NULL",
                     arguments: [removed.item.id.uuidString, watchID.uuidString])
             }
+            return MaterialRecord(item: removed.item, asset: asset)
         }
     }
 

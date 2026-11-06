@@ -12,7 +12,8 @@ struct CaliberStateTests {
         let fixture = WatchFixture()
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
-        let state = CaliberState(service: CaliberService(coordinator: coordinator))
+        let queue = EditQueue(coordinator: coordinator)
+        let state = CaliberState(queue: queue)
         await state.observe()
         #expect(!state.isLoading)
         #expect(state.loadError != nil)
@@ -32,12 +33,13 @@ struct CaliberStateTests {
         defer { fixture.remove() }
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
-        let state = CaliberState(service: CaliberService(coordinator: coordinator))
+        let queue = EditQueue(coordinator: coordinator)
+        let state = CaliberState(queue: queue)
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { !state.isLoading }
         state.searchText = "Nothing matches"
-        #expect(await state.create())
+        #expect(await state.create().didSave)
         let caliber = try #require(state.selectedCaliber)
         #expect(caliber.designation == "New Caliber" && state.nameToFocus == caliber.id)
         #expect(state.searchText.isEmpty && state.filteredCalibers == [caliber])
@@ -59,11 +61,12 @@ struct CaliberStateTests {
         _ = try await coordinator.open()
         let gate = PauseGate()
         let service = CaliberService(coordinator: coordinator)
-        let state = CaliberState(service: service, locale: unitedStates, pause: gate.pause)
+        let queue = EditQueue(coordinator: coordinator)
+        let state = CaliberState(queue: queue, locale: unitedStates, pause: gate.pause)
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { !state.isLoading }
-        #expect(await state.create())
+        #expect(await state.create().didSave)
         let id = try #require(state.selectedID)
         let facts = try #require(state.facts(for: id))
         let typed: [(FactField, String, String)] = [
@@ -75,7 +78,7 @@ struct CaliberStateTests {
         for (field, text, shown) in typed {
             field.beginEditing()
             field.change(to: text, undoManager: nil)
-            #expect(state.hasUnsavedFacts)
+            #expect(queue.hasUnsavedTyping)
             field.endEditing()
             try await waitUntil { field.text == shown && !field.hasUnsavedChanges }
         }
@@ -86,7 +89,7 @@ struct CaliberStateTests {
         try await waitUntil { state.selectedCaliber == saved }
         #expect(
             state.makers == [FactSuggestion(text: "Omega", detail: "1 caliber")]
-                && !state.hasUnsavedFacts)
+                && !queue.hasUnsavedTyping)
 
         facts.jewels.beginEditing()
         facts.jewels.change(to: "2", undoManager: nil)
@@ -110,8 +113,11 @@ struct CaliberStateTests {
         _ = try await coordinator.open()
         let service = CaliberService(coordinator: coordinator)
         let caliber = try await service.update(
-            try await service.create(named: "552").id, .beatRate(19_800))
-        let state = CaliberState(service: service, locale: unitedStates, pause: PauseGate().pause)
+            try await service.create(named: "552").id, .beatRate(19_800)
+        ).after
+        let queue = EditQueue(coordinator: coordinator)
+        let state = CaliberState(
+            queue: queue, locale: unitedStates, pause: PauseGate().pause)
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { state.calibers == [caliber] }
@@ -121,8 +127,8 @@ struct CaliberStateTests {
         field.change(to: "19,80", undoManager: nil)
         field.endEditing()
         #expect(field.problem == "Enter a number, such as 28,800 vph.")
-        #expect(field.text == "19,80" && state.hasUnsavedFacts)
-        #expect(await !state.saveAllFacts())
+        #expect(field.text == "19,80" && queue.hasUnsavedTyping)
+        #expect(await queue.saveEverything() == .textNotValid)
         #expect(try await coordinator.read(CaliberQueries.fetchAll) == [caliber])
         _ = try await service.update(caliber.id, .name("552 Elaboré"))
         try await waitUntil { state.calibers.first?.designation == "552 Elaboré" }
@@ -140,7 +146,9 @@ struct CaliberStateTests {
         _ = try await coordinator.open()
         let service = CaliberService(coordinator: coordinator)
         let caliber = try await service.create(named: "552")
-        let state = CaliberState(service: service, locale: unitedStates, pause: PauseGate().pause)
+        let queue = EditQueue(coordinator: coordinator)
+        let state = CaliberState(
+            queue: queue, locale: unitedStates, pause: PauseGate().pause)
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { state.calibers == [caliber] }
@@ -174,7 +182,9 @@ struct CaliberStateTests {
         _ = try await coordinator.open()
         let service = CaliberService(coordinator: coordinator)
         let caliber = try await service.create(named: "552")
-        let state = CaliberState(service: service, locale: unitedStates, pause: PauseGate().pause)
+        let queue = EditQueue(coordinator: coordinator)
+        let state = CaliberState(
+            queue: queue, locale: unitedStates, pause: PauseGate().pause)
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { state.calibers == [caliber] }
@@ -182,26 +192,26 @@ struct CaliberStateTests {
         let maker = try #require(state.facts(for: caliber.id)?.maker)
         maker.beginEditing()
         maker.change(to: "Omega", undoManager: nil)
-        #expect(await state.toggleArchive())
+        #expect(await state.toggleArchive().didSave)
         let archived = try #require(try await coordinator.read(CaliberQueries.fetchAll).first)
         #expect(archived.manufacturer == "Omega" && archived.archivedAt != nil)
-        #expect(!maker.hasUnsavedChanges && maker.saveError == nil)
+        #expect(!maker.hasUnsavedChanges)
         await #expect(throws: ArchiveError.archived) {
             try await service.update(caliber.id, .maker("Changed while archived"))
         }
-        #expect(await state.toggleArchive())
+        #expect(await state.toggleArchive().didSave)
         let beatRate = try #require(state.facts(for: caliber.id)?.beatRate)
         beatRate.beginEditing()
         beatRate.change(to: "fast", undoManager: nil)
         beatRate.endEditing()
-        #expect(await !state.toggleArchive())
-        #expect(state.saveError != nil && beatRate.text == "fast")
+        #expect(await !state.toggleArchive().didSave)
+        #expect(state.refusal != nil && beatRate.text == "fast")
         #expect(try await coordinator.read(CaliberQueries.fetchAll).first?.archivedAt == nil)
         beatRate.beginEditing()
         beatRate.change(to: "28800", undoManager: nil)
-        #expect(await state.toggleArchive())
+        #expect(await state.toggleArchive().didSave)
         let saved = try #require(try await coordinator.read(CaliberQueries.fetchAll).first)
-        #expect(saved.beatRate == 28_800 && saved.archivedAt != nil && state.saveError == nil)
+        #expect(saved.beatRate == 28_800 && saved.archivedAt != nil && state.refusal == nil)
         observation.cancel()
         await observation.value
         try await coordinator.close()
@@ -215,15 +225,8 @@ struct CaliberStateTests {
         _ = try await coordinator.open()
         let service = CaliberService(coordinator: coordinator)
         let caliber = try await service.create(named: "552")
-        let calibers = CaliberState(
-            service: service, locale: unitedStates, pause: PauseGate().pause)
-        let editing = WorkshopEditing(
-            watches: WatchState(service: WatchService(coordinator: coordinator)),
-            calibers: calibers, jobs: JobState(service: JobService(coordinator: coordinator)),
-            notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
-            material: MaterialState(service: MaterialService(coordinator: coordinator)),
-            checklist: ChecklistState(service: ChecklistService(coordinator: coordinator)),
-            parts: PartState(service: PartService(coordinator: coordinator)))
+        let editing = EditingFixture.make(coordinator, pause: PauseGate().pause)
+        let calibers = editing.calibers
         let observation = Task { await calibers.observe() }
         defer { observation.cancel() }
         try await waitUntil { calibers.calibers == [caliber] }
@@ -240,7 +243,7 @@ struct CaliberStateTests {
                 == "552 typed before leaving")
         facts.powerReserve.beginEditing()
         facts.powerReserve.change(to: "42", undoManager: nil)
-        #expect(await editing.saveAllFields())
+        #expect(await editing.saveAllFields() == .saved)
         #expect(try await coordinator.read(CaliberQueries.fetchAll).first?.powerReserve == 42)
         #expect(!editing.hasUnsavedFields)
         observation.cancel()

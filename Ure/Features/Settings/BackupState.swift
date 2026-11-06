@@ -12,13 +12,18 @@ final class BackupState {
     private(set) var message: String?
     private(set) var errorMessage: String?
     private let coordinator: LibraryCoordinator
+    private let editing: WorkshopEditing
     private let defaults: UserDefaults
     private let exportKey: String
     private var operation: Task<Void, Never>?
     private var panel: NSSavePanel?
 
-    init(coordinator: LibraryCoordinator, defaults: UserDefaults = .standard) {
+    init(
+        coordinator: LibraryCoordinator, editing: WorkshopEditing,
+        defaults: UserDefaults = .standard
+    ) {
         self.coordinator = coordinator
+        self.editing = editing
         self.defaults = defaults
         exportKey = "lastLibraryExport." + coordinator.root.standardizedFileURL.path
         if let saved = defaults.object(forKey: exportKey) as? Date { lastExport = saved }
@@ -49,8 +54,16 @@ final class BackupState {
         }
     }
 
+    static let unsavedChanges =
+        "The backup was not made, because a change did not save. In the main window, choose Try Again or Discard Unsaved Changes first."
+
     func chooseDestination() {
         guard summary != nil, !isExporting, panel == nil else { return }
+        if editing.failure != nil {
+            message = nil
+            errorMessage = Self.unsavedChanges
+            return
+        }
         let panel = NSSavePanel()
         panel.title = "Export Library Backup"
         panel.prompt = "Export"
@@ -78,7 +91,17 @@ final class BackupState {
         let version =
             Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
             ?? "Unknown"
-        operation = Task { await performExport(to: destination, version: version) }
+        operation = Task {
+            // The backup holds every change made before it, including typing on screen. A save
+            // that fails stops the export, so the backup never leaves out a change.
+            guard await editing.saveAllFields() != .stopped else {
+                errorMessage = Self.unsavedChanges
+                progress = nil
+                operation = nil
+                return
+            }
+            await performExport(to: destination, version: version)
+        }
     }
 
     func cancel() {

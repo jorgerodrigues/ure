@@ -66,7 +66,7 @@ private struct JobPage: View {
                 if job.watchID == nil {
                     JobWatchFacts(job: job, isEditable: isEditable).zIndex(2)
                 }
-                if let error = jobs.saveError {
+                if let error = jobs.refusal {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                 }
                 PartSectionView(jobID: job.id).zIndex(1)
@@ -314,20 +314,7 @@ private struct JobProblem: View {
                         .accessibilityHidden(true)
                 }
             }
-            if let error = field.saveError {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Label {
-                        Text("The problem did not save. Your text is still here. \(error)")
-                    } icon: {
-                        Image(systemName: "exclamationmark.circle.fill")
-                    }
-                    .font(.system(size: NotesLayout.failureSize))
-                    .foregroundStyle(.red)
-                    Button("Try Again", action: field.saveNow)
-                        .controlSize(.small)
-                }
-                .accessibilityElement(children: .contain)
-            } else if field.isEditing {
+            if field.isEditing {
                 Text("Saved as you type · Esc undoes this field")
                     .font(.system(size: NotesLayout.hintSize))
                     .foregroundStyle(.secondary)

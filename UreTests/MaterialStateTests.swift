@@ -12,23 +12,25 @@ struct MaterialStateTests {
         let coordinator = fixture.coordinator()
         _ = try await coordinator.open()
         let owner = try #require(try await ReferenceFixture.owners(coordinator).first)
-        let state = MaterialState(service: MaterialService(coordinator: coordinator))
+        let state = MaterialState(
+            service: MaterialService(coordinator: coordinator),
+            queue: EditQueue(coordinator: coordinator))
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { !state.isLoading }
 
-        #expect(await state.paste("https://example.org/service-guide", for: owner))
+        #expect(await state.paste("https://example.org/service-guide", for: owner).didSave)
         let link = try #require(state.records(for: owner).first)
         #expect(link.item.kind == .link && link.item.title == "example.org")
         #expect(link.item.url == "https://example.org/service-guide")
         #expect(state.titleField(for: link.id)?.text == "example.org")
-        #expect(state.errors[owner] == nil)
+        #expect(state.error(for: owner) == nil)
 
-        #expect(!(await state.paste("https://", for: owner)))
-        #expect(state.errors[owner] == LinkError.invalidURL.localizedDescription)
-        #expect(!(await state.paste("Mainspring is set", for: owner)))
-        #expect(state.errors[owner] == LinkError.notALink.localizedDescription)
-        #expect(!(await state.paste(nil, for: owner)))
+        #expect(state.paste("https://", for: owner) == nil)
+        #expect(state.error(for: owner) == LinkError.invalidURL.localizedDescription)
+        #expect(state.paste("Mainspring is set", for: owner) == nil)
+        #expect(state.error(for: owner) == LinkError.notALink.localizedDescription)
+        #expect(state.paste(nil, for: owner) == nil)
         try await waitUntil { state.records.count == 1 }
         #expect(try await coordinator.read(MaterialQueries.fetchAll).map(\.id) == [link.id])
         try await coordinator.close()
@@ -48,7 +50,7 @@ struct MaterialStateTests {
         let watch = try #require(try await coordinator.read(WatchQueries.fetchAll).first)
         try await service.setCover(photo.id, for: watch.id)
         let original = try await coordinator.originalURL(for: try #require(photo.asset).id)
-        let state = MaterialState(service: service)
+        let state = MaterialState(service: service, queue: EditQueue(coordinator: coordinator))
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { state.records.count == 1 }
@@ -57,27 +59,28 @@ struct MaterialStateTests {
 
         undo.beginUndoGrouping()
         let record = try #require(state.records.first)
-        #expect(await state.remove(record, on: owners[0], undoManager: undo))
+        let removing = state.remove(record, on: owners[0], undoManager: undo)
         undo.endUndoGrouping()
+        #expect(await removing.didSave)
         #expect(state.records(for: owners[0]).isEmpty)
         #expect(undo.undoActionName == "Remove Photo")
         #expect(try await coordinator.read(WatchQueries.fetchAll).first?.coverPhotoID == nil)
         #expect(FileManager.default.fileExists(atPath: original.path))
 
         undo.undo()
-        await state.waitForChanges()
+        await state.queue.waitUntilIdle()
         try await waitUntil { state.records.count == 1 }
         #expect(state.records.first?.item == photo.item)
         #expect(try await coordinator.read(WatchQueries.fetchAll).first?.coverPhotoID == photo.id)
         #expect(undo.canRedo && undo.redoActionName == "Remove Photo")
 
         undo.redo()
-        await state.waitForChanges()
+        await state.queue.waitUntilIdle()
         try await waitUntil { state.records.isEmpty }
-        #expect(undo.canUndo && state.errors[owners[0]] == nil)
+        #expect(undo.canUndo && state.error(for: owners[0]) == nil)
         #expect(FileManager.default.fileExists(atPath: original.path))
 
-        state.discardUndo()
+        state.queue.discardUndo()
         #expect(!undo.canUndo)
         observation.cancel()
         try await coordinator.close()
@@ -99,25 +102,26 @@ struct MaterialStateTests {
         let photo = try await MaterialFixture.file(
             try fixture.source(type: .png), for: owners[0], in: coordinator)
         let watch = try #require(try await coordinator.read(WatchQueries.fetchAll).first)
-        let state = MaterialState(service: service)
+        let state = MaterialState(service: service, queue: EditQueue(coordinator: coordinator))
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { state.records.count == 1 }
         let undo = UndoManager()
         undo.groupsByEvent = false
         undo.beginUndoGrouping()
-        #expect(
-            await state.remove(try #require(state.records.first), on: owners[0], undoManager: undo))
+        let removing = state.remove(
+            try #require(state.records.first), on: owners[0], undoManager: undo)
         undo.endUndoGrouping()
+        #expect(await removing.didSave)
         undo.undo()
-        await state.waitForChanges()
+        await state.queue.waitUntilIdle()
         try await waitUntil { state.records.count == 1 }
         try await service.setCover(photo.id, for: watch.id)
         undo.redo()
-        await state.waitForChanges()
+        await state.queue.waitUntilIdle()
         #expect(try await coordinator.read(WatchQueries.fetchAll).first?.coverPhotoID == nil)
         undo.undo()
-        await state.waitForChanges()
+        await state.queue.waitUntilIdle()
         try await waitUntil { state.records.count == 1 }
         #expect(try await coordinator.read(WatchQueries.fetchAll).first?.coverPhotoID == photo.id)
         observation.cancel()
@@ -136,7 +140,8 @@ struct MaterialStateTests {
             await service.importFiles([try DocumentFixture.source(in: fixture)], for: owner).first
         ).outcome.get()
         let gate = MaterialPauseGate()
-        let state = MaterialState(service: service, pause: gate.pause)
+        let state = MaterialState(
+            service: service, queue: EditQueue(coordinator: coordinator), pause: gate.pause)
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { state.records.count == 1 }
@@ -148,7 +153,7 @@ struct MaterialStateTests {
         undo.beginUndoGrouping()
         field.change(to: "Service guide", undoManager: undo)
         undo.endUndoGrouping()
-        #expect(state.hasUnsavedTitles)
+        #expect(state.queue.hasUnsavedTyping)
         try await gate.elapse()
         try await waitUntil { field.savedText == "Service guide" }
         try await waitUntil { state.records.first?.item.title == "Service guide" }
@@ -162,7 +167,8 @@ struct MaterialStateTests {
         field.change(to: "  ", undoManager: undo)
         undo.endUndoGrouping()
         try await gate.elapse()
-        #expect(await !field.flush())
+        field.saveNow()
+        #expect(field.isRefused)
         #expect(field.savedText == pdf.item.title)
         #expect(state.records.first?.item.title == pdf.item.title)
         undo.beginUndoGrouping()
@@ -172,7 +178,7 @@ struct MaterialStateTests {
 
         field.beginEditing()
         field.change(to: "Typed before quitting", undoManager: nil)
-        #expect(await state.saveAllTitles())
+        #expect(await state.queue.saveEverything() == .saved)
         #expect(
             try await coordinator.read(LibraryItemQueries.fetchAll).first?.title
                 == "Typed before quitting")
@@ -190,7 +196,8 @@ struct MaterialStateTests {
         let link = try await service.addLink(
             try #require(URL(string: "https://example.org")), for: owner)
         let gate = MaterialPauseGate()
-        let state = MaterialState(service: service, pause: gate.pause)
+        let state = MaterialState(
+            service: service, queue: EditQueue(coordinator: coordinator), pause: gate.pause)
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { state.records.count == 1 }
@@ -203,7 +210,8 @@ struct MaterialStateTests {
         field.change(to: "", undoManager: undo)
         undo.endUndoGrouping()
         try await gate.elapse()
-        #expect(await !field.flush())
+        field.saveNow()
+        #expect(field.isRefused)
         #expect(field.savedText == "example.org")
         // A burst that starts from a blank title registers no Undo, so it needs no group.
         field.change(to: "Supplier page", undoManager: undo)
@@ -222,7 +230,8 @@ struct MaterialStateTests {
         field.change(to: " ", undoManager: undo)
         undo.endUndoGrouping()
         try await gate.elapse()
-        #expect(await !field.flush())
+        field.saveNow()
+        #expect(field.isRefused)
         state.endEditingTitle(field, undoManager: undo)
         try await waitUntil { !field.hasUnsavedChanges && field.text == "example.org" }
         while undo.canUndo {
@@ -246,26 +255,28 @@ struct MaterialStateTests {
         let link = try await service.addLink(
             try #require(URL(string: "https://example.org")), for: owner)
         let gate = MaterialPauseGate()
-        let state = MaterialState(service: service, pause: gate.pause)
+        let state = MaterialState(
+            service: service, queue: EditQueue(coordinator: coordinator), pause: gate.pause)
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { state.records.count == 1 }
         let field = try #require(state.titleField(for: link.id))
         field.beginEditing()
         field.change(to: "Typed before removal", undoManager: nil)
-        #expect(state.hasUnsavedTitles)
+        #expect(state.queue.hasUnsavedTyping)
         let undo = UndoManager()
         undo.groupsByEvent = false
         undo.beginUndoGrouping()
         let record = try #require(state.records.first)
-        #expect(await state.remove(record, on: owner, undoManager: undo))
+        let removing = state.remove(record, on: owner, undoManager: undo)
         undo.endUndoGrouping()
-        #expect(!state.hasUnsavedTitles && state.records.isEmpty)
+        #expect(await removing.didSave)
+        #expect(!state.queue.hasUnsavedTyping && state.records.isEmpty)
         undo.undo()
-        await state.waitForChanges()
+        await state.queue.waitUntilIdle()
         try await waitUntil { state.records.count == 1 }
         #expect(state.records.first?.item.title == "Typed before removal")
-        #expect(!state.hasUnsavedTitles)
+        #expect(!state.queue.hasUnsavedTyping)
         try await coordinator.close()
     }
 
@@ -285,7 +296,7 @@ struct MaterialStateTests {
         }
         let link = try await service.addLink(
             try #require(URL(string: "https://example.org/552")), for: owners[2])
-        let state = MaterialState(service: service)
+        let state = MaterialState(service: service, queue: EditQueue(coordinator: coordinator))
         let observation = Task { await state.observe() }
         defer { observation.cancel() }
         try await waitUntil { state.records.count == 3 }
@@ -296,8 +307,8 @@ struct MaterialStateTests {
         #expect(state.presentedRecord?.item.caliberID != nil)
         #expect(!state.canRemove(try #require(state.presentedRecord), on: watchPage))
         #expect(
-            !(await state.remove(
-                try #require(state.presentedRecord), on: watchPage, undoManager: nil)))
+            state.remove(try #require(state.presentedRecord), on: watchPage, undoManager: nil)
+                == nil)
         #expect(state.canMove(by: 1) && !state.canMove(by: -1))
         state.moveSelection(by: 1)
         #expect(state.presentedRecord?.id == photos[1].id && state.presented?.page == watchPage)
@@ -324,11 +335,11 @@ struct MaterialStateTests {
         let link = try await service.addLink(
             try #require(URL(string: "https://example.org")), for: owner)
         let gate = MaterialPauseGate()
-        let material = MaterialState(service: service, pause: gate.pause)
+        let editing = EditingFixture.make(coordinator, pause: gate.pause)
+        let material = editing.material
         let observation = Task { await material.observe() }
         defer { observation.cancel() }
         try await waitUntil { material.records.count == 1 }
-        let editing = MaterialEditingFixture.editing(coordinator, material: material)
         let field = try #require(material.titleField(for: link.id))
         field.beginEditing()
         field.change(to: "Supplier page", undoManager: nil)
@@ -336,26 +347,11 @@ struct MaterialStateTests {
         var navigated = false
         editing.requestNavigation { navigated = true }
         #expect(navigated)
-        try await waitUntil { !editing.hasUnsavedFields }
+        #expect(!editing.hasUnsavedFields)
+        await editing.queue.waitUntilIdle()
         #expect(
             try await coordinator.read(LibraryItemQueries.fetchAll).first?.title == "Supplier page")
         try await coordinator.close()
-    }
-}
-
-enum MaterialEditingFixture {
-    static func editing(
-        _ coordinator: LibraryCoordinator, material: MaterialState? = nil, jobs: JobState? = nil,
-        parts: PartState? = nil
-    ) -> WorkshopEditing {
-        WorkshopEditing(
-            watches: WatchState(service: WatchService(coordinator: coordinator)),
-            calibers: CaliberState(service: CaliberService(coordinator: coordinator)),
-            jobs: jobs ?? JobState(service: JobService(coordinator: coordinator)),
-            notes: RecordNotesState(service: RecordNotesService(coordinator: coordinator)),
-            material: material ?? MaterialState(service: MaterialService(coordinator: coordinator)),
-            checklist: ChecklistState(service: ChecklistService(coordinator: coordinator)),
-            parts: parts ?? PartState(service: PartService(coordinator: coordinator)))
     }
 }
 

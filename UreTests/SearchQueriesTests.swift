@@ -21,7 +21,7 @@ nonisolated struct SearchQueriesTests {
             WatchFact.model("МОДЕЛЬ"), .reference("0012–Å/04"), .serial("000042.7-A"),
             .owner("Ödön Ünal"), .contact("ODON@EXAMPLE.ORG"),
         ] {
-            watch = try await watches.update(watch.id, fact)
+            watch = try await watches.update(watch.id, fact).after
         }
         let job = try await JobService(coordinator: coordinator).start(
             for: watch.id, title: "Réparation")
@@ -198,7 +198,7 @@ nonisolated struct SearchQueriesTests {
         let service = CaliberService(coordinator: coordinator)
         for maker in ["ETA", "Sellita"] {
             let created = try await service.create(named: "2824-2")
-            let caliber = try await service.update(created.id, .maker(maker))
+            let caliber = try await service.update(created.id, .maker(maker)).after
             labels[caliber.id] = caliber.title
             try await RecordNotesService(coordinator: coordinator).save(
                 "Service interval", for: .caliber(caliber.id))
@@ -229,7 +229,7 @@ nonisolated struct SearchQueriesTests {
         let job = try await JobTaskFixture.job(coordinator)
         let parts = PartService(coordinator: coordinator)
         let added = try await parts.add(named: "Mainspring", to: job.id)
-        let part = try await parts.update(added.id, .description("0012-Å"))
+        let part = try await parts.update(added.id, .description("0012-Å")).after
         try await coordinator.mutate { db, _, _ in try SearchMigrationFixture.removeSearch(in: db) }
         try await coordinator.close()
         let upgraded = fixture.coordinator()

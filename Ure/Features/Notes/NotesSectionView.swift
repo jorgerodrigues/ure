@@ -52,9 +52,7 @@ private struct NotesEditor: View {
                         NotesPrompt(isEditable: isEditable)
                     }
                 }
-            if let error = field.saveError {
-                NotesSaveFailure(message: error, retry: field.saveNow)
-            } else if field.isEditing {
+            if field.isEditing {
                 Text("Saved as you type · Esc undoes this field")
                     .font(.system(size: NotesLayout.hintSize))
                     .foregroundStyle(.secondary)
@@ -73,27 +71,6 @@ private struct NotesPrompt: View {
             .frame(height: NotesLayout.lineHeight)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
-    }
-}
-
-private struct NotesSaveFailure: View {
-    let message: String
-    let retry: () -> Void
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Label {
-                Text("Your notes did not save. They are still here. \(message)")
-            } icon: {
-                Image(systemName: "exclamationmark.circle.fill")
-            }
-            .font(.system(size: NotesLayout.failureSize))
-            .foregroundStyle(.red)
-            Button("Try Again", action: retry)
-                .controlSize(.small)
-                .accessibilityIdentifier("retryNotesSave")
-        }
-        .accessibilityElement(children: .contain)
     }
 }
 
